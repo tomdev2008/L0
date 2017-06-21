@@ -31,10 +31,10 @@ consensus:
 
   lbft:
     id: "ID0001"
-    "N": 28
-    Q: 25
-    K: 100
-    blockSize: 10000000
+    "N": 4
+    Q: 3
+    K: 10
+    blockSize: 2000 
     blockTimeout: 8s
     blockInterval: 10s
     blockDelay: 10s
@@ -43,5 +43,6 @@ consensus:
     viewChangePeriod: 0s
     nullRequest: 5s    
     bufferSize: 100    
-    maxConcurrentNum: 1
+    maxConcurrentNumFrom: 10
+    maxConcurrentNumTo: 10
 
