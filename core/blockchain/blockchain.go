@@ -204,8 +204,8 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 func (bc *Blockchain) ProcessBlock(blk *types.Block) bool {
 	log.Debugf("block previoushash %s, currentblockhash %s", blk.PreviousHash(), bc.CurrentBlockHash())
 	if blk.PreviousHash() == bc.CurrentBlockHash() {
-		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.ledger.AppendBlock(blk, true)
+		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlock = blk
 		return true
 	}
