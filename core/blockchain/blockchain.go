@@ -23,6 +23,8 @@ import (
 
 	"math/big"
 
+	"time"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
@@ -43,11 +45,11 @@ var validTxPoolSize = 100000
 type Blockchain struct {
 	// global chain config
 	// config
-	mu           sync.Mutex
-	wg           sync.WaitGroup
-	currentBlock *types.Block
-	ledger       *ledger.Ledger
-	txValidator  *Validator
+	mu                 sync.Mutex
+	wg                 sync.WaitGroup
+	currentBlockHeader *types.BlockHeader
+	ledger             *ledger.Ledger
+	txValidator        *Validator
 	// consensus
 	consenter consensus.Consenter
 	// network stack
@@ -63,7 +65,10 @@ type Blockchain struct {
 
 // load loads local blockchain data
 func (bc *Blockchain) load() {
+
+	t := time.Now()
 	bc.ledger.VerifyChain()
+	delay := time.Since(t)
 
 	height, err := bc.ledger.Height()
 
@@ -71,26 +76,26 @@ func (bc *Blockchain) load() {
 		log.Error("GetBlockHeight error", err)
 		return
 	}
-	bc.currentBlock, err = bc.ledger.GetBlockByNumber(height)
+	bc.currentBlockHeader, err = bc.ledger.GetBlockByNumber(height)
 
-	if bc.currentBlock == nil || err != nil {
+	if bc.currentBlockHeader == nil || err != nil {
 		log.Errorf("GetBlockByNumber error %v ", err)
 		panic(err)
 	}
 
-	log.Debugf("Load blockchain data, bestblockhash: %s height: %d", bc.currentBlock.Hash(), height)
+	log.Debugf("Load blockchain data, bestblockhash: %s height: %d load delay : %v ", bc.currentBlockHeader.Hash(), height, delay)
 }
 
 // NewBlockchain returns a fully initialised blockchain service using input data
 func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 	bc := &Blockchain{
-		mu:           sync.Mutex{},
-		wg:           sync.WaitGroup{},
-		ledger:       ledger,
-		quitCh:       make(chan bool),
-		txCh:         make(chan *types.Transaction, 10000),
-		blkCh:        make(chan *types.Block, 10),
-		currentBlock: new(types.Block),
+		mu:                 sync.Mutex{},
+		wg:                 sync.WaitGroup{},
+		ledger:             ledger,
+		quitCh:             make(chan bool),
+		txCh:               make(chan *types.Transaction, 10000),
+		blkCh:              make(chan *types.Block, 10),
+		currentBlockHeader: new(types.BlockHeader),
 	}
 	bc.txValidator = NewValidator(bc.ledger)
 	if params.Validator {
@@ -113,25 +118,25 @@ func (bc *Blockchain) SetNetworkStack(pm NetworkStack) {
 
 // CurrentHeight returns current heigt of the current block
 func (bc *Blockchain) CurrentHeight() uint32 {
-	return bc.currentBlock.Height()
+	return bc.currentBlockHeader.Height
 }
 
 // CurrentBlockHash returns current block hash of the current block
 func (bc *Blockchain) CurrentBlockHash() crypto.Hash {
-	return bc.currentBlock.Hash()
+	return bc.currentBlockHeader.Hash()
 }
 
 // GetNextBlockHash returns the next block hash
 func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
-	block, err := bc.ledger.GetBlockByHash(h.Bytes())
-	if block == nil || err != nil {
+	blockHeader, err := bc.ledger.GetBlockByHash(h.Bytes())
+	if blockHeader == nil || err != nil {
 		return h, err
 	}
-	nextBlock, err := bc.ledger.GetBlockByNumber(block.Height() + 1)
-	if nextBlock == nil || err != nil {
+	nextBlockHeader, err := bc.ledger.GetBlockByNumber(blockHeader.Height + 1)
+	if nextBlockHeader == nil || err != nil {
 		return h, err
 	}
-	hash := nextBlock.Hash()
+	hash := nextBlockHeader.Hash()
 	return hash, nil
 }
 
@@ -206,7 +211,7 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block) bool {
 	if blk.PreviousHash() == bc.CurrentBlockHash() {
 		bc.ledger.AppendBlock(blk, true)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
-		bc.currentBlock = blk
+		bc.currentBlockHeader = blk.Header
 		return true
 	}
 	return false
@@ -233,8 +238,8 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 	// log.Debug("Generateblock ", atomicTxs, acrossChainTxs)
 	//merkleRootHash = bc.merkleRootHash(txs)
 
-	blk := types.NewBlock(bc.currentBlock.Hash(),
-		createTime, bc.currentBlock.Height()+1,
+	blk := types.NewBlock(bc.currentBlockHeader.Hash(),
+		createTime, bc.currentBlockHeader.Height+1,
 		uint32(100),
 		merkleRootHash,
 		txs,
