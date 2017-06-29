@@ -1,0 +1,14 @@
+# Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
+
+language: go
+
+go:
+  - 1.7.x
+  - 1.8.x
+  - master
+
+install:
+  - echo " INSTALLING DEPENDENCIES "
+
+script:
+  - cd build && make
