@@ -22,7 +22,6 @@ import (
 	"math/big"
 
 	"github.com/bocheninc/L0/components/crypto"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/state"
@@ -32,19 +31,15 @@ import (
 //LedgerInterface ledger interface
 type LedgerInterface interface {
 	Height() (uint32, error)
-	GetBalance(addr accounts.Address) (*big.Int, uint32, error)
 	GetBalanceNonce(addr accounts.Address) (*big.Int, uint32)
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
-	GetBlockByHash(blockHashBytes []byte) (*types.Block, error)
-	GetBlockByNumber(number uint32) (*types.Block, error)
+	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
+	GetBlockByNumber(number uint32) (*types.BlockHeader, error)
 	GetLastBlockHash() (crypto.Hash, error)
 	GetTxsByBlockHash(blockHashBytes []byte, transactionType uint32) (types.Transactions, error)
 	GetTxsByBlockNumber(blockNumber uint32, transactionType uint32) (types.Transactions, error)
 	GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transactions, error)
-	GetAtmoicTxsStatistics() int
-	GetAcrossTxsStatistics() (int, int)
-	GetBlockAtmoicTxsStatistics() int
-	GetBlockAcrossTxsStatistics() (int, int, int, int)
+	GetTransactionHashList(number uint32) ([]crypto.Hash, error)
 }
 
 //Ledger ledger rpc api
@@ -69,6 +64,12 @@ type GetTxsByBlockHashArgs struct {
 	TxType    uint32
 }
 
+//Block json rpc return block
+type Block struct {
+	BlockHeader *types.BlockHeader
+	TxHashList  []crypto.Hash
+}
+
 //Height get blockchain height
 func (l *Ledger) Height(ignore string, reply *uint32) error {
 	height, err := l.ledger.Height()
@@ -81,19 +82,8 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 
 //GetBalance returns balance by account address
 func (l *Ledger) GetBalance(addr string, reply *state.Balance) error {
-	amount, nonce, err := l.ledger.GetBalance(accounts.HexToAddress(addr))
-	if err != nil {
-		return err
-	}
-	*reply = state.Balance{Amount: amount, Nonce: nonce}
-	return nil
-}
-
-//GetBalanceInTxPool return nonce
-func (l *Ledger) GetBalanceInTxPool(addr string, reply *state.Balance) error {
 	amount, nonce := l.ledger.GetBalanceNonce(accounts.HexToAddress(addr))
 	nonce = nonce - 1
-	log.Debug("amount: ", amount, " nonce: ", nonce)
 	*reply = state.Balance{Amount: amount, Nonce: nonce}
 	return nil
 }
@@ -109,22 +99,36 @@ func (l *Ledger) GetTxByHash(txHashBytes string, reply *types.Transaction) error
 }
 
 // GetBlockByHash returns the block detail by hash
-func (l *Ledger) GetBlockByHash(blockHashBytes string, reply *types.Block) error {
-	block, err := l.ledger.GetBlockByHash(crypto.HexToHash(blockHashBytes).Bytes())
+func (l *Ledger) GetBlockByHash(blockHashBytes string, reply *Block) error {
+	blockHeader, err := l.ledger.GetBlockByHash(crypto.HexToHash(blockHashBytes).Bytes())
 	if err != nil {
 		return err
 	}
-	*reply = *block
+
+	txHashList, err := l.ledger.GetTransactionHashList(blockHeader.Height)
+	if err != nil {
+		return err
+	}
+
+	*reply = Block{BlockHeader: blockHeader, TxHashList: txHashList}
+
 	return nil
 }
 
 //GetBlockByNumber get block by block number
-func (l *Ledger) GetBlockByNumber(number uint32, reply *types.Block) error {
-	block, err := l.ledger.GetBlockByNumber(number)
+func (l *Ledger) GetBlockByNumber(number uint32, reply *Block) error {
+	blockHeader, err := l.ledger.GetBlockByNumber(number)
 	if err != nil {
 		return err
 	}
-	*reply = *block
+
+	txHashList, err := l.ledger.GetTransactionHashList(blockHeader.Height)
+	if err != nil {
+		return err
+	}
+
+	*reply = Block{BlockHeader: blockHeader, TxHashList: txHashList}
+
 	return nil
 }
 

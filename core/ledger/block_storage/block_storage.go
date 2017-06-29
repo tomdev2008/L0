@@ -21,21 +21,20 @@ package block_storage
 import (
 	"errors"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/golang/protobuf/proto"
 )
 
 const (
 	heightKey string = "blockLastHeight"
-	atomic    uint32 = iota
-	acrossChain
 )
 
 // Blockchain represents block
 type Blockchain struct {
 	dbHandler         *db.BlockchainDB
+	txPrefix          []byte
 	columnFamily      string
 	indexColumnFamily string
 }
@@ -44,31 +43,52 @@ type Blockchain struct {
 func NewBlockchain(db *db.BlockchainDB) *Blockchain {
 	return &Blockchain{
 		dbHandler:         db,
+		txPrefix:          []byte("tx_"),
 		columnFamily:      "block",
 		indexColumnFamily: "index",
 	}
 }
 
 // GetBlockByHash gets block by block hash
-func (blockchain *Blockchain) GetBlockByHash(blockHash []byte) (*types.Block, error) {
-	blockBytes, err := blockchain.dbHandler.Get(blockchain.columnFamily, blockHash)
+func (blockchain *Blockchain) GetBlockByHash(blockHash []byte) (*types.BlockHeader, error) {
+
+	blockHeaderBytes, err := blockchain.dbHandler.Get(blockchain.columnFamily, blockHash)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(blockBytes) == 0 {
-		return nil, errors.New("not found block ")
+	if len(blockHeaderBytes) == 0 {
+		return nil, errors.New("not found block. ")
 	}
 
-	block := &types.Block{}
-	if err := block.Deserialize(blockBytes); err != nil {
+	blockHeader := new(types.BlockHeader)
+	if err := blockHeader.Deserialize(blockHeaderBytes); err != nil {
 		return nil, err
 	}
-	return block, nil
+
+	return blockHeader, nil
+
+}
+
+//GetTransactionHashList get transaction hash list by block height
+func (blockchain *Blockchain) GetTransactionHashList(blockHeight uint32) ([]crypto.Hash, error) {
+	txHashsBytes, err := blockchain.dbHandler.Get(blockchain.indexColumnFamily, prependKeyPrefix(blockchain.txPrefix, utils.Uint32ToBytes(blockHeight)))
+	if err != nil {
+		return nil, err
+	}
+	if len(txHashsBytes) == 0 && blockHeight != 0 {
+		return nil, errors.New("not found transactions")
+	}
+
+	txHashs := new([]crypto.Hash)
+
+	utils.Deserialize(txHashsBytes, txHashs)
+
+	return *txHashs, nil
 }
 
 // GetBlockByNumber gets block by block height number
-func (blockchain *Blockchain) GetBlockByNumber(blockNum uint32) (*types.Block, error) {
+func (blockchain *Blockchain) GetBlockByNumber(blockNum uint32) (*types.BlockHeader, error) {
 	blockHashBytes, err := blockchain.getBlockHashByNumber(blockNum)
 	if err != nil {
 		return nil, err
@@ -78,44 +98,48 @@ func (blockchain *Blockchain) GetBlockByNumber(blockNum uint32) (*types.Block, e
 
 // GetTransactionsByNumber by block height number
 func (blockchain *Blockchain) GetTransactionsByNumber(blockNum uint32, transactionType uint32) (types.Transactions, error) {
-	block, err := blockchain.GetBlockByNumber(blockNum)
+	txHashs, err := blockchain.GetTransactionHashList(blockNum)
 	if err != nil {
 		return nil, err
 	}
 
-	if transactionType == uint32(100) {
-		return block.Transactions, nil
-	}
-
-	return block.GetTransactions(transactionType)
+	return blockchain.getTransactionsByHashList(txHashs, transactionType)
 }
 
 // GetTransactionsByHash by block hash
 func (blockchain *Blockchain) GetTransactionsByHash(blockHash []byte, transactionType uint32) (types.Transactions, error) {
-	block, err := blockchain.GetBlockByHash(blockHash)
+
+	blockHeader, err := blockchain.GetBlockByHash(blockHash)
 	if err != nil {
 		return nil, err
 	}
-	if transactionType == uint32(100) {
-		return block.Transactions, nil
+
+	txHashs, err := blockchain.GetTransactionHashList(blockHeader.Height)
+	if err != nil {
+		return nil, err
 	}
-	return block.GetTransactions(transactionType)
+
+	return blockchain.getTransactionsByHashList(txHashs, transactionType)
+
 }
 
 // GetTransactionByTxHash gets transaction by transaction hash
 func (blockchain *Blockchain) GetTransactionByTxHash(txHash []byte) (*types.Transaction, error) {
-	bytes, err := blockchain.dbHandler.Get(blockchain.indexColumnFamily, txHash)
+	txBytes, err := blockchain.dbHandler.Get(blockchain.columnFamily, txHash)
 	if err != nil {
 		return nil, err
 	}
-	if len(bytes) == 0 {
+
+	if len(txBytes) == 0 {
 		return nil, errors.New("not found transaction by txHash")
 	}
-	numbers, err := utils.DecodeUint32(bytes, 2)
-	if err != nil {
+
+	tx := new(types.Transaction)
+
+	if err := tx.Deserialize(txBytes); err != nil {
 		return nil, err
 	}
-	return blockchain.getTransactionByNumber(numbers[0], numbers[1])
+	return tx, nil
 }
 
 // GetBlockchainHeight gets blockchain height
@@ -134,15 +158,22 @@ func (blockchain *Blockchain) AppendBlock(block *types.Block) []*db.WriteBatch {
 	blockHeightBytes := utils.Uint32ToBytes(block.Height())
 
 	// storage
-	var writeBatchs []*db.WriteBatch
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.columnFamily, db.OperationPut, blockHashBytes, block.Serialize()))        // block hash => block
+	var (
+		writeBatchs []*db.WriteBatch
+		txHashs     []crypto.Hash
+	)
+
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.columnFamily, db.OperationPut, blockHashBytes, block.Header.Serialize())) // block hash => block
 	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, blockHeightBytes, blockHashBytes))    // height => block hash
 	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, []byte(heightKey), blockHeightBytes)) // update block height
 
 	//storage  tx hash
-	for txIndex, tx := range block.Transactions {
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, tx.Hash().Bytes(), encodeUint32(block.Height(), uint32(txIndex)))) // tx hash => tx detail
+	for _, tx := range block.Transactions {
+		txHashs = append(txHashs, tx.Hash())
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.columnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize())) // tx hash => tx detail
+
 	}
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, prependKeyPrefix(blockchain.txPrefix, blockHeightBytes), utils.Serialize(txHashs))) // prefix + blockheight  => all tx hash
 
 	return writeBatchs
 }
@@ -167,28 +198,31 @@ func (blockchain *Blockchain) getBlockHashByNumber(blockNum uint32) ([]byte, err
 	return blockHashBytes, nil
 }
 
-func (blockchain *Blockchain) getTransactionByNumber(blockNum uint32, index uint32) (*types.Transaction, error) {
-	block, err := blockchain.GetBlockByNumber(blockNum)
-	if err != nil {
-		return nil, err
+func (blockchain *Blockchain) getTransactionsByHashList(txHashs []crypto.Hash, transactionType uint32) (types.Transactions, error) {
+	var (
+		txs types.Transactions
+	)
+	for _, txHash := range txHashs {
+		tx, err := blockchain.GetTransactionByTxHash(txHash.Bytes())
+		if err != nil {
+			return nil, err
+		}
+
+		if transactionType == uint32(100) {
+			txs = append(txs, tx)
+		} else {
+			if tx.GetType() == transactionType {
+				txs = append(txs, tx)
+			}
+		}
 	}
 
-	return block.Transactions[index], nil
+	return txs, nil
 }
 
-func encodeUint32(numbers ...uint32) []byte {
-	b := proto.NewBuffer([]byte{})
-	for _, number := range numbers {
-		b.EncodeVarint(uint64(number))
-	}
-	return b.Bytes()
-}
-
-/*
-func prependKeyPrefix(prefix byte, key []byte) []byte {
+func prependKeyPrefix(prefix []byte, key []byte) []byte {
 	modifiedKey := []byte{}
-	modifiedKey = append(modifiedKey, prefix)
+	modifiedKey = append(modifiedKey, prefix...)
 	modifiedKey = append(modifiedKey, key...)
 	return modifiedKey
 }
-*/

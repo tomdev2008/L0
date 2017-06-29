@@ -21,12 +21,9 @@ package ledger
 import (
 	"fmt"
 	"math/big"
-	"strings"
 
 	"bytes"
 	"errors"
-	"sync"
-	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
@@ -53,25 +50,15 @@ type Ledger struct {
 	state    *state.State
 	storage  *merge.Storage
 	contract *contract.SmartConstract
-
-	sync.Mutex
-	atmoicTxsStatistics     int
-	acrossTxsStatistics     map[string]int
-	blockAtmoicTxStatistics int
-	blockAcrossTxStatistics map[string]int
 }
 
 // NewLedger returns the ledger instance
 func NewLedger(db *db.BlockchainDB) *Ledger {
 	if ledgerInstance == nil {
 		ledgerInstance = &Ledger{
-			block:                   block_storage.NewBlockchain(db),
-			state:                   state.NewState(db),
-			storage:                 merge.NewStorage(db),
-			atmoicTxsStatistics:     0,
-			acrossTxsStatistics:     make(map[string]int),
-			blockAtmoicTxStatistics: 0,
-			blockAcrossTxStatistics: make(map[string]int),
+			block:   block_storage.NewBlockchain(db),
+			state:   state.NewState(db),
+			storage: merge.NewStorage(db),
 		}
 		_, err := ledgerInstance.Height()
 		if err != nil {
@@ -89,31 +76,30 @@ func (ledger *Ledger) VerifyChain() {
 	if err != nil {
 		panic(err)
 	}
-
-	currentBlock, err := ledger.GetBlockByNumber(height)
+	currentBlockHeader, err := ledger.block.GetBlockByNumber(height)
 	for i := height; i >= 1; i-- {
-		previousBlock, err := ledger.GetBlockByNumber(i - 1) // storage
-		if previousBlock != nil && err != nil {
+		previousBlockHeader, err := ledger.block.GetBlockByNumber(i - 1) // storage
+		if previousBlockHeader != nil && err != nil {
+
 			log.Debug("get block err")
 			panic(err)
 		}
-
 		// verify previous block
-		if !previousBlock.Hash().Equal(currentBlock.Header.PreviousHash) {
+		if !previousBlockHeader.Hash().Equal(currentBlockHeader.PreviousHash) {
 			panic(fmt.Errorf("block [%d], veifychain breaks", i))
 		}
-		currentBlock = previousBlock
+		currentBlockHeader = previousBlockHeader
 	}
 }
 
 // GetGenesisBlock returns the genesis block of the ledger
-func (ledger *Ledger) GetGenesisBlock() *types.Block {
+func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
 
-	genesisBlock, err := ledger.GetBlockByNumber(0)
+	genesisBlockHeader, err := ledger.GetBlockByNumber(0)
 	if err != nil {
 		panic(err)
 	}
-	return genesisBlock
+	return genesisBlockHeader
 }
 
 // AppendBlock appends a new block to the ledger,flag = true pack up block ,flag = false sync block
@@ -152,20 +138,22 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 }
 
 // GetBlockByNumber gets the block by the given number
-func (ledger *Ledger) GetBlockByNumber(number uint32) (*types.Block, error) {
-
+func (ledger *Ledger) GetBlockByNumber(number uint32) (*types.BlockHeader, error) {
 	return ledger.block.GetBlockByNumber(number)
 }
 
 // GetBlockByHash returns the block detail by hash
-func (ledger *Ledger) GetBlockByHash(blockHashBytes []byte) (*types.Block, error) {
-
+func (ledger *Ledger) GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error) {
 	return ledger.block.GetBlockByHash(blockHashBytes)
+}
+
+//GetTransactionHashList returns transactions hash list by block number
+func (ledger *Ledger) GetTransactionHashList(number uint32) ([]crypto.Hash, error) {
+	return ledger.block.GetTransactionHashList(number)
 }
 
 // Height returns height of ledger, return -1 if not exist
 func (ledger *Ledger) Height() (uint32, error) {
-
 	return ledger.block.GetBlockchainHeight()
 }
 
@@ -179,44 +167,36 @@ func (ledger *Ledger) GetLastBlockHash() (crypto.Hash, error) {
 	if err != nil {
 		return crypto.Hash{}, err
 	}
-
 	return lastBlock.Hash(), nil
 }
 
 // GetTxsByBlockHash returns transactions  by block hash and transactionType
 func (ledger *Ledger) GetTxsByBlockHash(blockHashBytes []byte, transactionType uint32) (types.Transactions, error) {
-
 	return ledger.block.GetTransactionsByHash(blockHashBytes, transactionType)
 }
 
 //GetTxsByBlockNumber returns transactions by blcokNumber and transactionType
 func (ledger *Ledger) GetTxsByBlockNumber(blockNumber uint32, transactionType uint32) (types.Transactions, error) {
-
 	return ledger.block.GetTransactionsByNumber(blockNumber, transactionType)
 }
 
 //GetTxByTxHash returns transaction by tx hash []byte
 func (ledger *Ledger) GetTxByTxHash(txHashBytes []byte) (*types.Transaction, error) {
-
 	return ledger.block.GetTransactionByTxHash(txHashBytes)
 }
 
 // GetBalance returns balance by account
 func (ledger *Ledger) GetBalance(addr accounts.Address) (*big.Int, uint32, error) {
-
 	return ledger.state.GetBalance(addr)
 }
 
 //GetMergedTransaction returns merged transaction within a specified period of time
 func (ledger *Ledger) GetMergedTransaction(duration uint32) (types.Transactions, error) {
 
-	t1 := time.Now()
 	txs, err := ledger.storage.GetMergedTransaction(duration)
 	if err != nil {
 		return nil, err
 	}
-	delay1 := time.Since(t1)
-	log.Debug("getMerge delay :", delay1)
 	return txs, nil
 }
 
@@ -258,11 +238,9 @@ func (ledger *Ledger) init() error {
 }
 
 func (ledger *Ledger) commitedTranaction(tx *types.Transaction, writeBatchs []*db.WriteBatch) ([]*db.WriteBatch, error) {
-	ledger.Lock()
-	defer ledger.Unlock()
+
 	var err error
-	ledger.blockAtmoicTxStatistics = 0
-	ledger.blockAcrossTxStatistics = make(map[string]int)
+
 	switch tx.GetType() {
 	case types.TypeIssue:
 		if writeBatchs, err = ledger.executeIssueTx(writeBatchs, tx); err != nil {
@@ -273,8 +251,6 @@ func (ledger *Ledger) commitedTranaction(tx *types.Transaction, writeBatchs []*d
 			return nil, err
 		}
 	case types.TypeAcrossChain:
-		ledger.blockAtmoicTxStatistics++
-		ledger.atmoicTxsStatistics++
 		if writeBatchs, err = ledger.executeACrossChainTx(writeBatchs, tx); err != nil {
 			return nil, err
 		}
@@ -308,9 +284,8 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 			txs, writeBatchs, err = ledger.executeSmartContractTx(writeBatchs, tx)
 			if err != nil {
 				return nil, nil, err
-			} else {
-				ctxs = append(ctxs, txs...)
 			}
+			ctxs = append(ctxs, txs...)
 		}
 
 		writeBatchs, err = ledger.commitedTranaction(tx, writeBatchs)
@@ -357,7 +332,6 @@ func (ledger *Ledger) executeAtomicTx(writeBatchs []*db.WriteBatch, tx *types.Tr
 func (ledger *Ledger) executeACrossChainTx(writeBatchs []*db.WriteBatch, tx *types.Transaction) ([]*db.WriteBatch, error) {
 	chainID := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes()
 	if bytes.Equal(chainID, params.ChainID) {
-		ledger.addAcrossTxsCnt("send:" + tx.ToChain())
 		sender := tx.Sender()
 		TxWriteBatch, err := ledger.state.UpdateBalance(sender, state.NewBalance(tx.Amount(), tx.Nonce()), tx.Fee(), state.OperationSub)
 		if err != nil {
@@ -369,7 +343,6 @@ func (ledger *Ledger) executeACrossChainTx(writeBatchs []*db.WriteBatch, tx *typ
 		}
 		writeBatchs = append(writeBatchs, TxWriteBatch...)
 	} else {
-		ledger.addAcrossTxsCnt("recv:" + tx.FromChain())
 		mergedTxWriteBatchs, err := ledger.state.UpdateBalance(tx.Recipient(), state.NewBalance(tx.Amount(), tx.Nonce()), tx.Fee(), state.OperationPlus)
 		if err != nil {
 			if err == state.ErrNegativeBalance {
@@ -447,7 +420,7 @@ func (ledger *Ledger) executeSmartContractTx(writeBatchs []*db.WriteBatch, tx *t
 	_, err := vm.RealExecute(ctx)
 	if err != nil {
 		log.Errorf("contract execute failed ......")
-		return nil, nil, errors.New("contract execute failed ......")
+		return nil, nil, errors.New("contract execute failed ")
 	}
 
 	smartContractTxs, err := ledger.contract.FinishContractTransaction()
@@ -475,6 +448,7 @@ func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {
 	return false
 }
 
+//GetTmpBalance get tmp balance in a block
 func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*big.Int, error) {
 	balance, err := ledger.state.GetTmpBalance(addr)
 	if err != nil {
@@ -493,47 +467,4 @@ func merkleRootHash(txs []*types.Transaction) crypto.Hash {
 		return crypto.ComputeMerkleHash(hashs)[0]
 	}
 	return crypto.Hash{}
-}
-
-func (ledger *Ledger) GetAtmoicTxsStatistics() int {
-	return ledger.atmoicTxsStatistics
-}
-
-func (ledger *Ledger) GetAcrossTxsStatistics() (int, int) {
-	ledger.Lock()
-	defer ledger.Unlock()
-	var allSendAcrossTxCnt, allRecvAcrossTxCnt int
-	for k, v := range ledger.acrossTxsStatistics {
-		if strings.Contains(k, "send:") {
-			allSendAcrossTxCnt = allSendAcrossTxCnt + v
-		} else {
-			allRecvAcrossTxCnt = allRecvAcrossTxCnt + v
-		}
-	}
-	return allSendAcrossTxCnt, allRecvAcrossTxCnt
-}
-
-func (ledger *Ledger) GetBlockAtmoicTxsStatistics() int {
-	return ledger.blockAtmoicTxStatistics
-}
-
-func (ledger *Ledger) GetBlockAcrossTxsStatistics() (int, int, int, int) {
-	ledger.Lock()
-	defer ledger.Unlock()
-	var sendAcrossTxCnt, recvAcrossTxCnt, sendAcrossChainCnt, recvAcrossChainCnt int
-	for k, v := range ledger.blockAcrossTxStatistics {
-		if strings.Contains(k, "send:") {
-			sendAcrossTxCnt = sendAcrossTxCnt + v
-			sendAcrossChainCnt++
-		} else {
-			recvAcrossTxCnt = recvAcrossTxCnt + v
-			recvAcrossChainCnt++
-		}
-	}
-	return sendAcrossTxCnt, recvAcrossTxCnt, sendAcrossChainCnt, recvAcrossChainCnt
-}
-
-func (ledger *Ledger) addAcrossTxsCnt(key string) {
-	ledger.blockAcrossTxStatistics[key]++
-	ledger.acrossTxsStatistics[key]++
 }
