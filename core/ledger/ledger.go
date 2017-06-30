@@ -23,7 +23,6 @@ import (
 	"math/big"
 
 	"bytes"
-	"errors"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
@@ -104,8 +103,10 @@ func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
 
 // AppendBlock appends a new block to the ledger,flag = true pack up block ,flag = false sync block
 func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
-	var err error
-	var txWriteBatchs []*db.WriteBatch
+	var (
+		err           error
+		txWriteBatchs []*db.WriteBatch
+	)
 
 	txWriteBatchs, block.Transactions, err = ledger.executeTransaction(block.Transactions)
 	if err != nil {
@@ -152,7 +153,7 @@ func (ledger *Ledger) GetTransactionHashList(number uint32) ([]crypto.Hash, erro
 	return ledger.block.GetTransactionHashList(number)
 }
 
-// Height returns height of ledger, return -1 if not exist
+// Height returns height of ledger
 func (ledger *Ledger) Height() (uint32, error) {
 	return ledger.block.GetBlockchainHeight()
 }
@@ -223,6 +224,20 @@ func (ledger *Ledger) GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transa
 	return txs, nil
 }
 
+//QueryContract processes new contract query transaction
+func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
+	contractSpec := new(types.ContractSpec)
+	utils.Deserialize(tx.Payload, contractSpec)
+	ledger.contract.ExecTransaction(tx, string(contractSpec.ContractAddr))
+	ctx := vm.NewCTX(tx, contractSpec, ledger.contract)
+	result, err := vm.RealExecute(ctx)
+	if err != nil {
+		log.Error("contract query execute failed  ", err)
+		return nil, fmt.Errorf("contract query execute failed : %v ", err)
+	}
+	return result, nil
+}
+
 // init generates the genesis block
 func (ledger *Ledger) init() error {
 	blockHeader := new(types.BlockHeader)
@@ -237,70 +252,81 @@ func (ledger *Ledger) init() error {
 	return ledger.state.AtomicWrite(writeBatchs)
 }
 
-func (ledger *Ledger) commitedTranaction(tx *types.Transaction, writeBatchs []*db.WriteBatch) ([]*db.WriteBatch, error) {
-
-	var err error
-
-	switch tx.GetType() {
-	case types.TypeIssue:
-		if writeBatchs, err = ledger.executeIssueTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	case types.TypeAtomic:
-		if writeBatchs, err = ledger.executeAtomicTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	case types.TypeAcrossChain:
-		if writeBatchs, err = ledger.executeACrossChainTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	case types.TypeMerged:
-		if writeBatchs, err = ledger.executeMergedTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	case types.TypeBackfront:
-		if writeBatchs, err = ledger.executeBackfrontTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	case types.TypeDistribut:
-		if writeBatchs, err = ledger.executeDistriTx(writeBatchs, tx); err != nil {
-			return nil, err
-		}
-	}
-
-	return writeBatchs, err
-}
-
 func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBatch, types.Transactions, error) {
-	var err error
-	var writeBatchs []*db.WriteBatch
-	var ctxs types.Transactions
-	var txs types.Transactions
+	var (
+		err                                               error
+		tmpAtomicWriteBatchs, tmpWriteBatchs, writeBatchs []*db.WriteBatch
+		effectiveTxs                                      types.Transactions
+	)
 
 	bh, _ := ledger.Height()
+	log.Debugln("tx-len start ", len(Txs), "bh ", bh)
 	ledger.contract.StartConstract(bh)
+
 	for _, tx := range Txs {
-		if tx.GetType() == types.TypeSmartContract {
-			txs, writeBatchs, err = ledger.executeSmartContractTx(writeBatchs, tx)
+		switch tx.GetType() {
+		case types.TypeIssue:
+			if writeBatchs, err = ledger.executeIssueTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeAtomic:
+			if writeBatchs, err = ledger.executeAtomicTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeAcrossChain:
+			if writeBatchs, err = ledger.executeACrossChainTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeMerged:
+			if writeBatchs, err = ledger.executeMergedTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeBackfront:
+			if writeBatchs, err = ledger.executeBackfrontTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeDistribut:
+			if writeBatchs, err = ledger.executeDistriTx(writeBatchs, tx); err != nil {
+				return nil, nil, err
+			}
+		case types.TypeContractInit:
+			fallthrough
+		case types.TypeContractInvoke:
+			tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
 			if err != nil {
 				return nil, nil, err
 			}
-			ctxs = append(ctxs, txs...)
+
+			txs, err := ledger.executeSmartContractTx(tx)
+			if err != nil {
+				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
+				continue
+			}
+
+			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
+
+			if len(txs) != 0 {
+				contractTxWriteBatchs, contractTxs, err := ledger.executeTransaction(txs)
+				if err != nil {
+					return nil, nil, err
+				}
+
+				writeBatchs = append(writeBatchs, contractTxWriteBatchs...)
+				Txs = append(Txs, contractTxs...)
+			}
 		}
 
-		writeBatchs, err = ledger.commitedTranaction(tx, writeBatchs)
-		if err != nil {
-			return nil, nil, err
-		}
+		effectiveTxs = append(effectiveTxs, tx)
 	}
 
-	Txs = append(Txs, ctxs...)
 	writeBatchs, err = ledger.contract.AddChangesForPersistence(writeBatchs)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	ledger.contract.StopContract(bh)
-	return writeBatchs, Txs, nil
+	log.Debugln("tx-len stop", len(Txs), "bh ", bh)
+	return writeBatchs, effectiveTxs, nil
 }
 
 func (ledger *Ledger) executeIssueTx(writeBatchs []*db.WriteBatch, tx *types.Transaction) ([]*db.WriteBatch, error) {
@@ -319,7 +345,7 @@ func (ledger *Ledger) executeAtomicTx(writeBatchs []*db.WriteBatch, tx *types.Tr
 	atomicTxWriteBatchs, err := ledger.state.Transfer(sender, tx.Recipient(), tx.Fee(), state.NewBalance(tx.Amount(), tx.Nonce()), types.TypeAtomic)
 	if err != nil {
 		if err == state.ErrNegativeBalance {
-			//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+			log.Errorf("execute atomic transaction: %s, err:%s\n", tx.Hash().String(), err)
 			return writeBatchs, nil
 		}
 		return writeBatchs, err
@@ -336,7 +362,7 @@ func (ledger *Ledger) executeACrossChainTx(writeBatchs []*db.WriteBatch, tx *typ
 		TxWriteBatch, err := ledger.state.UpdateBalance(sender, state.NewBalance(tx.Amount(), tx.Nonce()), tx.Fee(), state.OperationSub)
 		if err != nil {
 			if err == state.ErrNegativeBalance {
-				//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+				log.Errorf("execute acrosschain transaction: %s, err:%s\n", tx.Hash().String(), err)
 				return writeBatchs, nil
 			}
 			return writeBatchs, err
@@ -346,7 +372,7 @@ func (ledger *Ledger) executeACrossChainTx(writeBatchs []*db.WriteBatch, tx *typ
 		mergedTxWriteBatchs, err := ledger.state.UpdateBalance(tx.Recipient(), state.NewBalance(tx.Amount(), tx.Nonce()), tx.Fee(), state.OperationPlus)
 		if err != nil {
 			if err == state.ErrNegativeBalance {
-				//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+				log.Errorf("execute acrosschain transaction: %s, err:%s\n", tx.Hash().String(), err)
 				return writeBatchs, nil
 			}
 			return writeBatchs, err
@@ -365,7 +391,7 @@ func (ledger *Ledger) executeMergedTx(writeBatchs []*db.WriteBatch, tx *types.Tr
 		TxWriteBatchs, err := ledger.state.Transfer(senderAddress, tx.Recipient(), tx.Fee(), state.NewBalance(tx.Amount(), tx.Nonce()), tx.GetType())
 		if err != nil {
 			if err == state.ErrNegativeBalance {
-				//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+				log.Errorf("execute merged transaction: %s, err:%s\n", tx.Hash().String(), err)
 				return writeBatchs, nil
 			}
 			return writeBatchs, err
@@ -384,7 +410,7 @@ func (ledger *Ledger) executeDistriTx(writeBatchs []*db.WriteBatch, tx *types.Tr
 		TxWriteBatch, err := ledger.state.UpdateBalance(chainAddress, state.NewBalance(tx.Amount(), uint32(0)), big.NewInt(0), state.OperationPlus)
 		if err != nil {
 			if err == state.ErrNegativeBalance {
-				//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+				log.Errorf("execute distri transaction: %s, err:%s\n", tx.Hash().String(), err)
 				return writeBatchs, nil
 			}
 			return writeBatchs, err
@@ -402,7 +428,7 @@ func (ledger *Ledger) executeBackfrontTx(writeBatchs []*db.WriteBatch, tx *types
 		TxWriteBatch, err := ledger.state.UpdateBalance(chainAddress, state.NewBalance(tx.Amount(), uint32(0)), big.NewInt(0), state.OperationSub)
 		if err != nil {
 			if err == state.ErrNegativeBalance {
-				//log.Debugf("execute transaction: %s, err:%s\n", tx.Hash().String(), err)
+				log.Errorf("execute backfront transaction: %s, err:%s\n", tx.Hash().String(), err)
 				return writeBatchs, nil
 			}
 			return writeBatchs, err
@@ -412,31 +438,24 @@ func (ledger *Ledger) executeBackfrontTx(writeBatchs []*db.WriteBatch, tx *types
 	return ledger.executeACrossChainTx(writeBatchs, tx)
 }
 
-func (ledger *Ledger) executeSmartContractTx(writeBatchs []*db.WriteBatch, tx *types.Transaction) (types.Transactions, []*db.WriteBatch, error) {
+func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	ledger.contract.ExecTransaction(tx, string(contractSpec.ContractAddr))
 	ctx := vm.NewCTX(tx, contractSpec, ledger.contract)
 	_, err := vm.RealExecute(ctx)
 	if err != nil {
-		log.Errorf("contract execute failed ......")
-		return nil, nil, errors.New("contract execute failed ")
+		log.Error("contract execute failed : ", err)
+		return nil, fmt.Errorf("contract execute failed : %v ", err)
 	}
 
 	smartContractTxs, err := ledger.contract.FinishContractTransaction()
 	if err != nil {
 		log.Error("FinishContractTransaction: ", err)
-		return nil, nil, err
+		return nil, err
 	}
 
-	for _, tx := range smartContractTxs {
-		writeBatchs, err = ledger.commitedTranaction(tx, writeBatchs)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	return smartContractTxs, writeBatchs, nil
+	return smartContractTxs, nil
 }
 
 func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {
@@ -448,7 +467,7 @@ func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {
 	return false
 }
 
-//GetTmpBalance get tmp balance in a block
+//GetTmpBalance get balance
 func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*big.Int, error) {
 	balance, err := ledger.state.GetTmpBalance(addr)
 	if err != nil {
