@@ -150,7 +150,17 @@ func (ledger *Ledger) GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader,
 
 //GetTransactionHashList returns transactions hash list by block number
 func (ledger *Ledger) GetTransactionHashList(number uint32) ([]crypto.Hash, error) {
-	return ledger.block.GetTransactionHashList(number)
+
+	txHashsBytes, err := ledger.block.GetTransactionHashList(number)
+	if err != nil {
+		return nil, err
+	}
+
+	txHashs := []crypto.Hash{}
+
+	utils.Deserialize(txHashsBytes, &txHashs)
+
+	return txHashs, nil
 }
 
 // Height returns height of ledger
@@ -169,6 +179,21 @@ func (ledger *Ledger) GetLastBlockHash() (crypto.Hash, error) {
 		return crypto.Hash{}, err
 	}
 	return lastBlock.Hash(), nil
+}
+
+//GetBlockHashByNumber returns block hash by block number
+func (ledger *Ledger) GetBlockHashByNumber(blockNum uint32) (crypto.Hash, error) {
+
+	hashBytes, err := ledger.block.GetBlockHashByNumber(blockNum)
+	if err != nil {
+		return crypto.Hash{}, err
+	}
+
+	blockHash := new(crypto.Hash)
+
+	blockHash.SetBytes(hashBytes)
+
+	return *blockHash, err
 }
 
 // GetTxsByBlockHash returns transactions  by block hash and transactionType

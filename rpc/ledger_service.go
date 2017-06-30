@@ -35,6 +35,7 @@ type LedgerInterface interface {
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
 	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
 	GetBlockByNumber(number uint32) (*types.BlockHeader, error)
+	GetBlockHashByNumber(blockNum uint32) (crypto.Hash, error)
 	GetLastBlockHash() (crypto.Hash, error)
 	GetTxsByBlockHash(blockHashBytes []byte, transactionType uint32) (types.Transactions, error)
 	GetTxsByBlockNumber(blockNumber uint32, transactionType uint32) (types.Transactions, error)
@@ -66,8 +67,8 @@ type GetTxsByBlockHashArgs struct {
 
 //Block json rpc return block
 type Block struct {
-	BlockHeader *types.BlockHeader
-	TxHashList  []crypto.Hash
+	BlockHeader *types.BlockHeader `json:"header"`
+	TxHashList  []crypto.Hash      `json:"txHashList"`
 }
 
 //Height get blockchain height
@@ -95,6 +96,16 @@ func (l *Ledger) GetTxByHash(txHashBytes string, reply *types.Transaction) error
 		return err
 	}
 	*reply = *tx
+	return nil
+}
+
+//GetBlockHashByNumber return block hash by block number
+func (l *Ledger) GetBlockHashByNumber(blockNumber uint32, reply *crypto.Hash) error {
+	blockHash, err := l.ledger.GetBlockHashByNumber(blockNumber)
+	if err != nil {
+		return err
+	}
+	*reply = blockHash
 	return nil
 }
 
