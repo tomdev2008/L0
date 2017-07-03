@@ -173,6 +173,34 @@ func (blockchainDB *BlockchainDB) Get(cfName string, key []byte) ([]byte, error)
 	return data, nil
 }
 
+// ForeachCF for bulk read.
+func (blockchainDB *BlockchainDB) ForeachCF(cfName string, f func(key, value []byte)) {
+	blockchainDB.checkIfColumnExists(cfName)
+
+	opt := gorocksdb.NewDefaultReadOptions()
+	defer opt.Destroy()
+	opt.SetFillCache(false)
+	it := blockchainDB.DB.NewIteratorCF(opt, blockchainDB.cfHandlers[cfName])
+	defer it.Close()
+
+	it.SeekToFirst()
+	for it.Valid() {
+		key := it.Key()
+		keyData := make([]byte, key.Size())
+		copy(keyData, key.Data())
+
+		value := it.Value()
+		valueData := make([]byte, value.Size())
+		copy(valueData, value.Data())
+
+		f(keyData, valueData)
+
+		key.Free()
+		value.Free()
+		it.Next()
+	}
+}
+
 // GetByPrefix for bulk reads
 func (blockchainDB *BlockchainDB) GetByPrefix(prefix []byte, resCh chan map[string][]byte) {
 	ro := gorocksdb.NewDefaultReadOptions()
