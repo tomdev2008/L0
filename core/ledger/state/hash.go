@@ -287,10 +287,16 @@ func (n *stateCacheNode) childrenNumber() int {
 	return 0
 }
 
+// ForeacherHandler handle iterating.
+type ForeacherHandler func([]byte, []byte)
+
+// Foreacher iterates.
+type Foreacher func(ForeacherHandler)
+
 // InitHash returns stateRootHash
-func InitHash() crypto.Hash {
+func InitHash(foreacher Foreacher) crypto.Hash {
 	if cacheRootNode == nil {
-		initStateCache()
+		initStateCache(foreacher)
 	}
 	return crypto.NewHash(cacheRootNode.hash())
 }
@@ -298,7 +304,7 @@ func InitHash() crypto.Hash {
 // UpdateHash updates state cache and returns the new stateRootHash.
 func UpdateHash(writeBatchs []*db.WriteBatch) crypto.Hash {
 	if cacheRootNode == nil {
-		initStateCache()
+		panic("must init first!")
 	}
 
 	for _, writeBatch := range writeBatchs {
@@ -314,8 +320,22 @@ func UpdateHash(writeBatchs []*db.WriteBatch) crypto.Hash {
 	return crypto.NewHash(cacheRootNode.hash())
 }
 
-func initStateCache() {
+func initStateCache(foreacher Foreacher) {
+	if foreacher == nil {
+		panic("invalid foreacher.")
+	}
+
 	once.Do(func() {
 		cacheRootNode = newStateCacheNode(1)
+
+		k := 0
+		foreacher(func(key, value []byte) {
+			cacheRootNode.set(&stateCacheUnit{
+				key:   key,
+				value: value,
+			}, unitKeyEigen(key))
+			k++
+		})
+		log.Infoln("state hash init, count:", k)
 	})
 }
