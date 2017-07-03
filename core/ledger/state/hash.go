@@ -20,13 +20,12 @@ package state
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"hash/fnv"
 	"math"
 	"sort"
 	"sync"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 )
@@ -45,7 +44,7 @@ var (
 type stateCacheUnit struct {
 	key    []byte
 	value  []byte
-	sum    [sha256.Size]byte
+	sum    crypto.Hash
 	latest bool
 }
 
@@ -87,7 +86,7 @@ func (u *stateCacheUnit) hash() []byte {
 	var data []byte
 	data = append(data, u.key...)
 	data = append(data, u.value...)
-	u.sum = sha256.Sum256(data)
+	u.sum = crypto.Sha256(data)
 	u.latest = true
 	return u.sum[:]
 }
@@ -95,7 +94,7 @@ func (u *stateCacheUnit) hash() []byte {
 // stateCacheUnits
 type stateCacheUnits struct {
 	units  []*stateCacheUnit
-	sum    [sha256.Size]byte
+	sum    crypto.Hash
 	latest bool
 }
 
@@ -157,7 +156,7 @@ func (us *stateCacheUnits) hash() []byte {
 	for _, u := range us.units {
 		data = append(data, u.hash()...)
 	}
-	us.sum = sha256.Sum256(data)
+	us.sum = crypto.Sha256(data)
 	us.latest = true
 	return us.sum[:]
 }
@@ -172,7 +171,7 @@ func (us *stateCacheUnits) sort() {
 type stateCacheNode struct {
 	children []*stateCacheNode
 	level    byte
-	sum      [sha256.Size]byte
+	sum      crypto.Hash
 	latest   bool
 	units    *stateCacheUnits
 }
@@ -262,13 +261,9 @@ func (n *stateCacheNode) hash() []byte {
 			data = append(data, c.hash()...)
 		}
 	}
-	n.sum = sha256.Sum256(data)
+	n.sum = crypto.Sha256(data)
 	n.latest = true
 	return n.sum[:]
-}
-
-func (n *stateCacheNode) hashString() string {
-	return hex.EncodeToString(n.hash())
 }
 
 func (n *stateCacheNode) isLeaf() bool {
@@ -293,15 +288,15 @@ func (n *stateCacheNode) childrenNumber() int {
 }
 
 // InitHash returns stateRootHash
-func InitHash() string {
+func InitHash() crypto.Hash {
 	if cacheRootNode == nil {
 		initStateCache()
 	}
-	return cacheRootNode.hashString()
+	return crypto.NewHash(cacheRootNode.hash())
 }
 
 // UpdateHash updates state cache and returns the new stateRootHash.
-func UpdateHash(writeBatchs []*db.WriteBatch) string {
+func UpdateHash(writeBatchs []*db.WriteBatch) crypto.Hash {
 	if cacheRootNode == nil {
 		initStateCache()
 	}
@@ -316,7 +311,7 @@ func UpdateHash(writeBatchs []*db.WriteBatch) string {
 			cacheRootNode.remove(writeBatch.Key, unitKeyEigen(writeBatch.Key))
 		}
 	}
-	return cacheRootNode.hashString()
+	return crypto.NewHash(cacheRootNode.hash())
 }
 
 func initStateCache() {
