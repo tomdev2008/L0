@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -45,31 +45,34 @@ type Block struct {
 
 // BlockHeader represents the header in block
 type BlockHeader struct {
+	Nonce     uint32 `json:"nonce" `
+	Height    uint32 `json:"height" `
+	TimeStamp uint32 `json:"timeStamp"`
+
 	PreviousHash  crypto.Hash `json:"previousHash" `
-	TimeStamp     uint32      `json:"timeStamp"`
-	Nonce         uint32      `json:"nonce" `
+	StateHash     crypto.Hash `json:"stateHash"`
 	TxsMerkleHash crypto.Hash `json:"transactionsMerkleHash" `
-	Height        uint32      `json:"height" `
 }
 
 // NewBlockHeader returns a blockheader
-func NewBlockHeader(prvHash crypto.Hash, timeStamp, height, nonce uint32, txsHash crypto.Hash) *BlockHeader {
+func NewBlockHeader(nonce, height, timeStamp uint32, prvHash, stateHash, txsHash crypto.Hash) *BlockHeader {
 	return &BlockHeader{
-		prvHash,
-		timeStamp,
 		nonce,
-		txsHash,
 		height,
+		timeStamp,
+
+		prvHash,
+		stateHash,
+		txsHash,
 	}
 }
 
 // NewBlock returns an new block
-func NewBlock(prvHash crypto.Hash,
-	timeStamp, height, nonce uint32,
-	txsHash crypto.Hash,
+func NewBlock(nonce, height, timeStamp uint32,
+	prvHash, stateHash, txsHash crypto.Hash,
 	Txs Transactions) *Block {
 	return &Block{
-		Header:       NewBlockHeader(prvHash, timeStamp, height, nonce, txsHash),
+		Header:       NewBlockHeader(nonce, height, timeStamp, prvHash, stateHash, txsHash),
 		Transactions: Txs,
 	}
 }

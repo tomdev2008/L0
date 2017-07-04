@@ -25,6 +25,8 @@ import (
 	"sort"
 	"sync"
 
+	"time"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -250,20 +252,20 @@ func (n *stateCacheNode) remove(key []byte, keyEigen int) {
 	}
 }
 
-func (n *stateCacheNode) hash() []byte {
+func (n *stateCacheNode) hash() crypto.Hash {
 	if n.latest {
-		return n.sum[:]
+		return n.sum
 	}
 
 	var data []byte
 	for _, c := range n.children {
 		if c.valid() {
-			data = append(data, c.hash()...)
+			data = append(data, c.hash().Bytes()...)
 		}
 	}
 	n.sum = crypto.Sha256(data)
 	n.latest = true
-	return n.sum[:]
+	return n.sum
 }
 
 func (n *stateCacheNode) isLeaf() bool {
@@ -298,7 +300,12 @@ func InitHash(foreacher Foreacher) crypto.Hash {
 	if cacheRootNode == nil {
 		initStateCache(foreacher)
 	}
-	return crypto.NewHash(cacheRootNode.hash())
+	t := time.Now()
+	hash := cacheRootNode.hash()
+	delay := time.Since(t)
+
+	log.Debugln("rootNode delay", delay)
+	return hash
 }
 
 // UpdateHash updates state cache and returns the new stateRootHash.
@@ -317,7 +324,7 @@ func UpdateHash(writeBatchs []*db.WriteBatch) crypto.Hash {
 			cacheRootNode.remove(writeBatch.Key, unitKeyEigen(writeBatch.Key))
 		}
 	}
-	return crypto.NewHash(cacheRootNode.hash())
+	return cacheRootNode.hash()
 }
 
 func initStateCache(foreacher Foreacher) {

@@ -25,6 +25,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -206,4 +207,8 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 	}
 
 	return writeBatch, nil
+}
+
+func (sctx *SmartConstract) GetStateDelta(f state.ForeacherHandler) {
+	sctx.dbHandler.ForeachCF(sctx.columnFamily, f)
 }

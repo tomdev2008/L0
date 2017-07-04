@@ -24,6 +24,8 @@ import (
 
 	"bytes"
 
+	"time"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -114,6 +116,10 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	}
 
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
+	t := time.Now()
+	block.Header.StateHash = state.UpdateHash(txWriteBatchs)
+	delay := time.Since(t)
+
 	writeBatchs := ledger.block.AppendBlock(block)
 
 	writeBatchs = append(writeBatchs, txWriteBatchs...)
@@ -132,7 +138,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		if err := ledger.storage.ClassifiedTransaction(txs); err != nil {
 			return err
 		}
-		log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions))
+		log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions), " state delay ", delay)
 	}
 
 	return nil
@@ -266,9 +272,9 @@ func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 // init generates the genesis block
 func (ledger *Ledger) init() error {
 	blockHeader := new(types.BlockHeader)
-	blockHeader.TimeStamp = uint32(0)
 	blockHeader.Nonce = uint32(100)
 	blockHeader.Height = 0
+	blockHeader.TimeStamp = uint32(0)
 
 	genesisBlock := new(types.Block)
 	genesisBlock.Header = blockHeader
@@ -500,6 +506,13 @@ func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*big.Int, error) {
 	}
 
 	return balance.Amount, err
+}
+
+func (ledger *Ledger) LoadSateHash() crypto.Hash {
+	return state.InitHash(func(hanlder state.ForeacherHandler) {
+		ledger.state.GetStateDelta(hanlder)
+		ledger.contract.GetStateDelta(hanlder)
+	})
 }
 
 func merkleRootHash(txs []*types.Transaction) crypto.Hash {

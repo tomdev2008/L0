@@ -68,6 +68,7 @@ func (bc *Blockchain) load() {
 
 	t := time.Now()
 	bc.ledger.VerifyChain()
+	stateHash := bc.ledger.LoadSateHash()
 	delay := time.Since(t)
 
 	height, err := bc.ledger.Height()
@@ -83,7 +84,7 @@ func (bc *Blockchain) load() {
 		panic(err)
 	}
 
-	log.Debugf("Load blockchain data, bestblockhash: %s height: %d load delay : %v ", bc.currentBlockHeader.Hash(), height, delay)
+	log.Debugf("Load blockchain data, bestblockhash: %s height: %d load delay : %v ,stateHash : %s", bc.currentBlockHeader.Hash(), height, delay, stateHash)
 }
 
 // NewBlockchain returns a fully initialised blockchain service using input data
@@ -217,30 +218,24 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block) bool {
 	return false
 }
 
-func (bc *Blockchain) merkleRootHash(txs []*types.Transaction) crypto.Hash {
-	if len(txs) > 0 {
-		hashs := make([]crypto.Hash, 0)
-		for _, tx := range txs {
-			hashs = append(hashs, tx.Hash())
-		}
-		return crypto.ComputeMerkleHash(hashs)[0]
-	}
-	return crypto.Hash{}
-}
-
 // GenerateBlock gets transactions from consensus service and generates a new block
 func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *types.Block {
 	var (
 		// default value is empty hash
 		merkleRootHash crypto.Hash
+		stateHash      crypto.Hash
 	)
 
 	// log.Debug("Generateblock ", atomicTxs, acrossChainTxs)
 	//merkleRootHash = bc.merkleRootHash(txs)
 
-	blk := types.NewBlock(bc.currentBlockHeader.Hash(),
-		createTime, bc.currentBlockHeader.Height+1,
+	blk := types.NewBlock(
 		uint32(100),
+		bc.currentBlockHeader.Height+1,
+		createTime,
+
+		bc.currentBlockHeader.Hash(),
+		stateHash,
 		merkleRootHash,
 		txs,
 	)
