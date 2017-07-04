@@ -16,36 +16,45 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package state
+package state_hash
 
 import (
-	"testing"
+	"bytes"
 
-	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/crypto"
 )
 
-func TestInitHash(t *testing.T) {
-	type kv struct {
-		key   []byte
-		value []byte
-	}
-	hash := InitHash(func(handler ForeacherHandler) {
-		datas := []kv{
-			kv{[]byte{1, 2, 3}, []byte{2, 1, 4}},
-			kv{[]byte{2, 2, 3}, []byte{2, 1, 3}},
-		}
-		for _, d := range datas {
-			handler(d.key, d.value)
-		}
-	})
-	t.Logf("TestInitHash, hash: %s", hash)
+// stateCacheUnit
+type stateCacheUnit struct {
+	key    []byte
+	value  []byte
+	sum    crypto.Hash
+	latest bool
 }
 
-func TestUpdateHash(t *testing.T) {
-	writeBatch := []*db.WriteBatch{
-		db.NewWriteBatch("", db.OperationPut, []byte{1, 2, 3}, []byte{2, 1, 3}),
-		db.NewWriteBatch("", db.OperationDelete, []byte{2, 2, 3}, []byte{}),
+func newStateCacheUnit(key, value []byte) *stateCacheUnit {
+	return &stateCacheUnit{
+		key:   key,
+		value: value,
 	}
-	hash := UpdateHash(writeBatch)
-	t.Logf("TestUpdateHash, hash: %s", hash)
+}
+
+func (u *stateCacheUnit) set(value []byte) {
+	if !bytes.Equal(value, u.value) {
+		u.value = value
+		u.latest = false
+	}
+}
+
+func (u *stateCacheUnit) hash() []byte {
+	if u.latest {
+		return u.sum[:]
+	}
+
+	var data []byte
+	data = append(data, u.key...)
+	data = append(data, u.value...)
+	u.sum = crypto.Sha256(data)
+	u.latest = true
+	return u.sum[:]
 }
