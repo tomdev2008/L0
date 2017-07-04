@@ -233,6 +233,13 @@ func (lbft *Lbft) RecvConsensus(payload []byte) {
 		log.Errorf("Replica %s receive consensus message : unkown %v", lbft.options.ID, err)
 		return
 	}
+	if pprep := msg.GetPrePrepare(); pprep != nil {
+		log.Debugf("Replica %s core consenter %s received preprepare message from %s --- p2p", lbft.options.ID, pprep.Name, pprep.ReplicaID)
+	} else if prep := msg.GetPrepare(); prep != nil {
+		log.Debugf("Replica %s core consenter %s received prepare message from %s --- p2p", lbft.options.ID, prep.Name, prep.ReplicaID)
+	} else if cmt := msg.GetCommit(); cmt != nil {
+		log.Debugf("Replica %s core consenter %s received commit message from %s --- p2p", lbft.options.ID, cmt.Name, cmt.ReplicaID)
+	}
 	//log.Debugf("Replica %s receive broadcast consensus message %s(%s)", lbft.options.ID, msg.info(), hash(msg))
 	lbft.recvConsensusMsgChan <- msg
 }
@@ -338,7 +345,7 @@ func (lbft *Lbft) handleTransaction() {
 			var vc *ViewChange
 			lbft.voteViewChange.IterVoter(func(voter string, ticket vote.ITicket) {
 				tvc := ticket.(*ViewChange)
-				if tvc.PrimaryID != lbft.lastPrimaryID && tvc.H >= lbft.lastSeqNum() {
+				if tvc.PrimaryID != lbft.lastPrimaryID && tvc.H == lbft.lastSeqNum() {
 					if vc == nil {
 						vc = tvc
 					} else if tvc.Priority < vc.Priority {
@@ -700,16 +707,16 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 	}
 
 	lbft.voteViewChange.Add(vc.ReplicaID, vc)
-	if vc.PrimaryID == vc.ReplicaID {
-		lbft.voteViewChange.IterVoter(func(voter string, ticket vote.ITicket) {
-			tvc := ticket.(*ViewChange)
-			if tvc.PrimaryID == vc.PrimaryID {
-				if tvc.H < vc.H {
-					tvc.H = vc.H
-				}
+	lbft.voteViewChange.IterVoter(func(voter string, ticket vote.ITicket) {
+		tvc := ticket.(*ViewChange)
+		if tvc.PrimaryID == vc.PrimaryID {
+			if tvc.H < vc.H {
+				tvc.H = vc.H
+			} else {
+				vc.H = tvc.H
 			}
-		})
-	}
+		}
+	})
 
 	cnt := lbft.voteViewChange.Size()
 	log.Infof("Replica %s received view change message from %s for voter %s , vote size %d", lbft.options.ID, vc.ReplicaID, vc.PrimaryID, cnt)
@@ -718,13 +725,14 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 	} else if cnt == lbft.intersectionQuorum() {
 		lbft.lastPrimaryID = lbft.primaryID
 		lbft.primaryID = ""
+		lbft.blockTimer.Stop()
 		lbft.iterInstance(func(key string, instance *lbftCore) {
-			if !instance.isPassCommit {
-				delete(lbft.lbftCores, key)
-				instance.stop()
-				// } else {
-				// 	log.Debugf("Replica %s alreay commmit for consensus %s, view change", lbft.options.ID, instance.name)
-			}
+			//if !instance.isPassCommit {
+			delete(lbft.lbftCores, key)
+			instance.stop()
+			// } else {
+			// 	log.Debugf("Replica %s alreay commmit for consensus %s, view change", lbft.options.ID, instance.name)
+			//}
 		})
 		log.Infof("Replica %s start to vote new PrimaryID, view change", lbft.options.ID)
 		lbft.viewChangeTimer.Stop()
@@ -772,9 +780,9 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 			committed := <-lbft.lbftCoreCommittedChan
 			lbft.addCommittedReqeustBatch(committed.SeqNo, committed.RequestBatch)
 		}
-		lbft.resetBlockTimer()
 		lbft.resetEmptyBlockTimer()
 	}
+	lbft.resetBlockTimer()
 }
 
 func (lbft *Lbft) recvCommitted(ct *Committed) {

@@ -390,7 +390,8 @@ func (instance *lbftCore) handleCommit(commit *Commit) {
 						SeqNo:        instance.seqNo,
 						RequestBatch: instance.requestBatch,
 					}
-					instance.lbft.lbftCoreCommittedChan <- ctt
+					//instance.lbft.lbftCoreCommittedChan <- ctt
+					instance.lbft.recvConsensusMsgChan <- &Message{Type: MESSAGECOMMITTED, Payload: serialize(ctt)}
 					instance.lbft.broadcast(instance.lbft.options.Chain, &Message{Type: MESSAGECOMMITTED, Payload: serialize(ctt)})
 				})
 			}
