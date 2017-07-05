@@ -391,6 +391,10 @@ func (self Otto) SetStackTraceLimit(limit int) {
 	self.runtime.traceLimit = limit
 }
 
+func (self Otto) SetOPCodeLimit(limit int) {
+	self.runtime.opcodeLimit = limit
+}
+
 // MakeCustomError creates a new Error object with the given name and message,
 // returning it as a Value.
 func (self Otto) MakeCustomError(name, message string) Value {

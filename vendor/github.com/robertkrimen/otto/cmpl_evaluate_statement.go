@@ -3,6 +3,7 @@ package otto
 import (
 	"fmt"
 	"runtime"
+	"strconv"
 
 	"github.com/robertkrimen/otto/token"
 )
@@ -24,6 +25,7 @@ func (self *_runtime) cmpl_evaluate_nodeStatement(node _nodeStatement) Value {
 	switch node := node.(type) {
 
 	case *_nodeBlockStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		labels := self.labels
 		self.labels = nil
 
@@ -38,6 +40,7 @@ func (self *_runtime) cmpl_evaluate_nodeStatement(node _nodeStatement) Value {
 		return value
 
 	case *_nodeBranchStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		target := node.label
 		switch node.branch { // FIXME Maybe node.kind? node.operator?
 		case token.BREAK:
@@ -47,30 +50,38 @@ func (self *_runtime) cmpl_evaluate_nodeStatement(node _nodeStatement) Value {
 		}
 
 	case *_nodeDebuggerStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		if self.debugger != nil {
 			self.debugger(self.otto)
 		}
 		return emptyValue // Nothing happens.
 
 	case *_nodeDoWhileStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeDoWhileStatement(node)
 
 	case *_nodeEmptyStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return emptyValue
 
 	case *_nodeExpressionStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeExpression(node.expression)
 
 	case *_nodeForInStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeForInStatement(node)
 
 	case *_nodeForStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeForStatement(node)
 
 	case *_nodeIfStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeIfStatement(node)
 
 	case *_nodeLabelledStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		self.labels = append(self.labels, node.label)
 		defer func() {
 			if len(self.labels) > 0 {
@@ -82,22 +93,27 @@ func (self *_runtime) cmpl_evaluate_nodeStatement(node _nodeStatement) Value {
 		return self.cmpl_evaluate_nodeStatement(node.statement)
 
 	case *_nodeReturnStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		if node.argument != nil {
 			return toValue(newReturnResult(self.cmpl_evaluate_nodeExpression(node.argument).resolve()))
 		}
 		return toValue(newReturnResult(Value{}))
 
 	case *_nodeSwitchStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeSwitchStatement(node)
 
 	case *_nodeThrowStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		value := self.cmpl_evaluate_nodeExpression(node.argument).resolve()
 		panic(newException(value))
 
 	case *_nodeTryStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeTryStatement(node)
 
 	case *_nodeVariableStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		// Variables are already defined, this is initialization only
 		for _, variable := range node.list {
 			self.cmpl_evaluate_nodeVariableExpression(variable.(*_nodeVariableExpression))
@@ -105,9 +121,11 @@ func (self *_runtime) cmpl_evaluate_nodeStatement(node _nodeStatement) Value {
 		return emptyValue
 
 	case *_nodeWhileStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeWhileStatement(node)
 
 	case *_nodeWithStatement:
+		self.checkLimit() // add by ohnoohyesohmygod
 		return self.cmpl_evaluate_nodeWithStatement(node)
 
 	}
@@ -146,6 +164,7 @@ func (self *_runtime) cmpl_evaluate_nodeDoWhileStatement(node *_nodeDoWhileState
 resultBreak:
 	for {
 		for _, node := range node.body {
+			self.checkLimit() // add by ohnoohyesohmygod
 			value := self.cmpl_evaluate_nodeStatement(node)
 			switch value.kind {
 			case valueResult:
@@ -192,6 +211,7 @@ func (self *_runtime) cmpl_evaluate_nodeForInStatement(node *_nodeForInStatement
 	result := emptyValue
 	object := sourceObject
 	for object != nil {
+		self.checkLimit() // add by ohnoohyesohmygod
 		enumerateValue := emptyValue
 		object.enumerate(false, func(name string) bool {
 			into := self.cmpl_evaluate_nodeExpression(into)
@@ -252,6 +272,7 @@ func (self *_runtime) cmpl_evaluate_nodeForStatement(node *_nodeForStatement) Va
 	result := emptyValue
 resultBreak:
 	for {
+		self.checkLimit() // add by ohnoohyesohmygod
 		if test != nil {
 			testResult := self.cmpl_evaluate_nodeExpression(test)
 			testResultValue := testResult.resolve()
@@ -261,6 +282,7 @@ resultBreak:
 		}
 		for _, node := range body {
 			value := self.cmpl_evaluate_nodeStatement(node)
+			fmt.Println("do for ", node, value)
 			switch value.kind {
 			case valueResult:
 				switch value.evaluateBreakContinue(labels) {
@@ -386,6 +408,8 @@ func (self *_runtime) cmpl_evaluate_nodeWhileStatement(node *_nodeWhileStatement
 	result := emptyValue
 resultBreakContinue:
 	for {
+		self.checkLimit() // add by ohnoohyesohmygod
+
 		if !self.cmpl_evaluate_nodeExpression(test).resolve().bool() {
 			// Stahp: while (false) ...
 			break
@@ -421,4 +445,18 @@ func (self *_runtime) cmpl_evaluate_nodeWithStatement(node *_nodeWithStatement) 
 	}()
 
 	return self.cmpl_evaluate_nodeStatement(node.body)
+}
+
+// checkLimit limit execute opcode count
+// add by ohnoohyesohmygod
+func (self *_runtime) checkLimit() {
+	if self.opcodeLimit == 0 {
+		return
+	}
+
+	if self.execOPCodeCount > self.opcodeLimit {
+		panic(self.panicRangeError("Maximum execute opcode count exceeded maxcount:" + strconv.Itoa(self.opcodeLimit)))
+	} else {
+		self.execOPCodeCount++
+	}
 }

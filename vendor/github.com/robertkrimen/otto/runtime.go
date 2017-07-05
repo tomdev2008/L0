@@ -51,16 +51,18 @@ type _global struct {
 }
 
 type _runtime struct {
-	global       _global
-	globalObject *_object
-	globalStash  *_objectStash
-	scope        *_scope
-	otto         *Otto
-	eval         *_object // The builtin eval, for determine indirect versus direct invocation
-	debugger     func(*Otto)
-	random       func() float64
-	stackLimit   int
-	traceLimit   int
+	global          _global
+	globalObject    *_object
+	globalStash     *_objectStash
+	scope           *_scope
+	otto            *Otto
+	eval            *_object // The builtin eval, for determine indirect versus direct invocation
+	debugger        func(*Otto)
+	random          func() float64
+	stackLimit      int
+	traceLimit      int
+	opcodeLimit     int
+	execOPCodeCount int
 
 	labels []string // FIXME
 	lck    sync.Mutex
