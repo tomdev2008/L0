@@ -209,7 +209,7 @@ func (p *VMProc) CCallCommit() error {
 		if err := p.ccall("AddTransfer", nil, txOP.from, txOP.to, txOP.amount, txOP.txType); err != nil {
 			return err
 		}
-		log.Debugf("commit -> AddTransfer from:%s, to:%s, amount:%d, type:%d\n", txOP.from, txOP.to, txOP.amount, txOP.txType)
+		// log.Debugf("commit -> AddTransfer from:%s, to:%s, amount:%d, type:%d\n", txOP.from, txOP.to, txOP.amount, txOP.txType)
 	}
 
 	for {
@@ -222,12 +222,12 @@ func (p *VMProc) CCallCommit() error {
 			if err := p.ccall("AddState", nil, stateOP.key, stateOP.value); err != nil {
 				return err
 			}
-			log.Debugf("commit -> AddState key:%s", stateOP.key)
+			// log.Debugf("commit -> AddState key:%s", stateOP.key)
 		} else if stateOP.optype == stateOpTypeDelete {
 			if err := p.ccall("DelState", nil, stateOP.key); err != nil {
 				return err
 			}
-			log.Debugf("commit -> DelState key:%s", stateOP.key)
+			// log.Debugf("commit -> DelState key:%s", stateOP.key)
 		}
 	}
 
@@ -315,6 +315,5 @@ func (p *VMProc) request(funcName string, params ...interface{}) (*InvokeData, e
 
 	ch := p.SendRequest(data)
 	result := <-ch
-	log.Debug("receive response", len(result.Params))
 	return result, nil
 }

@@ -247,7 +247,6 @@ func doReadPipe(p *VMProc) {
 		return
 	}
 
-	log.Debugf("selector receive one data sid:%d", data.SessionID)
 	p.receiveChan <- data
 }
 
