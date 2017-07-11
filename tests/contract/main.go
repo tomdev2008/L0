@@ -117,8 +117,6 @@ func DeploySmartContractTX() {
 	contractSpec.ContractCode = buf
 	contractSpec.ContractAddr = a.Bytes()
 	contractSpec.ContractParams = []string{"init", "100"}
-	privateKey, _ := crypto.GenerateKey()
-	accounts.PublicKeyToAddress(*privateKey.Public())
 
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
