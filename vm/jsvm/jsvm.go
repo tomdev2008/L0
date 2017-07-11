@@ -20,8 +20,6 @@
 package jsvm
 
 import (
-	"fmt"
-
 	"errors"
 
 	"github.com/bocheninc/L0/components/log"
@@ -46,16 +44,16 @@ func Start() error {
 }
 
 // PreInitContract preset call L0Init not commit change
-func PreInitContract(cd *vm.ContractData) (bool, error) {
+func PreInitContract(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	return execContract(cd, "L0Init")
 }
 
 // RealInitContract real call L0Init and commit all change
-func RealInitContract(cd *vm.ContractData) (bool, error) {
+func RealInitContract(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Init")
-	if !ok || err != nil {
+	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
@@ -70,16 +68,16 @@ func RealInitContract(cd *vm.ContractData) (bool, error) {
 }
 
 // PreExecute preset call L0Invoke not commit change
-func PreExecute(cd *vm.ContractData) (bool, error) {
+func PreExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	return execContract(cd, "L0Invoke")
 }
 
 // RealExecute real call L0Invoke and commit all change
-func RealExecute(cd *vm.ContractData) (bool, error) {
+func RealExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Invoke")
-	if !ok || err != nil {
+	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
@@ -96,8 +94,11 @@ func RealExecute(cd *vm.ContractData) (bool, error) {
 // QueryContract call L0Query not commit change
 func QueryContract(cd *vm.ContractData) ([]byte, error) {
 	resetProc(cd)
-	fmt.Println("do PreExecute")
-	return []byte("hello"), nil
+	result, err := execContract(cd, "L0Query")
+	if err != nil {
+		return nil, err
+	}
+	return []byte(result.(string)), nil
 }
 
 func resetProc(cd *vm.ContractData) {
@@ -107,7 +108,7 @@ func resetProc(cd *vm.ContractData) {
 }
 
 // execContract start a js vm and execute smart contract script
-func execContract(cd *vm.ContractData, funcName string) (bool, error) {
+func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error("exec contract code error ", e)
@@ -133,7 +134,10 @@ func execContract(cd *vm.ContractData, funcName string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return val.ToBoolean()
+	if val.IsBoolean() {
+		return val.ToBoolean()
+	}
+	return val.ToString()
 }
 
 func callJSFunc(ottoVM *otto.Otto, cd *vm.ContractData, funcName string) (val otto.Value, err error) {

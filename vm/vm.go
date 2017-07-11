@@ -27,6 +27,8 @@ import (
 
 	"errors"
 
+	"fmt"
+
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/contract"
@@ -74,13 +76,21 @@ func Query(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmar
 }
 
 func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract, realExec bool) (interface{}, error) {
+	var vm *VMProc
+
 	if err := initVMProc(); err != nil {
 		return false, err
 	}
 
 	// TODO 根据不同的语言调用不同的vm
-	// vm := luavmProc
-	vm := jsvmProc
+	switch VMConf.VMType {
+	case "luavm":
+		vm = luavmProc
+	case "jsvm":
+		vm = jsvmProc
+	default:
+		return nil, fmt.Errorf("not support vm %s", VMConf.VMType)
+	}
 
 	contractCode := getContractCode(cs, handler)
 	cd := NewContractData(tx, cs, contractCode)
@@ -106,34 +116,37 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISm
 
 func initVMProc() error {
 	var err error
-
-	// create js vm
-	if jsvmProc == nil {
-		locker.Lock()
+	switch VMConf.VMType {
+	case "jsvm":
 		if jsvmProc == nil {
-			if jsvmProc, err = NewVMProc(VMConf.JSVMExeFilePath); err == nil {
-				jsvmProc.SetRequestHandle(requestHandle)
-				jsvmProc.Selector()
-			} else {
-				log.Error("create jsvm proc error", err)
+			locker.Lock()
+			if jsvmProc == nil {
+				if jsvmProc, err = NewVMProc(VMConf.JSVMExeFilePath); err == nil {
+					jsvmProc.SetRequestHandle(requestHandle)
+					jsvmProc.Selector()
+				} else {
+					log.Error("create jsvm proc error", err)
+				}
 			}
+			locker.Unlock()
 		}
-		locker.Unlock()
+	case "luavm":
+		// create lua vm
+		if luavmProc == nil {
+			locker.Lock()
+			if luavmProc == nil {
+				if luavmProc, err = NewVMProc(VMConf.LuaVMExeFilePath); err == nil {
+					luavmProc.SetRequestHandle(requestHandle)
+					luavmProc.Selector()
+				} else {
+					log.Error("create luavm proc error", err)
+				}
+			}
+			locker.Unlock()
+		}
+	default:
+		return fmt.Errorf("not support vm %s", VMConf.VMType)
 	}
-
-	// create lua vm
-	// if luavmProc == nil {
-	// 	locker.Lock()
-	// 	if luavmProc == nil {
-	// 		if luavmProc, err = NewVMProc(VMConf.LuaVMExeFilePath); err == nil {
-	// 			luavmProc.SetRequestHandle(requestHandle)
-	// 			luavmProc.Selector()
-	// 		} else {
-	// 			log.Error("create luavm proc error", err)
-	// 		}
-	// 	}
-	// 	locker.Unlock()
-	// }
 
 	return err
 }

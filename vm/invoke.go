@@ -219,7 +219,7 @@ func (p *VMProc) CCallCommit() error {
 		}
 
 		if stateOP.optype == stateOpTypePut {
-			if err := p.ccall("AddState", nil, stateOP.key, stateOP.value); err != nil {
+			if err := p.ccall("PutState", nil, stateOP.key, stateOP.value); err != nil {
 				return err
 			}
 			// log.Debugf("commit -> AddState key:%s", stateOP.key)

@@ -21,7 +21,6 @@ package luavm
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
@@ -44,15 +43,15 @@ func Start() error {
 	return nil
 }
 
-func PreInitContract(cd *vm.ContractData) (bool, error) {
+func PreInitContract(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	return execContract(cd, "L0Init")
 }
 
-func RealInitContract(cd *vm.ContractData) (bool, error) {
+func RealInitContract(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Init")
-	if !ok || err != nil {
+	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
@@ -66,15 +65,16 @@ func RealInitContract(cd *vm.ContractData) (bool, error) {
 	return ok, err
 }
 
-func PreExecute(cd *vm.ContractData) (bool, error) {
+func PreExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	return execContract(cd, "L0Invoke")
 }
 
-func RealExecute(cd *vm.ContractData) (bool, error) {
+func RealExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Invoke")
-	if !ok || err != nil {
+
+	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
@@ -90,8 +90,14 @@ func RealExecute(cd *vm.ContractData) (bool, error) {
 
 func QueryContract(cd *vm.ContractData) ([]byte, error) {
 	resetProc(cd)
-	fmt.Println("do PreExecute")
-	return []byte("hello"), nil
+
+	result, err := execContract(cd, "L0Query")
+
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return []byte(result.(string)), nil
 }
 
 func resetProc(cd *vm.ContractData) {
@@ -101,7 +107,7 @@ func resetProc(cd *vm.ContractData) {
 }
 
 // execContract start a lua vm and execute smart contract script
-func execContract(cd *vm.ContractData, funcName string) (bool, error) {
+func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error("exec contract code error ", e)
@@ -109,7 +115,6 @@ func execContract(cd *vm.ContractData, funcName string) (bool, error) {
 	}()
 
 	// log.Debugf("execContract funcName:%s\n", funcName)
-
 	code := cd.ContractCode
 	if err := vm.CheckContractCode(code); err != nil {
 		return false, err
@@ -185,7 +190,7 @@ func openLib(L *lua.LState, libName string, libFunc lua.LGFunction) {
 }
 
 // call lua function(L0Init, L0Invoke)
-func callLuaFunc(L *lua.LState, funcName string, params ...string) (bool, error) {
+func callLuaFunc(L *lua.LState, funcName string, params ...string) (interface{}, error) {
 	p := lua.P{
 		Fn:      L.GetGlobal(funcName),
 		NRet:    1,
@@ -195,26 +200,23 @@ func callLuaFunc(L *lua.LState, funcName string, params ...string) (bool, error)
 	var err error
 	l := len(params)
 	var lvparams []lua.LValue
-	if l == 0 {
-		if "L0Invoke" == funcName {
+	if "L0Invoke" == funcName {
+		if l == 0 {
 			lvparams = []lua.LValue{lua.LNil, lua.LNil}
-		} else {
-			lvparams = []lua.LValue{}
-		}
-	} else if l == 1 {
-		if "L0Invoke" == funcName {
+		} else if l == 1 {
 			lvparams = []lua.LValue{lua.LString(params[0]), lua.LNil}
-		} else {
-			lvparams = []lua.LValue{lua.LString(params[0])}
-		}
-	} else {
-		tb := new(lua.LTable)
-		if "L0Invoke" == funcName {
+		} else if l > 1 {
+			tb := new(lua.LTable)
 			for i := 1; i < l; i++ {
 				tb.RawSet(lua.LNumber(i), lua.LString(params[i]))
 			}
 			lvparams = []lua.LValue{lua.LString(params[0]), tb}
-		} else {
+		}
+	} else {
+		if l == 0 {
+			lvparams = []lua.LValue{}
+		} else if l > 0 {
+			tb := new(lua.LTable)
 			for i := 0; i < l; i++ {
 				tb.RawSet(lua.LNumber(i), lua.LString(params[i]))
 			}
@@ -228,8 +230,13 @@ func callLuaFunc(L *lua.LState, funcName string, params ...string) (bool, error)
 		return false, err
 	}
 
-	ret := L.CheckBool(-1) // returned value
-	L.Pop(1)               // remove received value
+	if _, ok := L.Get(-1).(lua.LBool); ok {
+		ret := L.ToBool(-1)
+		L.Pop(1) // remove received value
+		return ret, nil
+	}
 
-	return ret, nil
+	queryResult := L.ToString(-1)
+	L.Pop(1) // remove received value
+	return queryResult, nil
 }

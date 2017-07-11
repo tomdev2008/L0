@@ -20,7 +20,7 @@ local candidates = {"秦皇岛", "大连", "三亚"}
 -- }
 
 -- 合约创建时会被调用一次, 完成数据初始化
-function L0Init(func, args)
+function L0Init(args)
     print("L0Init")
     --初始化参与人
     for k, v in ipairs(voters) 
@@ -41,7 +41,7 @@ function L0Init(func, args)
 
     end
     
-    return true, "ok"
+    return true
 end
 
 -- 每次合约执行都调用
@@ -54,28 +54,29 @@ function L0Invoke(func, args)
         local candidate = L0.GetState("candidate:" .. candidateName)
         print("func ",func,"args ",args[1],args[2],"voter:",voter["name"],"candidate",candidate["name"])        
         if voter == nil or candidate == nil then
-            return false, "voter or candidate is nil "
+            print( "voter or candidate is nil ")
+            return false
         end
         voter["candidateName"] = candidateName
         L0.PutState("voter:" .. voteName,  voter)
         candidate["voteCount"] = candidate["voteCount"] + 1
         L0.PutState("candidate:" .. candidateName, candidate)
     end
-    return true, "ok"
+    return true
 end
 
 -- 每次合约查询都调用
-function L0Query(func, args)
+function L0Query(args)
     print("L0Query")
-    if func == "vote" then
+    if args[0] == "vote" then
         local voteName = args[1]
         local voter = L0.GetState("voter:" .. voteName)
-        return true, "voter: "..voter["name"].." candidateName: "..voter["candidateName"] 
-    elseif func == "candidate" then
+        return "voter: "..voter["name"].." candidateName: "..voter["candidateName"] 
+    elseif args[0] == "candidate" then
         local candidateName = args[1]
         local candidate = L0.GetState("candidate:" .. candidateName)
-        return true, "candidate: "..candidate["name"].." voteCount: "..candidate["voteCount"]
-    elseif func == "max" then
+        return "candidate: "..candidate["name"].." voteCount: "..candidate["voteCount"]
+    elseif args[0] == "max" then  
         local victor = nil
         for k, v in ipairs(candidates) do
           local candidate = L0.GetState("candidate:" .. v)
@@ -83,8 +84,8 @@ function L0Query(func, args)
             victor = candidate
           end
         end
-        return true, "victor: "..victor["name"].." voteCount: "..victor["voteCount"]
+        return "victor: "..victor["name"].." voteCount: "..victor["voteCount"]
     end
-    return false,"not fund func"..func
+    return "not fund func"
 end
 

@@ -30,6 +30,9 @@ var (
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	sender         = "7ce1bb0858e71b50d603ebe4bec95b11d8833e6d"
 	contractPath   = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
+
+	//contractPath = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
+	//contractPath = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
 )
 
 func main() {

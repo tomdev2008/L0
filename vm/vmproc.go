@@ -22,6 +22,7 @@ package vm
 import (
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -69,7 +70,16 @@ func NewVMProc(name string) (*VMProc, error) {
 
 	attr := new(os.ProcAttr)
 	attr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr, pr, cw}
-	argv := []string{"L0 contract", "vm", "proc"}
+	argv := []string{
+		"L0 contract vm proc",
+		VMConf.LogFile,
+		VMConf.LogLevel,
+		strconv.Itoa(VMConf.VMMaxMem),
+		strconv.Itoa(VMConf.VMCallStackSize),
+		strconv.Itoa(VMConf.VMRegistrySize),
+		strconv.Itoa(VMConf.ExecLimitMaxOpcodeCount),
+		strconv.Itoa(VMConf.ExecLimitStackDepth),
+	}
 	proc, err := os.StartProcess(name, argv, attr)
 	if err != nil {
 		log.Error("create vm proc error ", err)
@@ -214,7 +224,7 @@ func doReceive(p *VMProc, receiveData *InvokeData) {
 			errmsg := ""
 			if err != nil {
 				errmsg = err.Error()
-				log.Error("error msg:", errmsg)
+				log.Error("call requestHandle error msg:", errmsg)
 			}
 
 			data.SetParams(errmsg, result)

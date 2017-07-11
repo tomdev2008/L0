@@ -23,12 +23,11 @@ package vm
 
 var VMConf *Config
 
-func init() {
-	VMConf = DefaultConfig()
-}
-
 // Config vm config struct
 type Config struct {
+	LogFile                    string
+	LogLevel                   string
+	VMType                     string
 	VMRegistrySize             int
 	VMCallStackSize            int
 	VMMaxMem                   int // vm maximum memory size (MB)
@@ -46,9 +45,10 @@ type Config struct {
 // DefaultConfig default vm config
 func DefaultConfig() *Config {
 	return &Config{
+		VMType:                     "luavm",
 		VMRegistrySize:             256,
 		VMCallStackSize:            64,
-		VMMaxMem:                   2,
+		VMMaxMem:                   800,
 		ExecLimitStackDepth:        100,
 		ExecLimitMaxOpcodeCount:    10000,
 		ExecLimitMaxRunTime:        1000,
@@ -56,7 +56,7 @@ func DefaultConfig() *Config {
 		ExecLimitMaxStateValueSize: 5120, //5K
 		ExecLimitMaxStateItemCount: 1000,
 		ExecLimitMaxStateKeyLength: 256,
-		LuaVMExeFilePath:           "/Users/chenc/work/go/src/github.com/bocheninc/L0/vm/luavm/main/luavm",
-		JSVMExeFilePath:            "/Users/chenc/work/go/src/github.com/bocheninc/L0/vm/jsvm/main/jsvm",
+		LuaVMExeFilePath:           "/home/itcast/go/src/github.com/bocheninc/L0/vm/luavm/main/luavm",
+		JSVMExeFilePath:            "/home/itcast/go/src/github.com/bocheninc/L0/vm/jsvm/main/jsvm",
 	}
 }

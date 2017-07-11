@@ -27,6 +27,7 @@ function L0Invoke(func, args) {
 
 function L0Query(args) {
     console.log("call L0Query");
+    return "query ok"
 }
 
 function mint(receiver, amount) {

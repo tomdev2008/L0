@@ -20,7 +20,8 @@
 package main
 
 import (
-	"fmt"
+	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -30,16 +31,20 @@ import (
 )
 
 func main() {
+	log.New(os.Args[1])
+	log.SetLevel(os.Args[2])
+
+	vmConfig()
+
 	var rlimit syscall.Rlimit
-	rlimit.Cur = 1024 //以字节为单位
 	rlimit.Max = uint64(vm.VMConf.VMMaxMem) * 1024 * 1024
+	rlimit.Cur = uint64(rlimit.Max / 2)
 	err := syscall.Setrlimit(syscall.RLIMIT_AS, &rlimit)
 	if err != nil {
 		log.Error("set rlimit error", err)
 		return
 	}
 
-	fmt.Println("jsvm starting...")
 	err = jsvm.Start()
 	if err != nil {
 		log.Error("jsvm start error", err)
@@ -50,4 +55,13 @@ func main() {
 	for {
 		time.Sleep(time.Second * 60)
 	}
+}
+
+func vmConfig() {
+	vm.VMConf = vm.DefaultConfig()
+	vm.VMConf.VMMaxMem, _ = strconv.Atoi(os.Args[3])
+	vm.VMConf.VMCallStackSize, _ = strconv.Atoi(os.Args[4])
+	vm.VMConf.VMRegistrySize, _ = strconv.Atoi(os.Args[5])
+	vm.VMConf.ExecLimitMaxOpcodeCount, _ = strconv.Atoi(os.Args[6])
+	vm.VMConf.ExecLimitStackDepth, _ = strconv.Atoi(os.Args[7])
 }
