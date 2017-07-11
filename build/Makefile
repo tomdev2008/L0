@@ -16,10 +16,10 @@ TESTS=${BUILD_BIN_PATH}/tests
 INSTALL_DIR=./bin/
 
 all:
-	go build -o jsvm ../vm/jsvm/main/main.go
-	go build -o luavm ../vm/luavm/main/main.go
-
+	go build -tags=embed -o jsvm ../vm/jsvm/main/main.go
+	go build -tags=embed -o luavm ../vm/luavm/main/main.go
 	go install -tags=embed ../cmd/...
+	
 	@mkdir -p bin
 
 	@if test -f ${LCND}; then \

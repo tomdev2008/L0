@@ -275,6 +275,42 @@
 			"revisionTime": "2017-06-04T10:36:02Z"
 		},
 		{
+			"checksumSHA1": "35jaG3ZuHI84WLgAfjkM/nor+dU=",
+			"path": "github.com/robertkrimen/otto/ast",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "L0KsB2EzTlPgv0iae3q3SukNW7U=",
+			"path": "github.com/robertkrimen/otto/dbg",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "euDLJKhw4doeTSxjEoezjxYXLzs=",
+			"path": "github.com/robertkrimen/otto/file",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "THLL/H15S/hPSfii9hiJBU57FR8=",
+			"path": "github.com/robertkrimen/otto/parser",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "7J/7NaYRqKhBvZ+dTIutsEoEgFw=",
+			"path": "github.com/robertkrimen/otto/registry",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "/jMXYuXycBpTqWhRyJ2xsqvHvQI=",
+			"path": "github.com/robertkrimen/otto/token",
+			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
+			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
 			"checksumSHA1": "ncB97TqhsqLzFWWZCXRO3i1NoXk=",
 			"path": "github.com/spaolacci/murmur3",
 			"revision": "0d12bf811670bf6a1a63828dfbd003eded177fce",
