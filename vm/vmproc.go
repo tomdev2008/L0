@@ -79,6 +79,7 @@ func NewVMProc(name string) (*VMProc, error) {
 		strconv.Itoa(VMConf.VMRegistrySize),
 		strconv.Itoa(VMConf.ExecLimitMaxOpcodeCount),
 		strconv.Itoa(VMConf.ExecLimitStackDepth),
+		strconv.Itoa(VMConf.ExecLimitMaxScriptSize),
 	}
 	proc, err := os.StartProcess(name, argv, attr)
 	if err != nil {

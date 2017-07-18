@@ -97,7 +97,11 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 		blkCh:              make(chan *types.Block, 10),
 		currentBlockHeader: new(types.BlockHeader),
 	}
+
 	bc.txValidator = NewValidator(bc.ledger)
+
+	bc.ledger.Validator = bc.txValidator
+
 	if params.Validator {
 		bc.txValidator.startValidator()
 	} else {

@@ -24,6 +24,8 @@ import (
 
 	"bytes"
 
+	"time"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -43,12 +45,17 @@ var (
 	ledgerInstance *Ledger
 )
 
+type ValidatorHandler interface {
+	UpdateRecipientAccount(tx *types.Transaction)
+}
+
 // Ledger represents the ledger in blockchain
 type Ledger struct {
-	block    *block_storage.Blockchain
-	state    *state.State
-	storage  *merge.Storage
-	contract *contract.SmartConstract
+	block     *block_storage.Blockchain
+	state     *state.State
+	storage   *merge.Storage
+	contract  *contract.SmartConstract
+	Validator ValidatorHandler
 }
 
 // NewLedger returns the ledger instance
@@ -108,6 +115,10 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		txWriteBatchs []*db.WriteBatch
 	)
 
+	t := time.Now()
+	bh, _ := ledger.Height()
+	ledger.contract.StartConstract(bh)
+
 	txWriteBatchs, block.Transactions, err = ledger.executeTransaction(block.Transactions)
 	if err != nil {
 		return err
@@ -115,12 +126,14 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
 	writeBatchs := ledger.block.AppendBlock(block)
-
 	writeBatchs = append(writeBatchs, txWriteBatchs...)
 
 	if err := ledger.state.AtomicWrite(writeBatchs); err != nil {
 		return nil
 	}
+	delay := time.Since(t)
+	ledger.contract.StopContract(bh)
+	log.Infoln("append block delay :", delay, " transactions : ", len(block.Transactions))
 
 	if flag {
 		var txs types.Transactions
@@ -278,67 +291,41 @@ func (ledger *Ledger) init() error {
 }
 
 func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBatch, types.Transactions, error) {
-	var (
-		err                                               error
-		tmpAtomicWriteBatchs, tmpWriteBatchs, writeBatchs []*db.WriteBatch
-	)
-
-	bh, _ := ledger.Height()
-	log.Debugln("tx-len start ", len(Txs), "bh ", bh)
-	ledger.contract.StartConstract(bh)
+	var err error
+	var tmpWriteBatchs, tmpAtomicWriteBatchs, writeBatchs []*db.WriteBatch
 
 	for _, tx := range Txs {
-		switch tx.GetType() {
-		case types.TypeIssue:
-			if writeBatchs, err = ledger.executeIssueTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeAtomic:
-			if writeBatchs, err = ledger.executeAtomicTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeAcrossChain:
-			if writeBatchs, err = ledger.executeACrossChainTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeMerged:
-			if writeBatchs, err = ledger.executeMergedTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeBackfront:
-			if writeBatchs, err = ledger.executeBackfrontTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeDistribut:
-			if writeBatchs, err = ledger.executeDistriTx(writeBatchs, tx); err != nil {
-				return nil, nil, err
-			}
-		case types.TypeContractInit:
-			fallthrough
-		case types.TypeContractInvoke:
+		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeContractInvoke {
 			tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
 			if err != nil {
 				return nil, nil, err
 			}
 
+			t0 := time.Now()
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
 				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
 				continue
 			}
+			delay0 := time.Since(t0)
+			log.Debugln("contract delay: ", delay0)
 
 			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
 
-			if len(txs) != 0 {
-
-				contractTxWriteBatchs, contractTxs, err := ledger.executeTransaction(txs)
+			for _, v := range txs {
+				writeBatchs, err = ledger.commitedTranaction(v, writeBatchs)
 				if err != nil {
 					return nil, nil, err
 				}
-				log.Debugln("txs-haha", *txs[0], *contractTxs[0])
-				writeBatchs = append(writeBatchs, contractTxWriteBatchs...)
-				Txs = append(Txs, contractTxs...)
+
+				ledger.Validator.UpdateRecipientAccount(v)
 			}
+			Txs = append(Txs, txs...)
+		}
+
+		writeBatchs, err = ledger.commitedTranaction(tx, writeBatchs)
+		if err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -347,9 +334,40 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 		return nil, nil, err
 	}
 
-	ledger.contract.StopContract(bh)
-	log.Debugln("tx-len stop", len(Txs), "bh ", bh)
 	return writeBatchs, Txs, nil
+}
+
+func (ledger *Ledger) commitedTranaction(tx *types.Transaction, writeBatchs []*db.WriteBatch) ([]*db.WriteBatch, error) {
+	var err error
+	switch tx.GetType() {
+	case types.TypeIssue:
+		if writeBatchs, err = ledger.executeIssueTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	case types.TypeAtomic:
+		if writeBatchs, err = ledger.executeAtomicTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	case types.TypeAcrossChain:
+
+		if writeBatchs, err = ledger.executeACrossChainTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	case types.TypeMerged:
+		if writeBatchs, err = ledger.executeMergedTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	case types.TypeBackfront:
+		if writeBatchs, err = ledger.executeBackfrontTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	case types.TypeDistribut:
+		if writeBatchs, err = ledger.executeDistriTx(writeBatchs, tx); err != nil {
+			return nil, err
+		}
+	}
+
+	return writeBatchs, err
 }
 
 func (ledger *Ledger) executeIssueTx(writeBatchs []*db.WriteBatch, tx *types.Transaction) ([]*db.WriteBatch, error) {
