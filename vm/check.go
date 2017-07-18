@@ -67,6 +67,10 @@ func CheckStateKeyValue(key string, value []byte) error {
 }
 
 func CheckAddr(addr string) error {
+	if addr[0:2] == "0x" {
+		addr = addr[2:]
+	}
+
 	addrByte, err := hex.DecodeString(addr)
 	if err != nil {
 		return errors.New("account address illegal")

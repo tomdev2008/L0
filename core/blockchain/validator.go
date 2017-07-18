@@ -139,7 +139,9 @@ func (va *validatorAccount) addTransaction(tx *types.Transaction) bool {
 		if nonce != tx.Nonce() || amount.Sign() < 0 {
 			isOK = false
 		}
-	case types.TypeContractInit:
+	case types.TypeJSContractInit:
+	//TODO
+	case types.TypeLuaContractInit:
 	//TODO
 	case types.TypeContractInvoke:
 	//TODO
@@ -381,7 +383,7 @@ func (vr *Validator) getSenderAccount(address accounts.Address) *validatorAccoun
 	return account
 }
 
-func (vr *Validator) updateRecipientAccount(tx *types.Transaction) {
+func (vr *Validator) UpdateRecipientAccount(tx *types.Transaction) {
 	vr.Lock()
 	defer vr.Unlock()
 
@@ -415,7 +417,7 @@ func (vr *Validator) removeTxsForAccount(txs types.Transactions) {
 		}
 
 		// TODO: to update Recipient
-		vr.updateRecipientAccount(tx)
+		vr.UpdateRecipientAccount(tx)
 	}
 }
 

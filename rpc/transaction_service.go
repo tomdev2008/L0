@@ -82,7 +82,7 @@ func (t *Transaction) Broadcast(txHex string, reply *crypto.Hash) error {
 	tx := new(types.Transaction)
 	tx.Deserialize(utils.HexToBytes(txHex))
 
-	if tx.Amount().Sign() <= 0 {
+	if tx.Amount().Sign() < 0 {
 		return errors.New("Invalid Amount in Tx, Amount must be >0")
 	}
 

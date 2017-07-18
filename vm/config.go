@@ -27,7 +27,6 @@ var VMConf *Config
 type Config struct {
 	LogFile                    string
 	LogLevel                   string
-	VMType                     string
 	VMRegistrySize             int
 	VMCallStackSize            int
 	VMMaxMem                   int // vm maximum memory size (MB)
@@ -45,7 +44,6 @@ type Config struct {
 // DefaultConfig default vm config
 func DefaultConfig() *Config {
 	return &Config{
-		VMType:                     "luavm",
 		VMRegistrySize:             256,
 		VMCallStackSize:            64,
 		VMMaxMem:                   800,
