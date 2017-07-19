@@ -125,7 +125,7 @@ func DeploySmartContractTX() {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeContractInit,
+		types.TypeLuaContractInit,
 		uint32(nonce),
 		accounts.HexToAddress(sender),
 		accounts.Address{}, //HexToAddress("0x00000000000000000000"),

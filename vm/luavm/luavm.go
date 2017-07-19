@@ -21,13 +21,17 @@ package luavm
 
 import (
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
 	"github.com/yuin/gopher-lua"
+	"github.com/yuin/gopher-lua/parse"
 )
 
 var vmproc *vm.VMProc
+var luaProto = make(map[string]*lua.FunctionProto)
 
 // Start start vm process
 func Start() error {
@@ -72,13 +76,20 @@ func PreExecute(cd *vm.ContractData) (interface{}, error) {
 
 func RealExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
+	t := time.Now()
 	ok, err := execContract(cd, "L0Invoke")
+	delay := time.Since(t)
+	log.Debugln("execContract delay: ", delay)
 
 	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
+	t1 := time.Now()
 	err = vmproc.CCallCommit()
+	delay1 := time.Since(t1)
+	log.Debugln("CCallCommit delay: ", delay1)
+
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", vmproc.ContractData.ContractAddr, err.Error())
 		vmproc.CCallSmartContractFailed()
@@ -130,8 +141,30 @@ func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 	}
 	L.PreloadModule("L0", loader)
 
-	err := L.DoString(code)
-	if err != nil {
+	_, ok := luaProto[cd.ContractAddr]
+	if !ok {
+		chunk, err := parse.Parse(strings.NewReader(code), "<string>")
+		if err != nil {
+			return nil, err
+		}
+		proto, err := lua.Compile(chunk, "<string>")
+		if err != nil {
+			return nil, err
+		}
+		luaProto[cd.ContractAddr] = proto
+	}
+
+	fn := &lua.LFunction{
+		IsG: false,
+		Env: L.Env,
+
+		Proto:     luaProto[cd.ContractAddr],
+		GFunction: nil,
+		Upvalues:  make([]*lua.Upvalue, 0)}
+
+	L.Push(fn)
+
+	if err := L.PCall(0, lua.MultRet, nil); err != nil {
 		return false, err
 	}
 
@@ -208,7 +241,7 @@ func callLuaFunc(L *lua.LState, funcName string, params ...string) (interface{},
 		} else if l > 1 {
 			tb := new(lua.LTable)
 			for i := 1; i < l; i++ {
-				tb.RawSet(lua.LNumber(i), lua.LString(params[i]))
+				tb.RawSet(lua.LNumber(i-1), lua.LString(params[i]))
 			}
 			lvparams = []lua.LValue{lua.LString(params[0]), tb}
 		}

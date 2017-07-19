@@ -12,8 +12,8 @@ end
 -- 每次合约执行都调用
 function L0Invoke(func, args)
     print("in L0Invoke")
-    local receiver = args[1]
-    local amount = tonumber(args[2])
+    local receiver = args[0]
+    local amount = tonumber(args[1])
     
     if ("mint" == func) then
         mint(receiver, amount)
