@@ -81,7 +81,10 @@ func Query(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmar
 
 func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract, realExec bool) (interface{}, error) {
 
-	contractCode, contractType := getContractCode(cs, tx.GetType(), handler)
+	contractCode, contractType, err := getContractCode(cs, tx.GetType(), handler)
+	if err != nil {
+		return false, err
+	}
 
 	var vm *VMProc
 
@@ -159,24 +162,25 @@ func initVMProc(contractType string) error {
 	return err
 }
 
-func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISmartConstract) (string, string) {
+func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISmartConstract) (string, string, error) {
 
 	code := cs.ContractCode
 	if code != nil && len(code) > 0 {
 		if txType == types.TypeJSContractInit {
-			return string(code), "jsvm"
+			return string(code), "jsvm", nil
 		}
-		return string(code), "luavm"
+		return string(code), "luavm", nil
 	}
 
 	cc := new(ContractCode)
 	code, err := handler.GetState(contractCodeKey)
-	if code != nil && err == nil {
+	if len(code) != 0 && err == nil {
 		utils.Deserialize(code, cc)
-		return string(cc.Code), cc.Type
+		return string(cc.Code), cc.Type, nil
+	} else if len(code) == 0 && err == nil {
+		return "", "", errors.New("cat't find contract code in db")
 	}
-	log.Errorln("get contract code err :", err)
-	return "", ""
+	return "", "", err
 }
 
 func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
