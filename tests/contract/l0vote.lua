@@ -48,11 +48,11 @@ end
 function L0Invoke(func, args)
     print("L0Invoke")
     if func == "vote" then
-        local voteName = args[1]
-        local candidateName = args[2]
+        local voteName = args[0]
+        local candidateName = args[1]
         local voter = L0.GetState("voter:" .. voteName)
         local candidate = L0.GetState("candidate:" .. candidateName)
-        print("func ",func,"args ",args[1],args[2],"voter:",voter["name"],"candidate",candidate["name"])        
+        print("func ",func,"args ",args[0],args[1],"voter:",voter["name"],"candidate",candidate["name"])        
         if voter == nil or candidate == nil then
             print( "voter or candidate is nil ")
             return false

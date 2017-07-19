@@ -241,7 +241,7 @@ func callLuaFunc(L *lua.LState, funcName string, params ...string) (interface{},
 		} else if l > 1 {
 			tb := new(lua.LTable)
 			for i := 1; i < l; i++ {
-				tb.RawSet(lua.LNumber(i), lua.LString(params[i]))
+				tb.RawSet(lua.LNumber(i-1), lua.LString(params[i]))
 			}
 			lvparams = []lua.LValue{lua.LString(params[0]), tb}
 		}
