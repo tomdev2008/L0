@@ -44,9 +44,17 @@ type TransactionCreateArgs struct {
 	FromChain string
 	ToChain   string
 	Recipient string
+	Nonce     uint32
 	Amount    int64
 	Fee       int64
 	TxType    uint32
+	PayLoad   *PayLoad
+}
+
+type PayLoad struct {
+	ContractCode   string
+	ContractAddr   string
+	ContractParams []string
 }
 
 type ContractQueryArgs struct {
@@ -61,16 +69,21 @@ func NewTransaction(pmHandler IBroadcast) *Transaction {
 func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 	fromChain := coordinate.HexToChainCoordinate(args.FromChain)
 	toChain := coordinate.HexToChainCoordinate(args.ToChain)
-	// nonce的值
-	nonce := uint32(1)
+	nonce := args.Nonce
 	recipient := accounts.HexToAddress(args.Recipient)
 	sender := accounts.Address{}
 	amount := big.NewInt(args.Amount)
 	fee := big.NewInt(args.Fee)
-
 	tx := types.NewTransaction(fromChain, toChain, args.TxType, nonce, sender, recipient, amount, fee, utils.CurrentTimestamp())
-	*reply = utils.BytesToHex(tx.Serialize())
 
+	if args.PayLoad != nil {
+		contractSpec := new(types.ContractSpec)
+		contractSpec.ContractCode = utils.HexToBytes(args.PayLoad.ContractCode)
+		contractSpec.ContractAddr = utils.HexToBytes(args.PayLoad.ContractAddr)
+		contractSpec.ContractParams = args.PayLoad.ContractParams
+		tx.WithPayload(utils.Serialize(contractSpec))
+	}
+	*reply = utils.BytesToHex(tx.Serialize())
 	return nil
 }
 

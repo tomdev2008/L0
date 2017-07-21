@@ -296,11 +296,12 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 
 	for _, tx := range Txs {
 		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeContractInvoke {
-			tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
-			if err != nil {
-				return nil, nil, err
+			if tx.GetType() == types.TypeContractInvoke {
+				tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
-
 			t0 := time.Now()
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
@@ -482,6 +483,7 @@ func (ledger *Ledger) executeBackfrontTx(writeBatchs []*db.WriteBatch, tx *types
 func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
+	log.Debugln("contractSepc :", *contractSpec)
 	ledger.contract.ExecTransaction(tx, string(contractSpec.ContractAddr))
 
 	_, err := vm.RealExecute(tx, contractSpec, ledger.contract)
