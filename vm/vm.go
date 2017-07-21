@@ -27,13 +27,17 @@ import (
 
 	"errors"
 
-	"fmt"
-
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/types"
 )
+
+type ContractCode struct {
+	Code []byte
+	Type string
+}
 
 const (
 	contractCodeKey = "__CONTRACT_CODE_KEY__"
@@ -76,29 +80,38 @@ func Query(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmar
 }
 
 func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract, realExec bool) (interface{}, error) {
-	var vm *VMProc
 
-	if err := initVMProc(); err != nil {
+	contractCode, contractType, err := getContractCode(cs, tx.GetType(), handler)
+	if err != nil {
 		return false, err
 	}
 
-	// TODO 根据不同的语言调用不同的vm
-	switch VMConf.VMType {
+	var vm *VMProc
+
+	if err := initVMProc(contractType); err != nil {
+		return false, err
+	}
+
+	// 根据不同的语言调用不同的vm
+	switch contractType {
 	case "luavm":
 		vm = luavmProc
 	case "jsvm":
 		vm = jsvmProc
-	default:
-		return nil, fmt.Errorf("not support vm %s", VMConf.VMType)
 	}
 
-	contractCode := getContractCode(cs, handler)
 	cd := NewContractData(tx, cs, contractCode)
 
 	switch tx.GetType() {
-	case types.TypeContractInit:
+	case types.TypeJSContractInit:
 		if realExec {
-			handler.AddState(contractCodeKey, cs.ContractCode) // add contract code into state
+			handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})) // add js contract code into state
+			return vm.PCallRealInitContract(cd, handler)
+		}
+		return vm.PCallPreInitContract(cd, handler)
+	case types.TypeLuaContractInit:
+		if realExec {
+			handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"})) // add lua contract code into state
 			return vm.PCallRealInitContract(cd, handler)
 		}
 		return vm.PCallPreInitContract(cd, handler)
@@ -114,9 +127,9 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISm
 	return false, errors.New("Transaction type error")
 }
 
-func initVMProc() error {
+func initVMProc(contractType string) error {
 	var err error
-	switch VMConf.VMType {
+	switch contractType {
 	case "jsvm":
 		if jsvmProc == nil {
 			locker.Lock()
@@ -144,25 +157,30 @@ func initVMProc() error {
 			}
 			locker.Unlock()
 		}
-	default:
-		return fmt.Errorf("not support vm %s", VMConf.VMType)
 	}
 
 	return err
 }
 
-func getContractCode(cs *types.ContractSpec, handler contract.ISmartConstract) string {
+func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISmartConstract) (string, string, error) {
+
 	code := cs.ContractCode
 	if code != nil && len(code) > 0 {
-		return string(code)
+		if txType == types.TypeJSContractInit {
+			return string(code), "jsvm", nil
+		}
+		return string(code), "luavm", nil
 	}
 
+	cc := new(ContractCode)
 	code, err := handler.GetState(contractCodeKey)
-	if code != nil && err == nil {
-		return string(code)
+	if len(code) != 0 && err == nil {
+		utils.Deserialize(code, cc)
+		return string(cc.Code), cc.Type, nil
+	} else if len(code) == 0 && err == nil {
+		return "", "", errors.New("cat't find contract code in db")
 	}
-
-	return ""
+	return "", "", err
 }
 
 func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {

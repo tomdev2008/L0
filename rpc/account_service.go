@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -80,7 +80,12 @@ type SignTxArgs struct {
 	Pass     string
 }
 
-func (a *Account) Sign(args *SignTxArgs, reply *string) error {
+type SignReply struct {
+	ContractAddr   string `json:"contractAddr"`
+	TransactionHex string `json:"transactionHex"`
+}
+
+func (a *Account) Sign(args *SignTxArgs, reply *SignReply) error {
 	address := accounts.HexToAddress(args.Addr)
 	if !a.ai.HasAddress(address) {
 		return errors.New("address not exists")
@@ -94,7 +99,13 @@ func (a *Account) Sign(args *SignTxArgs, reply *string) error {
 	if err != nil {
 		return err
 	}
+	var contractAddr string
+	if len(tx.Payload) != 0 {
+		contractSpec := new(types.ContractSpec)
+		utils.Deserialize(tx.Payload, contractSpec)
+		contractAddr = utils.BytesToHex(contractSpec.ContractAddr)
+	}
 
-	*reply = utils.BytesToHex(signTx.Serialize())
+	*reply = SignReply{ContractAddr: contractAddr, TransactionHex: utils.BytesToHex(signTx.Serialize())}
 	return nil
 }

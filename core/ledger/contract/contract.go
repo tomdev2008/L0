@@ -22,6 +22,8 @@ import (
 	"errors"
 	"math/big"
 
+	"fmt"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
@@ -107,12 +109,14 @@ func (sctx *SmartConstract) GetState(key string) ([]byte, error) {
 	}
 
 	value := sctx.stateExtra.get(sctx.scAddr, key)
+
 	if len(value) == 0 {
 		var err error
 		scAddrkey := EnSmartContractKey(sctx.scAddr, key)
+		log.Debugf("sctx.scAddr: %x,%s", sctx.scAddr, key)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
-		if err != nil || len(value) == 0 {
-			return nil, errors.New("can't get date from db")
+		if err != nil {
+			return nil, fmt.Errorf("can't get date from db %s", err)
 		}
 	}
 

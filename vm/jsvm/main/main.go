@@ -64,4 +64,5 @@ func vmConfig() {
 	vm.VMConf.VMRegistrySize, _ = strconv.Atoi(os.Args[5])
 	vm.VMConf.ExecLimitMaxOpcodeCount, _ = strconv.Atoi(os.Args[6])
 	vm.VMConf.ExecLimitStackDepth, _ = strconv.Atoi(os.Args[7])
+	vm.VMConf.ExecLimitMaxScriptSize, _ = strconv.Atoi(os.Args[8])
 }

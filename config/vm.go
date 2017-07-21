@@ -9,7 +9,6 @@ func VMConfig(logFile, logLevel string) *vm.Config {
 	var config = vm.DefaultConfig()
 	config.LogFile = logFile
 	config.LogLevel = logLevel
-	config.VMType = getString("vm.type", config.VMType)
 	config.VMRegistrySize = getInt("vm.registrySize", config.VMRegistrySize)
 	config.VMCallStackSize = getInt("vm.callStackSize", config.VMCallStackSize)
 	config.VMMaxMem = getInt("vm.maxMem", config.VMMaxMem)

@@ -48,7 +48,7 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 }
 
 func accountFunc(fc otto.FunctionCall) otto.Value {
-	var addr string
+	var addr, sender string
 	var err error
 	if len(fc.ArgumentList) == 1 {
 		addr, err = fc.Argument(0).ToString()
@@ -61,10 +61,11 @@ func accountFunc(fc otto.FunctionCall) otto.Value {
 		log.Error("accountFunc -> call CCallGetBalances error", err)
 		return fc.Otto.MakeCustomError("accountFunc", "call CCallGetBalances error:"+err.Error())
 	}
-
-	mp := make(map[string]interface{}, 2)
+	sender = vmproc.ContractData.Transaction.Sender().String()
+	mp := make(map[string]interface{}, 3)
 	mp["Address"] = addr
 	mp["Balances"] = balances
+	mp["Sender"] = sender
 
 	val, err := fc.Otto.ToValue(mp)
 	if err != nil {

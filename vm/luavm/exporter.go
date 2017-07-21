@@ -39,7 +39,7 @@ func exporter() map[string]lua.LGFunction {
 }
 
 func accountFunc(l *lua.LState) int {
-	var addr string
+	var addr, sender string
 	if l.GetTop() == 1 {
 		addr = l.CheckString(1)
 	} else {
@@ -52,7 +52,9 @@ func accountFunc(l *lua.LState) int {
 		return 1
 	}
 
+	sender = vmproc.ContractData.Transaction.Sender().String()
 	tb := l.NewTable()
+	tb.RawSetString("Sender", lua.LString(sender))
 	tb.RawSetString("Address", lua.LString(addr))
 	tb.RawSetString("Balances", lua.LNumber(balances))
 

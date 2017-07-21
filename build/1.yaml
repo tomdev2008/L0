@@ -50,9 +50,6 @@ consensus:
 
 # vm
 vm:
-  type: "luavm"
-  #type: "jsvm"
-
   # vm maximum memory size (MB)
   maxMem: 800
   registrySize: 256
@@ -66,7 +63,7 @@ vm:
   execLimitMaxRunTime: 1000
 
   # contract script(lua source code) maximum size (byte)
-  execLimitMaxScriptSize: 5120
+  execLimitMaxScriptSize: 10240
 
   # the max state value size (byte)
   execLimitMaxStateValueSize: 5120
