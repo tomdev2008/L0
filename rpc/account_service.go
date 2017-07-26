@@ -80,12 +80,7 @@ type SignTxArgs struct {
 	Pass     string
 }
 
-type SignReply struct {
-	ContractAddr   string `json:"contractAddr"`
-	TransactionHex string `json:"transactionHex"`
-}
-
-func (a *Account) Sign(args *SignTxArgs, reply *SignReply) error {
+func (a *Account) Sign(args *SignTxArgs, reply *string) error {
 	address := accounts.HexToAddress(args.Addr)
 	if !a.ai.HasAddress(address) {
 		return errors.New("address not exists")
@@ -99,13 +94,7 @@ func (a *Account) Sign(args *SignTxArgs, reply *SignReply) error {
 	if err != nil {
 		return err
 	}
-	var contractAddr string
-	if len(tx.Payload) != 0 {
-		contractSpec := new(types.ContractSpec)
-		utils.Deserialize(tx.Payload, contractSpec)
-		contractAddr = utils.BytesToHex(contractSpec.ContractAddr)
-	}
 
-	*reply = SignReply{ContractAddr: contractAddr, TransactionHex: utils.BytesToHex(signTx.Serialize())}
+	*reply = utils.BytesToHex(signTx.Serialize())
 	return nil
 }
