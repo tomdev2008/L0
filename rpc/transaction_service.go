@@ -87,7 +87,12 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 	return nil
 }
 
-func (t *Transaction) Broadcast(txHex string, reply *crypto.Hash) error {
+type BroadcastReply struct {
+	ContractAddr    string      `json:"contractAddr"`
+	TransactionHash crypto.Hash `json:"transactionHash"`
+}
+
+func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	if len(txHex) < 1 {
 		return errors.New("Invalid Params: len(txSerializeData) must be >0 ")
 	}
@@ -109,7 +114,15 @@ func (t *Transaction) Broadcast(txHex string, reply *crypto.Hash) error {
 	}
 
 	t.pmHander.Relay(tx)
-	*reply = tx.Hash()
+
+	var contractAddr string
+	if len(tx.Payload) != 0 {
+		contractSpec := new(types.ContractSpec)
+		utils.Deserialize(tx.Payload, contractSpec)
+		contractAddr = utils.BytesToHex(contractSpec.ContractAddr)
+	}
+
+	*reply = BroadcastReply{ContractAddr: contractAddr, TransactionHash: tx.Hash()}
 	return nil
 }
 
