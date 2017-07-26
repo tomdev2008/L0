@@ -88,7 +88,7 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 }
 
 type BroadcastReply struct {
-	ContractAddr    string      `json:"contractAddr"`
+	ContractAddr    *string     `json:"contractAddr"`
 	TransactionHash crypto.Hash `json:"transactionHash"`
 }
 
@@ -115,14 +115,15 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 	t.pmHander.Relay(tx)
 
-	var contractAddr string
 	if len(tx.Payload) != 0 {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
-		contractAddr = utils.BytesToHex(contractSpec.ContractAddr)
+		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
+		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
+		return nil
 	}
+	*reply = BroadcastReply{TransactionHash: tx.Hash()}
 
-	*reply = BroadcastReply{ContractAddr: contractAddr, TransactionHash: tx.Hash()}
 	return nil
 }
 
