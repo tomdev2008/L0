@@ -102,10 +102,12 @@ func NewTransaction(
 // Hash returns the hash of a transaction
 func (tx *Transaction) Hash() crypto.Hash {
 	if hash := tx.hash.Load(); hash != nil {
+		//log.Debugf("Tx Hash %s", hash.(crypto.Hash))
 		return hash.(crypto.Hash)
 	}
 	v := crypto.DoubleSha256(tx.Serialize())
 	tx.hash.Store(v)
+	//log.Debugf("Tx Hash %s", v)
 	return v
 }
 

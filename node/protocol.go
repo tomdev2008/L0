@@ -30,16 +30,18 @@ const (
 	broadcastAckMergeTxsMsg
 )
 
-var (
-	// for log
-	msgMap = map[uint8]string{
-		statusMsg:               "status",
-		getBlocksMsg:            "getblocks",
-		blockMsg:                "block",
-		txMsg:                   "tx",
-		invMsg:                  "inv",
-		getdataMsg:              "getdata",
-		consensusMsg:            "consensus",
-		broadcastAckMergeTxsMsg: "broadcastAckMerge",
-	}
-)
+//var (
+//	// for log
+//	msgMap = map[uint8]string{
+//		statusMsg:               "status",
+//		getBlocksMsg:            "getblocks",
+//		blockMsg:                "block",
+//		txMsg:                   "tx",
+//		invMsg:                  "inv",
+//		getdataMsg:              "getdata",
+//		consensusMsg:            "consensus",
+//		broadcastAckMergeTxsMsg: "broadcastAckMerge",
+//		getBlockTxsMsg:          "getBlockTxsMsg",
+//		blockTxsMsg:             "blockTxsMsg",
+//	}
+//)

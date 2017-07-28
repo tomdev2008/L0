@@ -131,10 +131,6 @@ func sendMsg(m *Msg, c net.Conn) {
 	c.Write(data)
 }
 
-func init() {
-	// TCPSend(srvAddress)
-}
-
 // NewMsg returns a new msg
 func NewMsg(MsgType uint8, payload []byte) *Msg {
 	Msg := &Msg{

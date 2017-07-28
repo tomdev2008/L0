@@ -38,11 +38,12 @@ import (
 )
 
 type validatorAccount struct {
-	txsList *list.List
-	txsMap  map[crypto.Hash]*list.Element
-	currTx  *types.Transaction
-	amount  *big.Int
-	nonce   uint32
+	orphans    *list.List
+	txsList    *list.List
+	txsMap     map[crypto.Hash]*list.Element
+	currTxHash crypto.Hash
+	amount     *big.Int
+	nonce      uint32
 	sync.RWMutex
 }
 
@@ -56,6 +57,7 @@ type Validator struct {
 func newValidatorAccount(address accounts.Address, leger *ledger.Ledger) *validatorAccount {
 	amount, nonce, _ := leger.GetBalance(address)
 	return &validatorAccount{
+		orphans: list.New(),
 		txsList: list.New(),
 		txsMap:  make(map[crypto.Hash]*list.Element),
 		amount:  amount,
@@ -106,9 +108,58 @@ func (va *validatorAccount) addTransaction(tx *types.Transaction) bool {
 		return true
 	}
 
+	if tx.Nonce() > va.nonce {
+		if va.orphans.Len() == 0 {
+			va.orphans.PushBack(tx)
+		} else {
+			if va.orphans.Len() > 1000000 {
+				va.orphans.Remove(va.orphans.Front())
+			}
+			var added bool
+			for pre := va.orphans.Back(); pre != nil; pre = pre.Prev() {
+				otx := pre.Value.(*types.Transaction)
+				if tx.Nonce() > otx.Nonce() {
+					added = true
+					va.orphans.InsertAfter(tx, pre)
+					break
+				}
+			}
+			if !added {
+				va.orphans.PushFront(tx)
+			}
+		}
+	}
 	log.Debugf("[Validator] can't add: new tx, tx_hash: %v, tx_sender: %v, tx_type: %v, tx_amount: %v, tx_nonce: %v, va.amount: %v, va.nonce: %v",
 		tx.Hash().String(), tx.Sender().String(), tx.GetType(), tx.Amount(), tx.Nonce(), va.amount, va.nonce)
 	return false
+}
+
+func (va *validatorAccount) processOrphan() types.Transactions {
+	va.Lock()
+	defer va.Unlock()
+	nonce := va.nonce
+	var txs types.Transactions
+	var next *list.Element
+
+	for elem := va.orphans.Front(); elem != nil; elem = next {
+		tx := elem.Value.(*types.Transaction)
+		next = elem.Next()
+		if tx.Nonce() < nonce {
+			va.orphans.Remove(elem)
+		} else if tx.Nonce() == nonce {
+			txs = append(txs, tx)
+			va.orphans.Remove(elem)
+			nonce++
+		} else {
+			break
+		}
+	}
+
+	if len(txs) > 0 {
+		log.Debugf("orphans left total: %d, remove: %d, %d -> %d", va.orphans.Len(), len(txs), va.nonce, nonce)
+	}
+
+	return txs
 }
 
 func (va *validatorAccount) hasTransaction(tx *types.Transaction) bool {
@@ -154,10 +205,10 @@ func (va *validatorAccount) committedAndRemoveTransaction(tx *types.Transaction)
 
 	storeElem, ok := va.txsMap[tx.Hash()]
 	if ok {
+		priv := storeElem.Prev()
 		va.txsList.Remove(storeElem)
 		delete(va.txsMap, tx.Hash())
-		var priv *list.Element
-		for delElem := storeElem.Prev(); delElem != nil; delElem = priv {
+		for delElem := priv; delElem != nil; delElem = priv {
 			priv = delElem.Prev()
 			ptx := priv.Value.(*types.Transaction)
 			va.amount.Add(va.amount, ptx.Amount())
@@ -186,20 +237,14 @@ func (va *validatorAccount) iterTransaction(function func(tx *types.Transaction)
 	va.Lock()
 	defer va.Unlock()
 
-	var currTxElem *list.Element
-	if va.currTx == nil {
+	currTxElem, ok := va.txsMap[va.currTxHash]
+	if !ok {
 		currTxElem = va.txsList.Front()
 	} else {
-		var ok bool
-		currTxElem, ok = va.txsMap[va.currTx.Hash()]
-		if !ok {
-			currTxElem = va.txsList.Front()
-		} else {
-			currTxElem = currTxElem.Next()
-		}
+		currTxElem = currTxElem.Next()
 	}
 
-	if va.currTx == nil && currTxElem == nil {
+	if currTxElem == nil {
 		log.Debugf("[Validator] va.currTx is Null")
 		return
 	}
@@ -208,10 +253,10 @@ func (va *validatorAccount) iterTransaction(function func(tx *types.Transaction)
 	//log.Debugf("[Validator] currTxElem_hash: %s, currTx_hash: %s", currTxElem.Value.(*types.Transaction).Hash().String(), va.currTx.Hash().String())
 	for elem := currTxElem; elem != nil; elem = elem.Next() {
 		if !function(elem.Value.(*types.Transaction)) {
-			//log.Debugf("[Validator] currTx_hash: %s", va.currTx.Hash().String())
+			log.Debugf("[Validator] currTx_hash: %s", va.currTxHash)
 			break
 		}
-		va.currTx = elem.Value.(*types.Transaction)
+		va.currTxHash = elem.Value.(*types.Transaction).Hash()
 	}
 }
 
@@ -222,7 +267,7 @@ func (va *validatorAccount) checkExceptionTransaction(tx *types.Transaction) boo
 	diffNonce := int32(va.nonce - tx.Nonce())
 	if _, ok := va.txsMap[tx.Hash()]; !ok {
 		if diffNonce <= 0 || diffNonce > int32(va.txsList.Len()) {
-			log.Warningf("[Validator] checkExceptionTransaction fail due to va.nonce: %d > tx.Nonce: %d, tx_hash: ",
+			log.Warningf("[Validator] checkExceptionTransaction fail due to va.nonce: %d > tx.Nonce: %d, tx_hash: %s",
 				va.nonce, tx.Nonce(), tx.Hash().String())
 			return false
 		}
@@ -237,7 +282,8 @@ func (va *validatorAccount) checkExceptionTransaction(tx *types.Transaction) boo
 		for be := va.txsList.Back(); be != nil; be = next {
 			next = be.Prev()
 			cnt++
-			if cnt > diffNonce {
+			if cnt == diffNonce {
+				next = be
 				break
 			}
 		}
@@ -246,7 +292,8 @@ func (va *validatorAccount) checkExceptionTransaction(tx *types.Transaction) boo
 		for fe := va.txsList.Front(); fe != nil; fe = next {
 			next = fe.Next()
 			cnt++
-			if cnt > diffLen {
+			if cnt == diffLen {
+				next = fe
 				break
 			}
 		}
@@ -254,6 +301,9 @@ func (va *validatorAccount) checkExceptionTransaction(tx *types.Transaction) boo
 
 	//TODO check exception tx and replace
 	otx := next.Value.(*types.Transaction)
+	if otx.Nonce() != tx.Nonce() {
+		log.Panicf("checkExceptionTransaction")
+	}
 	res := otx.Amount().Cmp(tx.Amount())
 	if res > 0 {
 		va.amount = va.amount.Add(va.amount, (&big.Int{}).Sub(otx.Amount(), tx.Amount()))
@@ -270,13 +320,9 @@ func (va *validatorAccount) checkExceptionTransaction(tx *types.Transaction) boo
 
 				if amount.Sign() < 0 {
 					amount = amount.Add(amount, be.Value.(*types.Transaction).Amount())
+					va.txsList.Remove(be)
+					delete(va.txsMap, be.Value.(*types.Transaction).Hash())
 				} else {
-					va.nonce = be.Value.(*types.Transaction).Nonce()
-					for ne := be.Next(); ne != nil; ne = next {
-						next = ne.Next()
-						va.txsList.Remove(ne)
-						delete(va.txsMap, ne.Value.(*types.Transaction).Hash())
-					}
 					break
 				}
 
@@ -451,6 +497,7 @@ func (vr *Validator) rollbackTransaction(txs types.Transactions) {
 }
 
 func (vr *Validator) committedTransaction(txs types.Transactions) {
+
 	for _, tx := range txs {
 		senderAccount := vr.fetchSenderAccount(tx.Sender())
 		senderAccount.committedAndRemoveTransaction(tx)
@@ -462,6 +509,10 @@ func (vr *Validator) committedTransaction(txs types.Transactions) {
 			if receiverAccount != nil {
 				receiverAccount.updateTransactionReceiverBalance(tx)
 			}
+		}
+		otxs := senderAccount.processOrphan()
+		for _, otx := range otxs {
+			senderAccount.addTransaction(otx)
 		}
 	}
 }
@@ -513,7 +564,12 @@ func (vr *Validator) PushTxInTxPool(tx *types.Transaction) bool {
 
 	ok := vr.checkTransaction(tx)
 	if ok {
+
 		senderAccount := vr.fetchSenderAccount(address)
+		otxs := senderAccount.processOrphan()
+		for _, otx := range otxs {
+			senderAccount.addTransaction(otx)
+		}
 		ok = senderAccount.addTransaction(tx)
 	}
 

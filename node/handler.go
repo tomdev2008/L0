@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"strings"
 
+	"time"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -41,27 +43,29 @@ import (
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
 	jrpc "github.com/bocheninc/L0/rpc"
+	"github.com/willf/bloom"
 )
 
 // ProtocolManager manages the protocol
 type ProtocolManager struct {
 	*blockchain.Blockchain
-	consenter consensus.Consenter
-	// msg-net
-
-	statusData StatusData
-
-	peers []*peer
-	// syncer
-	msgnet msgnet.Stack
-	merger *merge.Helper
-
 	*ledger.Ledger
 	*keystore.KeyStore
 	*p2p.Server
+	consenter consensus.Consenter
+	msgnet    msgnet.Stack
+	merger    *merge.Helper
+	msgCh     chan *p2p.Msg
+	isStarted bool
+	highest   uint32
 
-	msgCh chan *p2p.Msg
+	filter *bloom.BloomFilter
 }
+
+var (
+	filterN       uint = 1000000
+	falsePositive      = 0.000001
+)
 
 // NewProtocolManager returns a new sub protocol manager.
 func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
@@ -69,15 +73,14 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	ledger *ledger.Ledger, ks *keystore.KeyStore,
 	mergeConfig *merge.Config, logDir string) *ProtocolManager {
 	manager := &ProtocolManager{
+		KeyStore:   ks,
+		Ledger:     ledger,
 		Blockchain: blockchain,
 		consenter:  consenter,
-
-		Server:   p2p.NewServer(db, netConfig),
-		Ledger:   ledger,
-		KeyStore: ks,
-		msgCh:    make(chan *p2p.Msg, 100),
+		msgCh:      make(chan *p2p.Msg, 100),
+		Server:     p2p.NewServer(db, netConfig),
+		filter:     bloom.NewWithEstimates(filterN, falsePositive),
 	}
-
 	manager.Server.Protocols = append(manager.Server.Protocols, p2p.Protocol{
 		Name:    params.ProtocolName,
 		Version: params.ProtocolVersion,
@@ -87,10 +90,8 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 		},
 		BaseCmd: baseMsg,
 	})
-
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
-
 	go jrpc.StartServer(config.JrpcConfig(), manager)
 	return manager
 }
@@ -103,7 +104,12 @@ func (pm *ProtocolManager) Start() {
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
 
-	pm.init()
+	go func() {
+		for {
+			<-time.NewTicker(time.Minute).C
+			pm.filter.ClearAll()
+		}
+	}()
 }
 
 // Sign signs data with nodekey
@@ -111,54 +117,45 @@ func (pm ProtocolManager) Sign(data []byte) (*crypto.Signature, error) {
 	return pm.Server.Sign(data)
 }
 
-// init initializes protocol manager
-func (pm *ProtocolManager) init() {
-	pm.statusData = StatusData{
-		Version:     params.VersionMajor,
-		StartHeight: pm.Blockchain.CurrentHeight(),
-	}
-}
-
 func (pm *ProtocolManager) handle(p *p2p.Peer, rw p2p.MsgReadWriter) error {
-	// handleshake
 	pm.handleShake(rw)
-	msg, err := rw.ReadMsg()
-	// log.Debugf("status msg %v, error %v", msg, err)
-	if err != nil {
-		return err
-	}
 
-	if msg.Cmd == statusMsg {
-		pm.OnStatus(msg, p)
-	} else {
-		return err
+	if msg, err := rw.ReadMsg(); err == nil {
+		if msg.Cmd == statusMsg {
+			pm.OnStatus(msg, p)
+		} else {
+			return fmt.Errorf("handshake error ")
+		}
+		return pm.handleMsg(p, rw)
 	}
-
-	return pm.handleMsg(p, rw)
+	return fmt.Errorf("handshake error ")
 }
 
 func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 	for {
 		m, err := rw.ReadMsg()
-		log.Debugf("ProtocolManager handle message %s", msgMap[m.Cmd])
 		if err != nil {
 			return err
 		}
 		switch m.Cmd {
 		case statusMsg:
 			return fmt.Errorf("should not appear status message")
-		// case getBlocksMsg:
-		// 	pm.OnGetBlocks(m, p)
-		// case invMsg:
-		// 	pm.OnInv(m, p)
+		case getBlocksMsg:
+			pm.OnGetBlocks(m, p)
+		case invMsg:
+			pm.OnInv(m, p)
 		case txMsg:
-			pm.OnTx(m, p)
-		// case blockMsg:
-		// 	pm.OnBlock(m, p)
-		// case getdataMsg:
-		// 	pm.OnGetData(m, p)
+			if pm.isStarted {
+				pm.OnTx(m, p)
+			}
+		case blockMsg:
+			pm.OnBlock(m, p)
+		case getdataMsg:
+			pm.OnGetData(m, p)
 		case consensusMsg:
-			pm.OnConsensus(m, p)
+			if pm.isStarted {
+				pm.OnConsensus(m, p)
+			}
 		case broadcastAckMergeTxsMsg:
 			pm.merger.HandleLocalMsg(m)
 		default:
@@ -168,14 +165,18 @@ func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 }
 
 func (pm *ProtocolManager) handleShake(rw p2p.MsgReadWriter) {
-	rw.WriteMsg(*p2p.NewMsg(statusMsg, utils.Serialize(pm.statusData)))
+	s := &StatusData{
+		StartHeight: pm.CurrentHeight(),
+		Version:     params.VersionMinor,
+	}
+	rw.WriteMsg(*p2p.NewMsg(statusMsg, utils.Serialize(s)))
 }
 
 // Relay relays inventory to remote peers
 func (pm *ProtocolManager) Relay(inv types.IInventory) {
 	var (
-		// inventory InvVect
-		msg *p2p.Msg
+		inventory InvVect
+		msg       *p2p.Msg
 	)
 	// log.Debugf("ProtocolManager Relay inventory, hash: %s", inv.Hash())
 
@@ -190,21 +191,19 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 		}
 
 		if pm.Blockchain.ProcessTransaction(&tx) {
-			// inventory.Type = InvTypeTx
-			// inventory.Hashes = []crypto.Hash{inv.Hash()}
+			//inventory.Type = InvTypeTx
+			//inventory.Hashes = []crypto.Hash{inv.Hash()}
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
 		}
 	case *types.Block:
 		if pm.Blockchain.ProcessBlock(inv.(*types.Block)) {
-			pm.statusData.StartHeight++
-			// inventory.Type = InvTypeBlock
-			// inventory.Hashes = []crypto.Hash{inv.Hash()}
-			// log.Debugf("Relay inventory %v", inventory)
-			// msg = p2p.NewMsg(invMsg, utils.Serialize(inventory))
+			inventory.Type = InvTypeBlock
+			inventory.Hashes = []crypto.Hash{inv.Hash()}
+			log.Debugf("Relay inventory %v", inventory)
+			msg = p2p.NewMsg(invMsg, utils.Serialize(inventory))
 		}
 	}
 	if msg != nil {
-		// log.Debugf("relay message %v", *msg)
 		pm.msgCh <- msg
 	}
 }
@@ -240,33 +239,45 @@ func (pm *ProtocolManager) broadcastLoop() {
 
 // OnStatus handles statusMsg
 func (pm *ProtocolManager) OnStatus(m p2p.Msg, p *p2p.Peer) {
-	// swich status with remote peer
-	// add status to peer instance
-	// if local peer startheight behind remote, start sync
-	statusData := StatusData{}
-	utils.Deserialize(m.Payload, &statusData)
-	peer := newPeer(p, statusData)
-	pm.peers = append(pm.peers, peer)
-	log.Debugf("Status Msg %d %d", pm.statusData.StartHeight, peer.Status.StartHeight)
-	if pm.statusData.StartHeight < peer.Status.StartHeight {
-		// getBlocks := GetBlocks{
-		// 	Version:       pm.statusData.Version,
-		// 	LocatorHashes: []crypto.Hash{pm.Blockchain.CurrentBlockHash()},
-		// 	HashStop:      crypto.Hash{},
-		// }
-		// p2p.SendMessage(p.Conn, p2p.NewMsg(getBlocksMsg, utils.Serialize(getBlocks)))
+	remote := StatusData{}
+	if err := utils.Deserialize(m.Payload, &remote); err != nil {
+		log.Errorln("OnStatus deserialize error", err)
+		return
+	}
+	log.Debugln("-----sync----- OnStatus", "---- From ", pm.CurrentHeight(), " To ", remote.StartHeight, " Size ", remote.StartHeight-pm.CurrentHeight())
+	if pm.CurrentHeight() < remote.StartHeight {
+		if remote.StartHeight > pm.highest {
+			pm.highest = remote.StartHeight
+		}
+		getBlocks := GetBlocks{
+			Version:       params.VersionMajor,
+			LocatorHashes: []crypto.Hash{pm.Blockchain.CurrentBlockHash()},
+			HashStop:      crypto.Hash{},
+		}
+		p2p.SendMessage(p.Conn, p2p.NewMsg(getBlocksMsg, utils.Serialize(getBlocks)))
+	} else if !pm.isStarted {
+		pm.isStarted = true
+		pm.Blockchain.Start()
 	}
 }
 
 // OnTx processes tx message
 func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
-	//TODO: broadcast after validation
+
+	if pm.filter.TestAndAdd(m.Payload) {
+		return
+	}
+
 	tx := new(types.Transaction)
-	tx.Deserialize(m.Payload)
-	// p.AddFilter(m.CheckSum[:])
-	log.Debugf("Tx Msg %s", tx.Hash())
+	if err := tx.Deserialize(m.Payload); err != nil {
+		log.Errorln("OnTx deserialize error ", err)
+		return
+	}
+
+	//log.Debugln("OnTx Hash=", tx.Hash(), " Nonce=", tx.Nonce())
+
 	if pm.Blockchain.ProcessTransaction(tx) {
-		// pm.msgCh <- &m
+		pm.msgCh <- &m
 	}
 }
 
@@ -280,16 +291,18 @@ func (pm *ProtocolManager) OnGetBlocks(m p2p.Msg, peer *p2p.Peer) {
 		err       error
 	)
 
-	utils.Deserialize(m.Payload, getblocks)
-	//
+	if err := utils.Deserialize(m.Payload, &getblocks); err != nil {
+		log.Errorln("-----sync-----", err)
+		return
+	}
+
+	// TODO ????
 	for _, h := range getblocks.LocatorHashes {
-		// validate locator
 		hash = h
 	}
 
 	for {
 		hash, err = pm.GetNextBlockHash(hash)
-		log.Debugf("GetNextBlockHash hash %s, error %v", hash, err)
 		if err != nil || hash.Equal(crypto.Hash{}) {
 			break
 		} else {
@@ -300,66 +313,83 @@ func (pm *ProtocolManager) OnGetBlocks(m p2p.Msg, peer *p2p.Peer) {
 	if len(hashes) > 0 {
 		inventory.Type = InvTypeBlock
 		inventory.Hashes = hashes
-
+		log.Debugln("-----sync----- OnGetBlocks Size ", len(hashes))
 		p2p.SendMessage(peer.Conn, p2p.NewMsg(invMsg, utils.Serialize(inventory)))
 	}
 }
 
-// OnBlock processes block message
-func (pm *ProtocolManager) OnBlock(m p2p.Msg, p *p2p.Peer) {
-	//TODO: broadcast after validation
+func (pm *ProtocolManager) OnBlock(m p2p.Msg, peer *p2p.Peer) {
 	blk := new(types.Block)
-	blk.Deserialize(m.Payload)
-	log.Debugf("Block Msg %s", blk.Hash())
+	if err := blk.Deserialize(m.Payload); err != nil {
+		log.Errorln("-----sync----- OnBlock  deserialize ", err)
+		return
+	}
+
+	log.Debugf("-----sync----- OnBlock %s(%d)", blk.Hash(), blk.Height())
 	// p.AddFilter(m.CheckSum[:])
-	if pm.Blockchain.ProcessBlock(blk) {
-		pm.statusData.StartHeight++
-		// pm.msgCh <- p2p.NewMsg(invMsg, blk.Hash().Bytes())
+	if pm.CurrentHeight()+1 < blk.Height() {
+		getBlocks := GetBlocks{
+			Version:       params.VersionMajor,
+			LocatorHashes: []crypto.Hash{pm.Blockchain.CurrentBlockHash()},
+			HashStop:      crypto.Hash{},
+		}
+		p2p.SendMessage(peer.Conn, p2p.NewMsg(getBlocksMsg, utils.Serialize(getBlocks)))
+	} else if pm.Blockchain.ProcessBlock(blk) {
+		if !pm.isStarted && pm.CurrentHeight() == pm.highest {
+			pm.isStarted = true
+			pm.Blockchain.Start()
+		}
 	}
 }
 
 // OnInv processes inventory message
 func (pm *ProtocolManager) OnInv(m p2p.Msg, peer *p2p.Peer) {
+	if pm.Synced() {
+		return
+	}
+
 	// TODO: parse tx inv
 	var (
 		inventory InvVect
-		getdata   GetData
+		data      GetData
 		hashes    []crypto.Hash
 	)
 
-	utils.Deserialize(m.Payload, &inventory)
+	if err := utils.Deserialize(m.Payload, &inventory); err != nil {
+		log.Errorln("-----sync----- Inv deserialize error", err)
+		return
+	}
 
 	switch inventory.Type {
 	case InvTypeTx:
-		// log.Debugf("Inv Tx %v", inventory.Hashes)
 		for _, h := range inventory.Hashes {
 			if tx, _ := pm.GetTransaction(h); tx == nil {
 				hashes = append(hashes, h)
 			}
 		}
 
-		getdata.InvList = []InvVect{
-			InvVect{
+		data.InvList = []InvVect{
+			{
 				Type: InvTypeTx,
 			},
 		}
 	case InvTypeBlock:
-		// log.Debugf("Inv Block %v", inventory.Hashes)
 		for _, h := range inventory.Hashes {
 			if block, _ := pm.GetBlockByHash(h.Bytes()); block == nil {
 				hashes = append(hashes, h)
 			}
 		}
-		getdata.InvList = []InvVect{
-			InvVect{
+		data.InvList = []InvVect{
+			{
 				Type: InvTypeBlock,
 			},
 		}
 	}
 
 	if len(hashes) > 0 {
-		getdata.InvList[0].Hashes = hashes
-		msg := p2p.NewMsg(getdataMsg, utils.Serialize(getdata))
+		log.Debugln("-----sync----- OnInv Size ", len(inventory.Hashes))
+		data.InvList[0].Hashes = hashes
+		msg := p2p.NewMsg(getdataMsg, utils.Serialize(data))
 		p2p.SendMessage(peer.Conn, msg)
 	}
 }
@@ -370,23 +400,37 @@ func (pm *ProtocolManager) OnGetData(m p2p.Msg, peer *p2p.Peer) {
 		getdata GetData
 	)
 
-	utils.Deserialize(m.Payload, &getdata)
-	log.Debugf("OnGetData message %v", getdata)
+	if err := utils.Deserialize(m.Payload, &getdata); err != nil {
+		log.Errorln("-----sync----- OnGetData deserialize error", err)
+		return
+	}
 
 	for _, inventory := range getdata.InvList {
 		switch inventory.Type {
 		case InvTypeBlock:
 			for _, h := range inventory.Hashes {
-				if block, _ := pm.GetBlockByHash(h.Bytes()); block != nil {
-					log.Debugf("GetBlock from local, %s", block.Hash())
-					msg := p2p.NewMsg(blockMsg, block.Serialize())
-					p2p.SendMessage(peer.Conn, msg)
+				header, err := pm.GetBlockByHash(h.Bytes())
+				if err != nil || header == nil {
+					log.Errorln("-----sync----- GetBlockByHash error", err)
+					break
 				}
+				txs, err := pm.GetTxsByBlockHash(h.Bytes(), 100)
+				if err != nil {
+					log.Errorln("-----sync----- GetTxsByBlockHash error", err)
+					break
+				}
+
+				block := types.Block{
+					Header:       header,
+					Transactions: txs,
+				}
+
+				log.Debugf("-----sync----- OnGetData %s(%d)", block.Hash(), block.Height())
+				p2p.SendMessage(peer.Conn, p2p.NewMsg(blockMsg, block.Serialize()))
 			}
 		case InvTypeTx:
 			for _, h := range inventory.Hashes {
 				if tx, _ := pm.GetTransaction(h); tx != nil {
-					log.Debugf("GetTransaction from local, %s", tx.Hash())
 					msg := p2p.NewMsg(txMsg, tx.Serialize())
 					p2p.SendMessage(peer.Conn, msg)
 				}
