@@ -48,7 +48,7 @@ type TransactionCreateArgs struct {
 	Amount    int64
 	Fee       int64
 	TxType    uint32
-	PayLoad   *PayLoad
+	PayLoad   interface{}
 }
 
 type PayLoad struct {
@@ -76,12 +76,34 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 	fee := big.NewInt(args.Fee)
 	tx := types.NewTransaction(fromChain, toChain, args.TxType, nonce, sender, recipient, amount, fee, utils.CurrentTimestamp())
 
-	if args.PayLoad != nil {
+	switch tx.GetType() {
+	case types.TypeJSContractInit:
+		fallthrough
+	case types.TypeLuaContractInit:
+		fallthrough
+	case types.TypeContractInvoke:
+		if args.PayLoad == nil {
+			return errors.New("contract transaction payload must not be nil")
+		}
 		contractSpec := new(types.ContractSpec)
-		contractSpec.ContractCode = utils.HexToBytes(args.PayLoad.ContractCode)
-		contractSpec.ContractAddr = utils.HexToBytes(args.PayLoad.ContractAddr)
-		contractSpec.ContractParams = args.PayLoad.ContractParams
+		payLoad := args.PayLoad.(map[string]interface{})
+
+		if contractCode, ok := payLoad["ContractCode"]; ok {
+			contractSpec.ContractCode = utils.HexToBytes(contractCode.(string))
+		}
+		if contractAddr, ok := payLoad["ContractAddr"]; ok {
+			contractSpec.ContractAddr = utils.HexToBytes(contractAddr.(string))
+		}
+		if contractParams, ok := payLoad["ContractParams"]; ok {
+			for _, v := range contractParams.([]interface{}) {
+				contractSpec.ContractParams = append(contractSpec.ContractParams, v.(string))
+			}
+		}
 		tx.WithPayload(utils.Serialize(contractSpec))
+	default:
+		if args.PayLoad != nil {
+			tx.WithPayload([]byte(args.PayLoad.(string)))
+		}
 	}
 	*reply = utils.BytesToHex(tx.Serialize())
 	return nil
@@ -143,7 +165,6 @@ func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
 	}
 
 	contractSpec := new(types.ContractSpec)
-	contractSpec.ContractCode = []byte("")
 	contractSpec.ContractAddr = contractAddress
 	contractSpec.ContractParams = args.ContractParams
 	tx := types.NewTransaction(

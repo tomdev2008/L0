@@ -21,6 +21,7 @@ package rpc
 import (
 	"errors"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
@@ -95,6 +96,27 @@ func (a *Account) Sign(args *SignTxArgs, reply *string) error {
 		return err
 	}
 
+	genTxSender(signTx, account.PublicKey)
+
 	*reply = utils.BytesToHex(signTx.Serialize())
 	return nil
+}
+
+func genTxSender(tx *types.Transaction, publicKey *crypto.PublicKey) {
+	//generated sender address by PublicKey
+	tx.Data.Sender = accounts.PublicKeyToAddress(*publicKey)
+
+	//contract init transaction generated contract address  by sender address and contract code
+	if tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeJSContractInit {
+		contractSpec := new(types.ContractSpec)
+		utils.Deserialize(tx.Payload, contractSpec)
+		var a accounts.Address
+		pubBytes := []byte(tx.Data.Sender.String() + string(contractSpec.ContractCode))
+		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+		contractSpec.ContractAddr = a.Bytes()
+		tx.WithPayload(utils.Serialize(contractSpec))
+
+		//generated recipient address by contract address
+		tx.Data.Recipient = accounts.NewAddress(a.Bytes())
+	}
 }

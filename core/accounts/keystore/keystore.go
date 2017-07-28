@@ -28,7 +28,6 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/utils"
 
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
@@ -172,24 +171,9 @@ func (ks *KeyStore) SignTx(a accounts.Account, tx *types.Transaction, pass strin
 		return nil, err
 	}
 
-	priv := key.PrivateKey
-	tx.Data.Sender = accounts.PublicKeyToAddress(*priv.Public())
-
-	if tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeJSContractInit {
-		contractSpec := new(types.ContractSpec)
-		utils.Deserialize(tx.Payload, contractSpec)
-
-		var a accounts.Address
-		pubBytes := []byte(tx.Data.Sender.String() + string(contractSpec.ContractCode))
-		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
-
-		contractSpec.ContractAddr = a.Bytes()
-		tx.WithPayload(utils.Serialize(contractSpec))
-	}
-
-	sig, err1 := priv.Sign(tx.Hash().Bytes())
-	if err1 != nil {
-		return nil, err1
+	sig, err := key.PrivateKey.Sign(tx.Hash().Bytes())
+	if err != nil {
+		return nil, err
 	}
 	tx.WithSignature(sig)
 	return tx, nil

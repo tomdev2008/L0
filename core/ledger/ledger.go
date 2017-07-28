@@ -296,21 +296,15 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 
 	for _, tx := range Txs {
 		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeContractInvoke {
-			if tx.GetType() == types.TypeContractInvoke {
-				tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
-				if err != nil {
-					return nil, nil, err
-				}
+			tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
+			if err != nil {
+				return nil, nil, err
 			}
-			t0 := time.Now()
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
 				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
 				continue
 			}
-			delay0 := time.Since(t0)
-			log.Debugln("contract delay: ", delay0)
-
 			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
 
 			for _, v := range txs {
