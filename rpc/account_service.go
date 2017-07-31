@@ -21,6 +21,7 @@ package rpc
 import (
 	"errors"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
@@ -80,12 +81,7 @@ type SignTxArgs struct {
 	Pass     string
 }
 
-type SignReply struct {
-	ContractAddr   string `json:"contractAddr"`
-	TransactionHex string `json:"transactionHex"`
-}
-
-func (a *Account) Sign(args *SignTxArgs, reply *SignReply) error {
+func (a *Account) Sign(args *SignTxArgs, reply *string) error {
 	address := accounts.HexToAddress(args.Addr)
 	if !a.ai.HasAddress(address) {
 		return errors.New("address not exists")
@@ -99,13 +95,28 @@ func (a *Account) Sign(args *SignTxArgs, reply *SignReply) error {
 	if err != nil {
 		return err
 	}
-	var contractAddr string
-	if len(tx.Payload) != 0 {
+
+	genTxSender(signTx, account.PublicKey)
+
+	*reply = utils.BytesToHex(signTx.Serialize())
+	return nil
+}
+
+func genTxSender(tx *types.Transaction, publicKey *crypto.PublicKey) {
+	//generated sender address by PublicKey
+	tx.Data.Sender = accounts.PublicKeyToAddress(*publicKey)
+
+	//contract init transaction generated contract address  by sender address and contract code
+	if tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeJSContractInit {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
-		contractAddr = utils.BytesToHex(contractSpec.ContractAddr)
-	}
+		var a accounts.Address
+		pubBytes := []byte(tx.Data.Sender.String() + string(contractSpec.ContractCode))
+		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+		contractSpec.ContractAddr = a.Bytes()
+		tx.WithPayload(utils.Serialize(contractSpec))
 
-	*reply = SignReply{ContractAddr: contractAddr, TransactionHex: utils.BytesToHex(signTx.Serialize())}
-	return nil
+		//generated recipient address by contract address
+		tx.Data.Recipient = accounts.NewAddress(a.Bytes())
+	}
 }

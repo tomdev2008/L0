@@ -1,4 +1,5 @@
 ## L0
+[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/Bochen-L0/Lobby)
 
 [English>>](https://github.com/bocheninc/L0/blob/master/README-en.md)
 
