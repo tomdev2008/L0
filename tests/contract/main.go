@@ -28,7 +28,9 @@ var (
 	fromChain      = []byte{0}
 	toChain        = []byte{0}
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
-	sender         = "7ce1bb0858e71b50d603ebe4bec95b11d8833e6d"
+	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
+	sender         accounts.Address
+	privkey        *crypto.PrivateKey
 	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
 	//contractPath = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
@@ -36,14 +38,16 @@ var (
 )
 
 func main() {
-	issueTX()
-	time.Sleep(1 * time.Second)
+	privkey, _ = crypto.HexToECDSA(privkeyHex)
+	sender = accounts.PublicKeyToAddress(*privkey.Public())
+
+	// issueTX()
+	// time.Sleep(40 * time.Second)
 	DeploySmartContractTX()
 	time.Sleep(1 * time.Second)
 	//ExecSmartContractTX([]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 	ExecSmartContractTX([]string{"vote", "张三", "秦皇岛"})
 	time.Sleep(40 * time.Second)
-
 }
 
 func sendTransaction(txChan chan *types.Transaction) {
@@ -82,6 +86,7 @@ func sendTransaction(txChan chan *types.Transaction) {
 
 func issueTX() {
 	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
+
 	nonce := 1
 	txChan := make(chan *types.Transaction, 5)
 	go sendTransaction(txChan)
@@ -95,7 +100,7 @@ func issueTX() {
 		types.TypeIssue,
 		uint32(nonce),
 		issueSender,
-		accounts.HexToAddress(sender),
+		sender,
 		big.NewInt(10e11),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
@@ -107,15 +112,15 @@ func issueTX() {
 }
 
 func DeploySmartContractTX() {
-	privkey, _ := crypto.GenerateKey()
-	nonce := 2
+
+	nonce := 1
 	txChan := make(chan *types.Transaction, 5)
 	go sendTransaction(txChan)
 	contractSpec := new(types.ContractSpec)
 	f, _ := os.Open(contractPath)
 	buf, _ := ioutil.ReadAll(f)
 	var a accounts.Address
-	pubBytes := []byte(sender + string(buf))
+	pubBytes := []byte(sender.String() + string(buf))
 	a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
 
 	contractSpec.ContractCode = buf
@@ -127,9 +132,9 @@ func DeploySmartContractTX() {
 		coordinate.NewChainCoordinate(toChain),
 		types.TypeLuaContractInit,
 		uint32(nonce),
-		accounts.HexToAddress(sender),
-		accounts.Address{}, //HexToAddress("0x00000000000000000000"),
-		big.NewInt(10000),
+		sender,
+		accounts.NewAddress(contractSpec.ContractAddr),
+		big.NewInt(1000),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
@@ -140,8 +145,7 @@ func DeploySmartContractTX() {
 }
 
 func ExecSmartContractTX(params []string) {
-	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
-	nonce := 3
+	nonce := 2
 	txChan := make(chan *types.Transaction, 5)
 
 	go sendTransaction(txChan)
@@ -150,7 +154,7 @@ func ExecSmartContractTX(params []string) {
 	buf, _ := ioutil.ReadAll(f)
 
 	var a accounts.Address
-	pubBytes := []byte(sender + string(buf))
+	pubBytes := []byte(sender.String() + string(buf))
 	a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
 
 	contractSpec.ContractCode = []byte("")
@@ -164,15 +168,15 @@ func ExecSmartContractTX(params []string) {
 		coordinate.NewChainCoordinate(toChain),
 		types.TypeContractInvoke,
 		uint32(nonce),
-		accounts.HexToAddress(sender),
+		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		big.NewInt(1000),
+		big.NewInt(100),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
 	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
-	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
+	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txChan <- tx
 }

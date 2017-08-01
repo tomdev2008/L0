@@ -39,7 +39,7 @@ type NetworkStack interface {
 	Relay(inv types.IInventory)
 }
 
-var validTxPoolSize = 100000
+var validTxPoolSize = 1000000
 
 // Blockchain is blockchain instance
 type Blockchain struct {
@@ -149,7 +149,7 @@ func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) 
 	return bc.txValidator.getBalanceNonce(addr)
 }
 
-// GetTransaction returns transaction in ledage first then txBool
+// GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
 	if tx == nil {
@@ -177,17 +177,10 @@ func (bc *Blockchain) StartConsensusService() {
 		for {
 			select {
 			case commitedTxs := <-bc.consenter.CommittedTxsChannel():
-				var (
-					// atmoicTxs, acrossChainTxs types.Transactions
-					txs types.Transactions
-				)
 
-				log.Debugf("Get CommitedTxs Number: %d", len(commitedTxs.Transactions))
-				for _, tx := range commitedTxs.Transactions {
-					txs = append(txs, tx)
-				}
+				txs, time := bc.txValidator.GetCommittedTxs(commitedTxs.Outputs)
 				if txs != nil && len(txs) > 0 {
-					blk := bc.GenerateBlock(txs, uint32(commitedTxs.Time))
+					blk := bc.GenerateBlock(txs, time)
 					// bc.pm.Relay(blk)
 					bc.ProcessBlock(blk)
 				}
@@ -201,10 +194,13 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	// step 1: validate and mark transaction
 	// step 2: add transaction to txPool
 	// if atomic.LoadUint32(&bc.synced) == 0 {
-	if bc.txValidator.TxsLenInTxPool() < validTxPoolSize {
-		if ok := bc.txValidator.VerifyTxInTxPool(tx); ok {
+	log.Debugf("[Blockchain] new tx, tx_hash: %v, tx_sender: %v, tx_nonce: %v", tx.Hash().String(), tx.Sender().String(), tx.Nonce())
+	if bc.txValidator.getValidatorSize() < validTxPoolSize {
+		if ok := bc.txValidator.PushTxInTxPool(tx); ok {
 			return true
 		}
+	} else {
+		log.Warnf("over max txs in txpool, %d", bc.txValidator.getValidatorSize())
 	}
 	return false
 }

@@ -54,7 +54,7 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 
 		committedRequestBatchChan: make(chan *committedRequestBatch, options.BufferSize),
 		recvConsensusMsgChan:      make(chan *Message, options.BufferSize),
-		committedTxsChan:          make(chan *consensus.CommittedTxs, options.BufferSize),
+		committedTxsChan:          make(chan *consensus.OutputTxs, options.BufferSize),
 		broadcastChan:             make(chan *consensus.BroadcastConsensus, options.BufferSize),
 	}
 
@@ -130,7 +130,7 @@ type Lbft struct {
 	committedRequestBatchChan chan *committedRequestBatch
 
 	recvConsensusMsgChan chan *Message
-	committedTxsChan     chan *consensus.CommittedTxs
+	committedTxsChan     chan *consensus.OutputTxs
 	broadcastChan        chan *consensus.BroadcastConsensus
 	exit                 chan struct{}
 	waitGroup            sync.WaitGroup
@@ -159,6 +159,7 @@ func (lbft *Lbft) updateExecSeqNo(seqNo uint64) {
 func (lbft *Lbft) updateLastSeqNo(seqNo uint64) {
 	if t := seqNo - lbft.lastSeqNum(); int64(t) > 0 {
 		atomic.AddUint64(&lbft.lastSeqNo, t)
+		log.Debugf("Replica %s updateLastSeqNo %d == %d, %s", lbft.options.ID, seqNo, lbft.lastSeqNum(), time.Now().Format("2006-01-02 15:04:05.999999999"))
 	}
 }
 
@@ -212,6 +213,15 @@ func (lbft *Lbft) Start() {
 	}()
 	log.Debugf("Replica %s consenter started", lbft.options.ID)
 	lbft.resetBlockTimer()
+	go func() {
+		ticker := time.NewTicker(time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				log.Debugf("Replica %s channel size (%d %d %d %d %d)", lbft.options.ID, len(lbft.recvConsensusMsgChan), len(lbft.broadcastChan), len(lbft.committedTxsChan), len(lbft.committedRequestBatchChan), len(lbft.lbftCoreCommittedChan))
+			}
+		}
+	}()
 }
 
 //Stop Stop consenter serverice
@@ -250,7 +260,7 @@ func (lbft *Lbft) BroadcastConsensusChannel() <-chan *consensus.BroadcastConsens
 }
 
 //CommittedTxsChannel Commit block data
-func (lbft *Lbft) CommittedTxsChannel() <-chan *consensus.CommittedTxs {
+func (lbft *Lbft) CommittedTxsChannel() <-chan *consensus.OutputTxs {
 	return lbft.committedTxsChan
 }
 
@@ -308,19 +318,26 @@ func (lbft *Lbft) writeBlock() {
 	if len(lbft.committedBlock) == 0 {
 		return
 	}
-	var nano uint32
+	cnt := 0
+	concurrentNumFrom := 0
 	var seqNos []uint64
-	txs := []*types.Transaction{}
+	cts := []*consensus.CommittedTxs{}
 	for _, ctt := range lbft.committedBlock {
 		seqNos = append(seqNos, ctt.seqNo)
-		nano = ctt.requestBatch.Time
-		reqBatch := ctt.requestBatch
-		for _, req := range reqBatch.Requests {
+		txs := []*types.Transaction{}
+		for _, req := range ctt.requestBatch.Requests {
 			txs = append(txs, req.Transaction)
+			cnt++
+		}
+		if ctt.requestBatch.fromChain() == lbft.options.Chain {
+			concurrentNumFrom++
+			cts = append(cts, &consensus.CommittedTxs{Skip: concurrentNumFrom == 1, IsLocalChain: true, Time: ctt.requestBatch.Time, Transactions: txs, SeqNo: ctt.seqNo})
+		} else {
+			cts = append(cts, &consensus.CommittedTxs{Skip: false, IsLocalChain: false, Time: ctt.requestBatch.Time, Transactions: txs, SeqNo: ctt.seqNo})
 		}
 	}
-	log.Infof("Replica %s write block %v (%d transactions) ", lbft.options.ID, seqNos, len(txs))
-	lbft.committedTxsChan <- &consensus.CommittedTxs{Time: nano, Transactions: txs, SeqNos: seqNos}
+	log.Infof("Replica %s write block %v (%d transactions) ", lbft.options.ID, seqNos, cnt)
+	lbft.committedTxsChan <- &consensus.OutputTxs{Outputs: cts}
 	lbft.committedBlock = nil
 }
 
@@ -380,68 +397,30 @@ func (lbft *Lbft) handleTransaction() {
 }
 
 func (lbft *Lbft) submitRequestBatches() {
-	if !lbft.isPrimary() || lbft.stack.Len() == 0 {
+	if !lbft.isPrimary() {
 		return
 	}
+	txss := lbft.stack.FetchGroupingTxsInTxPool(lbft.options.MaxConcurrentNumFrom, lbft.options.BlockSize)
 
 	id := time.Now().UnixNano()
-	requestBatchList := make([]*RequestBatch, 0, lbft.options.MaxConcurrentNumFrom/2)
-	reqs := make([]*Request, 0, lbft.options.BlockSize/3)
-	var toChain string
-	var nano uint32
-	var cnt int
-	lbft.stack.IterTransaction(func(tx *types.Transaction) bool {
-		if tx == nil && len(reqs) > 0 {
-			requestBath := &RequestBatch{Time: nano, Requests: reqs, ID: id}
-			log.Debugf("Replica %s generate requestBatch %s : timestamp %d, transations %d", lbft.options.ID, hash(requestBath), requestBath.Time, len(requestBath.Requests))
-			cnt = 0
-			nano = 0
-			toChain = ""
-			reqs = make([]*Request, 0, lbft.options.BlockSize/3)
-			requestBatchList = append(requestBatchList, requestBath)
-			if len(requestBatchList) == lbft.options.MaxConcurrentNumFrom {
-				return true
+	requestBatchList := make([]*RequestBatch, 0, len(txss))
+	for index, txs := range txss {
+		if len(txs) > 0 {
+			var nano uint32
+			reqs := make([]*Request, 0, len(txs))
+			for _, tx := range txs {
+				req := &Request{
+					Transaction: tx,
+				}
+				reqs = append(reqs, req)
+				if nano < req.Time() {
+					nano = req.Time()
+				}
 			}
-		}
-		req := &Request{
-			Transaction: tx,
-		}
-		if toChain != "" && req.ToChain() != toChain {
-			requestBath := &RequestBatch{Time: nano, Requests: reqs, ID: id}
+			requestBath := &RequestBatch{Time: nano, Requests: reqs, ID: id, Index: uint32(index)}
 			log.Debugf("Replica %s generate requestBatch %s : timestamp %d, transations %d", lbft.options.ID, hash(requestBath), requestBath.Time, len(requestBath.Requests))
-			cnt = 0
-			nano = 0
-			toChain = ""
-			reqs = make([]*Request, 0, lbft.options.BlockSize/3)
 			requestBatchList = append(requestBatchList, requestBath)
-			if len(requestBatchList) == lbft.options.MaxConcurrentNumFrom {
-				return true
-			}
 		}
-		reqs = append(reqs, req)
-		toChain = req.ToChain()
-		if nano < req.Time() {
-			nano = req.Time()
-		}
-		cnt++
-		if cnt == lbft.options.BlockSize {
-			requestBath := &RequestBatch{Time: nano, Requests: reqs, ID: id}
-			log.Debugf("Replica %s generate requestBatch %s : timestamp %d, transations %d", lbft.options.ID, hash(requestBath), requestBath.Time, len(requestBath.Requests))
-			cnt = 0
-			nano = 0
-			toChain = ""
-			reqs = make([]*Request, 0, lbft.options.BlockSize/3)
-			requestBatchList = append(requestBatchList, requestBath)
-			if len(requestBatchList) == lbft.options.MaxConcurrentNumFrom {
-				return true
-			}
-		}
-		return false
-	})
-	if len(reqs) > 0 {
-		requestBath := &RequestBatch{Time: nano, Requests: reqs, ID: id}
-		requestBatchList = append(requestBatchList, requestBath)
-		log.Debugf("Replica %s generate requestBatch %s : timestamp %d, transations %d", lbft.options.ID, hash(requestBath), requestBath.Time, len(requestBath.Requests))
 	}
 
 	for _, requestBatch := range requestBatchList {
@@ -597,7 +576,7 @@ func (lbft *Lbft) handleConsensusMsg() {
 							}
 							lbft.broadcast(lbft.options.Chain, &Message{Type: MESSAGECOMMITTED, Payload: serialize(ctt)})
 						} else {
-							log.Warnf("Replica %s received fetch committed message from %s : ignore missing seqno %d", lbft.options.ID, committed.ReplicaID, committed.SeqNo)
+							log.Warnf("Replica %s received fetch committed message from %s : ignore missing seqno ", lbft.options.ID, committed.ReplicaID)
 						}
 					}
 				}
@@ -719,13 +698,13 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 	})
 
 	cnt := lbft.voteViewChange.Size()
-	log.Infof("Replica %s received view change message from %s for voter %s , vote size %d", lbft.options.ID, vc.ReplicaID, vc.PrimaryID, cnt)
+	log.Infof("Replica %s received view change message from %s for voter %s(%d) , vote size %d", lbft.options.ID, vc.ReplicaID, vc.PrimaryID, vc.H, cnt)
 	if cnt == 1 {
 		lbft.viewChangeTimer.Reset(lbft.options.ViewChange)
 	} else if cnt == lbft.intersectionQuorum() {
 		lbft.lastPrimaryID = lbft.primaryID
 		lbft.primaryID = ""
-		lbft.blockTimer.Stop()
+		//lbft.blockTimer.Stop()
 		lbft.iterInstance(func(key string, instance *lbftCore) {
 			//if !instance.isPassCommit {
 			delete(lbft.lbftCores, key)
@@ -780,6 +759,10 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 			committed := <-lbft.lbftCoreCommittedChan
 			lbft.addCommittedReqeustBatch(committed.SeqNo, committed.RequestBatch)
 		}
+		lbft.handleRequestBatch(&RequestBatch{Time: uint32(time.Now().Unix()), ID: EMPTYBLOCK})
+		for len(lbft.committedTxsChan) > 0 {
+			time.Sleep(lbft.options.BlockTimeout)
+		}
 		lbft.resetEmptyBlockTimer()
 	}
 	lbft.resetBlockTimer()
@@ -815,27 +798,30 @@ func (lbft *Lbft) recvCommitted(ct *Committed) {
 func (lbft *Lbft) addCommittedReqeustBatch(seqNo uint64, requestBatch *RequestBatch) {
 	lbft.rwCommittedRequestBatch.Lock()
 	defer lbft.rwCommittedRequestBatch.Unlock()
+	lbft.removeInstance(requestBatch.key())
 	if _, ok := lbft.committedRequestBatch[seqNo]; ok {
+		return
+	}
+	if seqNo != lbft.lastSeqNum()+1 {
 		return
 	}
 	log.Infof("Replica %s add committed requestBatch %d (%s)", lbft.options.ID, seqNo, hash(requestBatch))
 	lbft.committedRequestBatch[seqNo] = requestBatch
 	lbft.updateLastSeqNo(seqNo)
 	lbft.updateVerifySeqNo(seqNo)
-	lbft.removeInstance(requestBatch.key())
 	lbft.checkpoint()
 	// && lbft.options.Chain == requestBatch.fromChain()
-	if len(requestBatch.Requests) > 0 {
-		lbft.stack.Removes(lbft.toTxs(requestBatch))
-		// go func(requestBatch *RequestBatch) {
-		// 	tts := lbft.toTxs(requestBatch)
-		// 	for _, tt := range tts {
-		// 		tx := tt.(*types.Transaction)
-		// 		sender := tx.Sender()
-		// 		log.Info("yyy", " ", sender, " ", tx.Nonce(), " ", tx.Hash(), requestBatch.key())
-		// 	}
-		// }(requestBatch)
-	}
+	// if len(requestBatch.Requests) > 0 {
+	// 	lbft.stack.Removes(lbft.toTxs(requestBatch))
+	// go func(requestBatch *RequestBatch) {
+	// 	tts := lbft.toTxs(requestBatch)
+	// 	for _, tt := range tts {
+	// 		tx := tt.(*types.Transaction)
+	// 		sender := tx.Sender()
+	// 		log.Info("yyy", " ", sender, " ", tx.Nonce(), " ", tx.Hash(), requestBatch.key())
+	// 	}
+	// }(requestBatch)
+	// }
 }
 
 //Uint64Slice sortable

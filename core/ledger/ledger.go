@@ -46,7 +46,8 @@ var (
 )
 
 type ValidatorHandler interface {
-	UpdateRecipientAccount(tx *types.Transaction)
+	UpdateAccount(tx *types.Transaction)
+	RollBackAccount(tx *types.Transaction)
 }
 
 // Ledger represents the ledger in blockchain
@@ -295,35 +296,36 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 	var tmpWriteBatchs, tmpAtomicWriteBatchs, writeBatchs []*db.WriteBatch
 
 	for _, tx := range Txs {
+		//execute contract transaction
 		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeContractInvoke {
-			if tx.GetType() == types.TypeContractInvoke {
-				tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
-				if err != nil {
-					return nil, nil, err
-				}
+			//execute transfer
+			tmpAtomicWriteBatchs, err = ledger.executeAtomicTx(tmpWriteBatchs, tx)
+			if err != nil {
+				return nil, nil, err
 			}
-			t0 := time.Now()
+			//execute contract Payload.if payload have transfer action ,return new transaction to execute
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
+				//rollback Validator balance cache
+				ledger.Validator.RollBackAccount(tx)
 				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
 				continue
 			}
-			delay0 := time.Since(t0)
-			log.Debugln("contract delay: ", delay0)
-
 			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
 
+			//execute new generating transactions
 			for _, v := range txs {
 				writeBatchs, err = ledger.commitedTranaction(v, writeBatchs)
 				if err != nil {
 					return nil, nil, err
 				}
-
-				ledger.Validator.UpdateRecipientAccount(v)
+				//update Validator balance cache
+				ledger.Validator.UpdateAccount(v)
 			}
 			Txs = append(Txs, txs...)
 		}
 
+		//execute other Transactions
 		writeBatchs, err = ledger.commitedTranaction(tx, writeBatchs)
 		if err != nil {
 			return nil, nil, err
