@@ -182,6 +182,13 @@ func (va *validatorAccount) updateTransactionReceiverBalance(tx *types.Transacti
 	va.amount = va.amount.Add(va.amount, tx.Amount())
 }
 
+func (va *validatorAccount) updateTransactionSenderBalance(tx *types.Transaction) {
+	va.Lock()
+	defer va.Unlock()
+
+	va.amount = va.amount.Sub(va.amount, tx.Amount())
+}
+
 func (va *validatorAccount) iterTransaction(function func(tx *types.Transaction) bool) {
 	va.Lock()
 	defer va.Unlock()
@@ -458,7 +465,7 @@ func (vr *Validator) committedTransaction(txs types.Transactions) {
 
 		if tx.IsLocalChain() {
 			//TODO update receiver balance
-			receiverAccount := vr.fetchReceiverAccount(tx.Recipient())
+			receiverAccount := vr.fetchAccount(tx.Recipient())
 			if receiverAccount != nil {
 				receiverAccount.updateTransactionReceiverBalance(tx)
 			}
@@ -468,7 +475,7 @@ func (vr *Validator) committedTransaction(txs types.Transactions) {
 
 func (vr *Validator) updateTransactionReceiver(txs types.Transactions) {
 	for _, tx := range txs {
-		receiverAccount := vr.fetchReceiverAccount(tx.Recipient())
+		receiverAccount := vr.fetchAccount(tx.Recipient())
 		if receiverAccount != nil {
 			receiverAccount.updateTransactionReceiverBalance(tx)
 		}
@@ -488,7 +495,7 @@ func (vr *Validator) fetchSenderAccount(address accounts.Address) *validatorAcco
 	return account
 }
 
-func (vr *Validator) fetchReceiverAccount(address accounts.Address) *validatorAccount {
+func (vr *Validator) fetchAccount(address accounts.Address) *validatorAccount {
 	vr.Lock()
 	defer vr.Unlock()
 
@@ -507,7 +514,7 @@ func (vr *Validator) PushTxInTxPool(tx *types.Transaction) bool {
 
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[Validator] Varify fail, tx_hash: ", tx.Hash().String())
+		log.Debugf("[Validator] Varify fail, tx_hash: %s,%s,%s", tx.Hash().String(), address.String(), tx.Sender().String())
 		return false
 	}
 
@@ -677,8 +684,30 @@ func (vr *Validator) RemoveTxsInTxPool(totalTxs, groupTxs, oChainTxs types.Trans
 		time.Since(t1), totalTxsLen, groupTxsLen, vr.getValidatorSize())
 }
 
-func (vr *Validator) UpdateRecipientAccount(tx *types.Transaction) {
-	receiverAccount := vr.fetchReceiverAccount(tx.Recipient())
+//RollBackAccount roll back sender account balance
+func (vr *Validator) RollBackAccount(tx *types.Transaction) {
+	senderAccont := vr.fetchAccount(tx.Sender())
+	if senderAccont != nil {
+		senderAccont.Lock()
+		senderAccont.amount.Add(senderAccont.amount, tx.Amount())
+		senderAccont.Unlock()
+	}
+
+	receiverAccount := vr.fetchAccount(tx.Recipient())
+	if receiverAccount != nil {
+		receiverAccount.Lock()
+		receiverAccount.amount.Sub(receiverAccount.amount, tx.Amount())
+		receiverAccount.Unlock()
+	}
+}
+
+func (vr *Validator) UpdateAccount(tx *types.Transaction) {
+	senderAccount := vr.fetchAccount(tx.Sender())
+	if senderAccount != nil {
+		senderAccount.updateTransactionSenderBalance(tx)
+	}
+
+	receiverAccount := vr.fetchAccount(tx.Recipient())
 	if receiverAccount != nil {
 		receiverAccount.updateTransactionReceiverBalance(tx)
 	}
