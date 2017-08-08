@@ -77,5 +77,13 @@ vm:
   luaVMExeFilePath: "bin/luavm"
   jsVMExeFilePath: "bin/jsvm"
 
+cert:
+  keyPath: ca_certificate/0001_abc/0001_abc.key
+  crtPath: ca_certificate/0001_abc/0001_abc.crt
+  caPath: ca_certificate/0001_abc/ca.crt
+ca:
+  enabled: true
 
+node_id: 0001_abc
+update_time: 1502180797
 
