@@ -309,7 +309,6 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions, flag bool) ([]*
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
 				//rollback Validator balance cache
-<<<<<<< HEAD
 				if ledger.Validator != nil {
 					ledger.Validator.RollBackAccount(tx)
 				}
@@ -321,12 +320,6 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions, flag bool) ([]*
 				syncContractGenTxs = append(syncContractGenTxs, txs...)
 			}
 
-=======
-				ledger.Validator.RollBackAccount(tx)
-				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
-				continue
-			}
->>>>>>> master
 			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
 
 			//execute new generating transactions
@@ -336,7 +329,6 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions, flag bool) ([]*
 					return nil, nil, err
 				}
 				//update Validator balance cache
-<<<<<<< HEAD
 				if ledger.Validator != nil {
 					ledger.Validator.UpdateAccount(v)
 				}
@@ -357,9 +349,6 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions, flag bool) ([]*
 				return false
 			}(tx, syncContractGenTxs) {
 				continue
-=======
-				ledger.Validator.UpdateAccount(v)
->>>>>>> master
 			}
 		}
 
