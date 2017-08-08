@@ -114,13 +114,14 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	var (
 		err           error
 		txWriteBatchs []*db.WriteBatch
+		txs           types.Transactions
 	)
 
 	t := time.Now()
 	bh, _ := ledger.Height()
 	ledger.contract.StartConstract(bh)
 
-	txWriteBatchs, block.Transactions, err = ledger.executeTransaction(block.Transactions)
+	txWriteBatchs, block.Transactions, err = ledger.executeTransaction(block.Transactions, flag)
 	if err != nil {
 		return err
 	}
@@ -136,18 +137,15 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	ledger.contract.StopContract(bh)
 	log.Infoln("append block delay :", delay, " transactions : ", len(block.Transactions))
 
-	if flag {
-		var txs types.Transactions
-		for _, tx := range block.Transactions {
-			if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {
-				txs = append(txs, tx)
-			}
+	for _, tx := range block.Transactions {
+		if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {
+			txs = append(txs, tx)
 		}
-		if err := ledger.storage.ClassifiedTransaction(txs); err != nil {
-			return err
-		}
-		log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions))
 	}
+	if err := ledger.storage.ClassifiedTransaction(txs); err != nil {
+		return err
+	}
+	log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions))
 
 	return nil
 }
@@ -291,9 +289,13 @@ func (ledger *Ledger) init() error {
 	return ledger.state.AtomicWrite(writeBatchs)
 }
 
-func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBatch, types.Transactions, error) {
-	var err error
-	var tmpWriteBatchs, tmpAtomicWriteBatchs, writeBatchs []*db.WriteBatch
+func (ledger *Ledger) executeTransaction(Txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, error) {
+
+	var (
+		err                                               error
+		tmpWriteBatchs, tmpAtomicWriteBatchs, writeBatchs []*db.WriteBatch
+		syncContractGenTxs                                types.Transactions
+	)
 
 	for _, tx := range Txs {
 		//execute contract transaction
@@ -307,10 +309,17 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 			txs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
 				//rollback Validator balance cache
-				ledger.Validator.RollBackAccount(tx)
+				if ledger.Validator != nil {
+					ledger.Validator.RollBackAccount(tx)
+				}
 				log.Errorf("execute Contract Tx hash: %s ,err: %v", tx.Hash(), err)
 				continue
 			}
+
+			if len(txs) != 0 && !flag {
+				syncContractGenTxs = append(syncContractGenTxs, txs...)
+			}
+
 			writeBatchs = append(writeBatchs, tmpAtomicWriteBatchs...)
 
 			//execute new generating transactions
@@ -320,9 +329,27 @@ func (ledger *Ledger) executeTransaction(Txs types.Transactions) ([]*db.WriteBat
 					return nil, nil, err
 				}
 				//update Validator balance cache
-				ledger.Validator.UpdateAccount(v)
+				if ledger.Validator != nil {
+					ledger.Validator.UpdateAccount(v)
+				}
 			}
-			Txs = append(Txs, txs...)
+
+			if flag {
+				Txs = append(Txs, txs...)
+			}
+		}
+
+		if len(syncContractGenTxs) != 0 && !flag {
+			if func(tx *types.Transaction, txs types.Transactions) bool {
+				for _, v := range txs {
+					if bytes.Equal(tx.Hash().Bytes(), v.Hash().Bytes()) {
+						return true
+					}
+				}
+				return false
+			}(tx, syncContractGenTxs) {
+				continue
+			}
 		}
 
 		//execute other Transactions

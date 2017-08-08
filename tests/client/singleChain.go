@@ -36,9 +36,10 @@ import (
 var (
 	srvAddress = []string{
 		"127.0.0.1:20166",
-		"127.0.0.1:20167",
-		"127.0.0.1:20168",
-		"127.0.0.1:20169",
+		//"127.0.0.1:20167",
+		//"127.0.0.1:20168",
+		//"127.0.0.1:20169",
+		//"127.0.0.1:20170",
 	}
 
 	list           = make(chan *crypto.PrivateKey, 10)
@@ -48,6 +49,7 @@ var (
 
 func sendTx() {
 	TCPSend(srvAddress)
+	time.Sleep(time.Second * 20)
 	fmt.Println("start Send ...")
 	go generateIssueTx()
 	go generateAtomicTx()
@@ -74,14 +76,14 @@ func generateAtomicTx() {
 				sender := accounts.PublicKeyToAddress(*privateKey.Public())
 				nonce := uint32(0)
 				for {
-					nonce = nonce + 1
+					nonce++
 					privkey, _ := crypto.GenerateKey()
 					addr := accounts.PublicKeyToAddress(*privkey.Public())
 					tx := types.NewTransaction(
 						coordinate.NewChainCoordinate(fromChain),
 						coordinate.NewChainCoordinate(toChain),
 						uint32(0),
-						uint32(nonce),
+						nonce,
 						sender,
 						addr,
 						big.NewInt(10),
@@ -106,7 +108,7 @@ func generateIssueTx() {
 	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
 	sender := accounts.PublicKeyToAddress(*issueKey.Public())
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 1; i++ {
 		privateKey, _ := crypto.GenerateKey()
 		list <- privateKey
 		addr := accounts.PublicKeyToAddress(*privateKey.Public())

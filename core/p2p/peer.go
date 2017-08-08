@@ -32,14 +32,11 @@ import (
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/params"
-	"github.com/willf/bloom"
 )
 
 var (
-	scheme             = "encode"
-	delimiter          = "&"
-	filterN       uint = 100000
-	falsePositive      = 0.0001
+	scheme    = "encode"
+	delimiter = "&"
 )
 
 // PeerID represents the peer identity
@@ -140,7 +137,6 @@ type Peer struct {
 	Address        string
 	Conn           net.Conn
 
-	filter  *bloom.BloomFilter
 	running map[string]*protoRW
 }
 
@@ -156,7 +152,6 @@ func NewPeer(id []byte, conn net.Conn, addr string, protocols []Protocol) *Peer 
 		LastActiveTime: *new(time.Time),
 		Conn:           conn,
 		Address:        addr,
-		filter:         bloom.NewWithEstimates(filterN, falsePositive),
 		running:        protoMap,
 	}
 }
@@ -172,14 +167,14 @@ func (peer *Peer) String() string {
 }
 
 // AddFilter adds data to bloomfilter
-func (peer *Peer) AddFilter(data []byte) {
-	peer.filter.Add(data)
-}
-
-// TestFilter tests data
-func (peer *Peer) TestFilter(data []byte) bool {
-	return peer.filter.Test(data)
-}
+//func (peer *Peer) AddFilter(data []byte) {
+//	peer.filter.Add(data)
+//}
+//
+//// TestFilter tests data
+//func (peer *Peer) TestFilter(data []byte) bool {
+//	return peer.filter.Test(data)
+//}
 
 // GetPeerAddress returns local peer address info
 func (peer *Peer) GetPeerAddress() string {

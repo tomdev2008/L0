@@ -23,6 +23,8 @@ import (
 
 	"math/big"
 
+	"sync"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
@@ -34,6 +36,7 @@ type State struct {
 	balancePrefix []byte
 	columnFamily  string
 	tmpBalance    map[string]*Balance
+	mu            sync.RWMutex
 }
 
 const (
@@ -73,8 +76,7 @@ func (state *State) UpdateBalance(a accounts.Address, balance *Balance, fee *big
 			return nil, ErrNegativeBalance
 		}
 		tmpBalance.Amount.Sub(tmpBalance.Amount.Sub(tmpBalance.Amount, fee), balance.Amount)
-
-		state.tmpBalance[a.String()].Nonce = balance.Nonce
+		tmpBalance.Nonce = balance.Nonce
 	default:
 		return nil, errors.New("unknown operation")
 	}
@@ -157,14 +159,17 @@ func (state *State) Transfer(sender, recipient accounts.Address, fee *big.Int, b
 
 //GetTmpBalance get tmpBalance When the block is not packaged
 func (state *State) GetTmpBalance(addr accounts.Address) (*Balance, error) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	balance, ok := state.tmpBalance[addr.String()]
 	if !ok {
 		Amount, Nonce, err := state.GetBalance(addr)
 		if err != nil {
 			return nil, err
 		}
-		state.tmpBalance[addr.String()] = NewBalance(Amount, Nonce)
-		return state.tmpBalance[addr.String()], nil
+		b := NewBalance(Amount, Nonce)
+		state.tmpBalance[addr.String()] = b
+		return b, nil
 	}
 	return balance, nil
 }
@@ -175,7 +180,9 @@ func (state *State) AtomicWrite(writeBatchs []*db.WriteBatch) error {
 		return err
 	}
 	//clear map
+	state.mu.Lock()
 	state.tmpBalance = make(map[string]*Balance)
+	state.mu.Unlock()
 	return nil
 }
 
