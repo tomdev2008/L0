@@ -1,9 +1,9 @@
 ## L0
-
 [English>>](https://github.com/bocheninc/L0/blob/master/README-en.md)
 
 [![Build Status](https://travis-ci.org/bocheninc/L0.svg?branch=master)](https://travis-ci.org/bocheninc/L0)
 [![GoDoc](https://godoc.org/github.com/bocheninc/L0?status.svg)](https://godoc.org/github.com/bocheninc/L0)
+[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/Bochen-L0/Lobby)
 
 ### 概述
 

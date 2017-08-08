@@ -154,6 +154,12 @@ func (tx *Transaction) Verfiy() (accounts.Address, error) {
 		fallthrough
 	case TypeAcrossChain:
 		fallthrough
+	case TypeJSContractInit:
+		fallthrough
+	case TypeLuaContractInit:
+		fallthrough
+	case TypeContractInvoke:
+		fallthrough
 	case TypeIssue:
 		if tx.Data.Signature != nil {
 			if sender := tx.sender.Load(); sender != nil {

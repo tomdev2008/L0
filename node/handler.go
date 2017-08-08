@@ -196,7 +196,7 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
 		}
 	case *types.Block:
-		if pm.Blockchain.ProcessBlock(inv.(*types.Block)) {
+		if pm.Blockchain.ProcessBlock(inv.(*types.Block), true) {
 			inventory.Type = InvTypeBlock
 			inventory.Hashes = []crypto.Hash{inv.Hash()}
 			log.Debugf("Relay inventory %v", inventory)
@@ -334,7 +334,7 @@ func (pm *ProtocolManager) OnBlock(m p2p.Msg, peer *p2p.Peer) {
 			HashStop:      crypto.Hash{},
 		}
 		p2p.SendMessage(peer.Conn, p2p.NewMsg(getBlocksMsg, utils.Serialize(getBlocks)))
-	} else if pm.Blockchain.ProcessBlock(blk) {
+	} else if pm.Blockchain.ProcessBlock(blk, false) {
 		if !pm.isStarted && pm.CurrentHeight() == pm.highest {
 			pm.isStarted = true
 			pm.Blockchain.Start()

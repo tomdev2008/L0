@@ -256,13 +256,13 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	return false
 }
 
-// ProcessBlock processes new block from the network
-func (bc *Blockchain) ProcessBlock(blk *types.Block) bool {
+// ProcessBlock processes new block from the network,flag = true pack up block ,flag = false sync block
+func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
 	log.Debugf("block previoushash %s, currentblockhash %s", blk.PreviousHash(), bc.CurrentBlockHash())
 	if blk.PreviousHash() == bc.CurrentBlockHash() {
-		bc.ledger.AppendBlock(blk, true)
+		bc.ledger.AppendBlock(blk, flag)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
 		return true
