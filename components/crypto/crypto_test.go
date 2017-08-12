@@ -37,15 +37,8 @@ func TestSign(t *testing.T) {
 		t.Errorf("Sign Error %s", err)
 	}
 
-	if sig.Validate() {
+	if !sig.Validate() {
 		t.Errorf("Signature Validate error %s", err)
-	}
-
-	s := Signature{}
-	s.SetBytes(sig[:], false)
-
-	if !s.Validate() {
-		t.Errorf("Signature Validate error %v", s.Validate())
 	}
 
 	pub, err := sig.RecoverPublicKey(msg[:])
