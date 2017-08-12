@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -79,7 +79,6 @@ func TestExecuteIssueTx(t *testing.T) {
 }
 
 func TestExecuteAtmoicTx(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(0)}
 
 	atmoicTxKeypair, _ := crypto.GenerateKey()
@@ -113,7 +112,7 @@ func TestExecuteAtmoicTx(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, atmoicTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, atmoicTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -126,7 +125,6 @@ func TestExecuteAtmoicTx(t *testing.T) {
 }
 
 func TestExecuteAcossTx1(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(0)}
 
 	acrossTxKeypair, _ := crypto.GenerateKey()
@@ -159,7 +157,7 @@ func TestExecuteAcossTx1(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -171,7 +169,6 @@ func TestExecuteAcossTx1(t *testing.T) {
 }
 
 func TestExecuteAcossTx2(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(0)}
 
 	acrossTxKeypair, _ := crypto.GenerateKey()
@@ -205,7 +202,7 @@ func TestExecuteAcossTx2(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -217,7 +214,6 @@ func TestExecuteAcossTx2(t *testing.T) {
 }
 
 func TestExecuteMergedTx(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(0)}
 
 	from := coordinate.NewChainCoordinate([]byte{byte(0)})
@@ -256,7 +252,7 @@ func TestExecuteMergedTx(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, mergedTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, mergedTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -269,7 +265,6 @@ func TestExecuteMergedTx(t *testing.T) {
 }
 
 func TestExecuteDistributTx(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(0)}
 
 	distributTxKeypair, _ := crypto.GenerateKey()
@@ -302,7 +297,7 @@ func TestExecuteDistributTx(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, distributTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, distributTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
@@ -315,7 +310,6 @@ func TestExecuteDistributTx(t *testing.T) {
 }
 
 func TestExecuteBackfrontTx(t *testing.T) {
-	var writeBash []*db.WriteBatch
 	params.ChainID = []byte{byte(1)}
 
 	backfrontTxKeypair, _ := crypto.GenerateKey()
@@ -349,7 +343,7 @@ func TestExecuteBackfrontTx(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	err := li.executeTransaction(types.Transactions{issueTx, backfrontTx}, writeBash)
+	_, _, err := li.executeTransaction(types.Transactions{issueTx, backfrontTx}, false)
 	if err != nil {
 		t.Error(err)
 	}
