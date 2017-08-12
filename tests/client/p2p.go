@@ -20,17 +20,29 @@ package main
 
 import (
 	"bytes"
+	ccrypto "crypto"
+	crand "crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math/rand"
 	"net"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 )
 
 var (
-	priKey *crypto.PrivateKey
-	conn   []net.Conn
+	priKey       *crypto.PrivateKey
+	conn         []net.Conn
+	biggetNumber int32 = 1024 * 1024 * 1024
 )
 
 const (
@@ -38,8 +50,23 @@ const (
 	pongMsg
 	handshakeMsg
 	handshakeAckMsg
+	secMsg    = 7
+	signMsg   = 8
 	statusMsg = 17
 )
+
+var nodeID string = "0005_abc"
+
+type VerifyObj struct {
+	nonce    uint32
+	crt      []byte
+	isPassed bool
+}
+
+var handshakeState = struct {
+	sync.RWMutex
+	m map[net.Conn]*VerifyObj
+}{m: make(map[net.Conn]*VerifyObj)}
 
 type Msg struct {
 	Cmd      uint8
@@ -65,7 +92,35 @@ type EncHandshake struct {
 	Hash      *crypto.Hash
 }
 
+type SecMsg struct {
+	Cert  []byte
+	Nonce uint32
+}
+
+type CertSign struct {
+	Sign []byte
+}
+
 func listen(c net.Conn) {
+	localNonce := getHandshakeNonce()
+
+	handshakeState.Lock()
+	if _, ok := handshakeState.m[c]; !ok {
+		handshakeState.m[c] = &VerifyObj{nonce: localNonce}
+	} else {
+		handshakeState.m[c].nonce = localNonce
+	}
+	handshakeState.Unlock()
+
+	localCrt, _ := ioutil.ReadFile("./cert/client.crt")
+	sec := &SecMsg{
+		Cert:  localCrt,
+		Nonce: localNonce,
+	}
+	respMsg := NewMsg(secMsg, utils.Serialize(*sec))
+	fmt.Println("secMsg")
+	sendMsg(respMsg, c)
+
 	for {
 		l, err := utils.ReadVarInt(c)
 		if err != nil {
@@ -78,8 +133,23 @@ func listen(c net.Conn) {
 		if err != nil {
 			panic(err)
 		}
-		go processMsg(m, c)
+
+		handshakeState.RLock()
+		isPassed := handshakeState.m[c].isPassed
+		handshakeState.RUnlock()
+
+		if isPassed {
+			go processMsg(m, c)
+		} else {
+			processMsg(m, c)
+		}
 	}
+}
+
+func getHandshakeNonce() uint32 {
+	rand.Seed(int64(time.Now().Nanosecond()))
+	nonce := rand.Int31n(biggetNumber)
+	return uint32(nonce)
 }
 
 func processMsg(m *Msg, c net.Conn) {
@@ -91,13 +161,69 @@ func processMsg(m *Msg, c net.Conn) {
 
 	respMsg := new(Msg)
 	switch m.Cmd {
+	case secMsg:
+		recvMsg := &SecMsg{}
+		utils.Deserialize(m.Payload, recvMsg)
+
+		ca, _ := ioutil.ReadFile("./cert/ca.crt")
+
+		remoteCrt := recvMsg.Cert
+
+		handshakeState.Lock()
+		if _, ok := handshakeState.m[c]; !ok {
+			handshakeState.m[c] = &VerifyObj{crt: remoteCrt}
+		} else {
+			handshakeState.m[c].crt = remoteCrt
+		}
+		handshakeState.Unlock()
+
+		isPassed := verifyCrt(ca, remoteCrt)
+		if !isPassed {
+			fmt.Println("verify crt failed")
+			return
+		}
+		fmt.Println("verify crt passed")
+
+		tmpSign, err := generateSign(recvMsg.Nonce, "./cert/client.key")
+		if err != nil {
+			fmt.Println("generate sign failed:", err)
+			return
+		}
+		certSign := &CertSign{
+			Sign: tmpSign,
+		}
+		respMsg = NewMsg(signMsg, utils.Serialize(*certSign))
+		fmt.Println("signMsg")
+	case signMsg:
+		recvSign := &CertSign{}
+		utils.Deserialize(m.Payload, recvSign)
+
+		handshakeState.RLock()
+		localNonce := handshakeState.m[c].nonce
+		recvCrt := handshakeState.m[c].crt
+		handshakeState.RUnlock()
+
+		isOk := verifySign(localNonce, recvCrt, recvSign.Sign)
+		if !isOk {
+			fmt.Println("verify sign failed")
+		}
+		fmt.Println("verify sign passed")
+
+		handshakeState.Lock()
+		if _, ok := handshakeState.m[c]; !ok {
+			handshakeState.m[c] = &VerifyObj{isPassed: isOk}
+		} else {
+			handshakeState.m[c].isPassed = isOk
+		}
+		handshakeState.Unlock()
+		return
 	case pingMsg:
 		respMsg = NewMsg(pongMsg, nil)
 	case handshakeMsg:
 		proto := &ProtoHandshake{
 			Name:       "l0-base-protocol",
 			Version:    "0.0.1",
-			ID:         priKey.Public().Bytes(),
+			ID:         []byte(nodeID),
 			SrvAddress: "",
 		}
 		respMsg = NewMsg(handshakeMsg, utils.Serialize(*proto))
@@ -108,7 +234,7 @@ func processMsg(m *Msg, c net.Conn) {
 		enc := &EncHandshake{
 			Signature: sign,
 			Hash:      &h,
-			ID:        priKey.Public().Bytes(),
+			ID:        []byte(nodeID),
 		}
 		respMsg = NewMsg(handshakeAckMsg, utils.Serialize(*enc))
 		fmt.Println("handshakeAckMsg")
@@ -120,6 +246,7 @@ func processMsg(m *Msg, c net.Conn) {
 		respMsg = NewMsg(statusMsg, utils.Serialize(*status))
 		fmt.Println("statusMsg")
 	default:
+		fmt.Println("default conn:", c)
 		return
 	}
 	sendMsg(respMsg, c)
@@ -154,6 +281,7 @@ func TCPSend(srvAddress []string) {
 		go listen(c)
 		fmt.Println("LocalAddr:", c.LocalAddr().String(), " RemoteAddr:", c.RemoteAddr().String())
 		conn = append(conn, c)
+		time.Sleep(time.Second * 5)
 	}
 }
 
@@ -164,4 +292,88 @@ func Relay(m *Msg) {
 	for _, c := range conn {
 		c.Write(data)
 	}
+}
+
+func generateSign(nonce uint32, localKeyPath string) ([]byte, error) {
+	key, err := ioutil.ReadFile(localKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("can't read local key\n")
+	}
+
+	block, _ := pem.Decode(key)
+	if block == nil || block.Type != "PRIVATE KEY" {
+		return nil, fmt.Errorf("failed to decode PEM block containing public key\n")
+	}
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("error: %v\n", err)
+	}
+
+	rng := crand.Reader
+	message := []byte(strconv.Itoa(int(nonce)))
+	hashed := sha256.Sum256(message)
+	sign, err := rsa.SignPKCS1v15(rng, privateKey, ccrypto.SHA256, hashed[:])
+	if err != nil {
+		return nil, fmt.Errorf("Error from signing: %v\nc", err)
+	}
+	return sign, nil
+}
+
+// verifyCrt use ca crt to verify remote crt
+func verifyCrt(ca []byte, remoteCrt []byte) bool {
+	// get remote certificate
+	pRemote, _ := pem.Decode(remoteCrt)
+	if pRemote == nil || pRemote.Type != "CERTIFICATE" {
+		fmt.Println("failed to decode PEM block containing public key")
+		return false
+	}
+	certRemote, err := x509.ParseCertificate(pRemote.Bytes)
+	if err != nil {
+		fmt.Println("error:", err)
+		return false
+	}
+
+	// get ca certificate
+	pCA, _ := pem.Decode(ca)
+	if pCA == nil || pCA.Type != "CERTIFICATE" {
+		fmt.Println("failed to decode PEM block containing public key")
+		return false
+	}
+	certCA, err := x509.ParseCertificate(pCA.Bytes)
+	if err != nil {
+		fmt.Println("error:", err)
+		return false
+	}
+
+	// verify
+	err = certRemote.CheckSignatureFrom(certCA)
+	if err != nil {
+		fmt.Println("error:", err)
+		return false
+	}
+	return true
+}
+
+func verifySign(nonce uint32, recvCrt []byte, recvSign []byte) bool {
+	p, _ := pem.Decode(recvCrt)
+	if p == nil || p.Type != "CERTIFICATE" {
+		fmt.Println("failed to decode PEM block containing public key")
+		return false
+	}
+	certificate, err := x509.ParseCertificate(p.Bytes)
+	if err != nil {
+		fmt.Println(err)
+		return false
+	}
+
+	// verify
+	message := []byte(strconv.Itoa(int(nonce)))
+	hashed := sha256.Sum256(message)
+	err = rsa.VerifyPKCS1v15(certificate.PublicKey.(*rsa.PublicKey), ccrypto.SHA256, hashed[:], recvSign)
+	if err != nil {
+		fmt.Println("verify sign failed")
+		return false
+	}
+	return true
 }

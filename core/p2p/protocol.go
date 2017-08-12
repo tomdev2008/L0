@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -111,6 +111,7 @@ func (proto *ProtoHandshake) deserialize(data []byte) {
 // matchProtocol returns the result of handshake
 func (proto *ProtoHandshake) matchProtocol(i interface{}) bool {
 	if p, ok := i.(*ProtoHandshake); ok {
+		log.Debugln("matchProtocol")
 		if p.Name == proto.Name || p.Version == proto.Version {
 			return true
 		}
@@ -152,4 +153,41 @@ func (enc *EncHandshake) deserialize(data []byte) {
 
 func getPeerID() []byte {
 	return getPeerManager().localPeer.ID[:]
+}
+
+type SecMsg struct {
+	Cert  []byte
+	Nonce uint32
+}
+
+func NewSecMsg(cert []byte, nonce uint32) *SecMsg {
+	secMsg := &SecMsg{
+		Cert:  cert,
+		Nonce: nonce,
+	}
+	return secMsg
+}
+
+// serialize SecMsg instance to []byte
+func (secMsg *SecMsg) serialize() []byte {
+	return utils.Serialize(secMsg)
+}
+
+// deserialize buffer to SecMsg instance
+func (secMsg *SecMsg) deserialize(data []byte) {
+	utils.Deserialize(data, secMsg)
+}
+
+type CertSign struct {
+	Sign []byte
+}
+
+// serialize SecSign instance to []byte
+func (certSign *CertSign) serialize() []byte {
+	return utils.Serialize(certSign)
+}
+
+// deserialize buffer to SecSign instance
+func (certSign *CertSign) deserialize(data []byte) {
+	utils.Deserialize(data, certSign)
 }
