@@ -152,7 +152,7 @@ func DeploySmartContractTX() {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		big.NewInt(1000),
+		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
@@ -188,7 +188,7 @@ func ExecSmartContractTX(params []string) {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		big.NewInt(100),
+		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
