@@ -30,6 +30,7 @@ const (
 	ChainMergeTxsMsg
 	ChainAckMergeTxsMsg
 	ChainAckedMergeTxsMsg
+	ChainRpcMsg
 )
 
 // Message represents the message transfer in msg-net

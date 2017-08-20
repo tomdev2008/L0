@@ -55,6 +55,7 @@ type ProtocolManager struct {
 	consenter consensus.Consenter
 	msgnet    msgnet.Stack
 	merger    *merge.Helper
+	msgrpc    *msgnet.RpcHelper
 	msgCh     chan *p2p.Msg
 	isStarted bool
 	highest   uint32
@@ -92,6 +93,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	})
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
+	manager.msgrpc = msgnet.NewRpcHelper(manager)
 	go jrpc.StartServer(config.JrpcConfig(), manager)
 	return manager
 }
@@ -460,6 +462,7 @@ func (pm *ProtocolManager) SendMsgnetMessage(src, dst string, msg msgnet.Message
 	}
 
 	if pm.msgnet != nil {
+		log.Debugf("==============send data=========== cmd : %v, payload: %v ", msg.Cmd, msg.Payload)
 		return pm.msgnet.Send(dst, msg.Serialize(), sig[:])
 	}
 
@@ -470,15 +473,17 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 	sig := crypto.Signature{}
 	copy(sig[:], signature)
 
-	if !sig.Validate() {
+	if signature != nil && !sig.Validate() {
 		return errors.New("msg-net signature error")
 	}
 
-	h := crypto.Sha256(append(payload, src+dst...))
-	pub, err := sig.RecoverPublicKey(h[:])
-	if pub == nil || err != nil {
-		log.Debug("PubilcKey verify error")
-		return errors.New("PubilcKey verify error")
+	if signature != nil {
+		h := crypto.Sha256(append(payload, src+dst...))
+		pub, err := sig.RecoverPublicKey(h[:])
+		if pub == nil || err != nil {
+			log.Debug("PubilcKey verify error")
+			return errors.New("PubilcKey verify error")
+		}
 	}
 
 	msg := msgnet.Message{}
@@ -504,6 +509,11 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		chainID, peerID := parseID(src)
 		pm.merger.HandleNetMsg(msg.Cmd, chainID.String(), peerID.String(), msg)
 		log.Debugf("mergeRecv cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
+	case msgnet.ChainRpcMsg:
+		chainID, peerID := parseID(src)
+		data_msg, msgtype := pm.msgrpc.InvokeRpcHandle(msg.Payload)
+		pm.msgrpc.HandleNetMsg(msgtype, pm.peerAddress(), src, data_msg)
+		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
 	default:
 		log.Debug("not know msgnet.type...")
 	}

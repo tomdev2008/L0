@@ -67,7 +67,7 @@ type GetTxsByBlockHashArgs struct {
 
 //Block json rpc return block
 type Block struct {
-	BlockHeader *types.BlockHeader `json:"header"`
+	BlockHeader types.BlockHeader `json:"header"`
 	TxHashList  []crypto.Hash      `json:"txHashList"`
 }
 
@@ -121,7 +121,7 @@ func (l *Ledger) GetBlockByHash(blockHashBytes string, reply *Block) error {
 		return err
 	}
 
-	*reply = Block{BlockHeader: blockHeader, TxHashList: txHashList}
+	*reply = Block{BlockHeader: *blockHeader, TxHashList: txHashList}
 
 	return nil
 }
@@ -138,7 +138,7 @@ func (l *Ledger) GetBlockByNumber(number uint32, reply *Block) error {
 		return err
 	}
 
-	*reply = Block{BlockHeader: blockHeader, TxHashList: txHashList}
+	*reply = Block{BlockHeader: *blockHeader, TxHashList: txHashList}
 
 	return nil
 }

@@ -148,13 +148,14 @@ func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) 
 // GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
-	if tx == nil && bc.txValidator != nil {
+	if bc.txValidator != nil && err != nil {
 		var ok bool
-		if tx, ok = bc.txValidator.getTransactionByHash(txHash); !ok {
-			return nil, err
+		if tx, ok = bc.txValidator.getTransactionByHash(txHash); ok {
+			return tx, nil
 		}
 	}
-	return tx, nil
+
+	return tx, err
 }
 
 // Start starts blockchain services
