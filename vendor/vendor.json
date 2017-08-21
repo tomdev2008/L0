@@ -466,6 +466,11 @@
 			"revision": "6e83acea0053641eff084973fee085f0c193c61a",
 			"revisionTime": "2017-02-13T14:20:43Z"
 		},
+		{	"checksumSHA1": "ClyNDKGVhQH1K/IXbLZ1qMv0ddA=",
+			"path": "github.com/twinj/uuid",
+			"revision": "7bbe408d339787c56ec15568c947c0959db1b275",
+			"revisionTime": "2016-09-09T07:54:38Z"
+		},
 		{
 			"checksumSHA1": "FGuroI+Vvi5/VXE+Y+7G0lzb2EM=",
 			"path": "gopkg.in/sourcemap.v1/base64vlq",
