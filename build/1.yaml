@@ -84,6 +84,6 @@ cert:
 ca:
   enabled: true
 
-node_id: 0001_abc
+nodeid: 0001_abc
 update_time: 1502180797
 

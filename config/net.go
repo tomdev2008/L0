@@ -69,7 +69,7 @@ func NetConfig(nodeDir string) *p2p.Config {
 	config.CrtPath = getString("cert.crtPath", config.CrtPath)
 	config.CAPath = getString("cert.caPath", config.CAPath)
 	config.CAEnabled = getbool("ca.enabled", config.CAEnabled)
-	config.NodeID = getString("node_id", config.NodeID)
+	config.NodeID = getString("nodeid", config.NodeID)
 
 	return config
 }
