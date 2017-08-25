@@ -20,6 +20,7 @@ package node
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -105,6 +106,8 @@ func (pm *ProtocolManager) Start() {
 
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
+
+	go pm.reportStatusLoop()
 
 	go func() {
 		for {
@@ -235,6 +238,19 @@ func (pm *ProtocolManager) broadcastLoop() {
 		select {
 		case msg := <-pm.msgCh:
 			pm.Broadcast(msg)
+		}
+	}
+}
+
+func (pm *ProtocolManager) reportStatusLoop() {
+	for {
+		select {
+		case height := <-pm.Blockchain.HeightStatusChan():
+			msg := msgnet.Message{}
+			msg.Cmd = msgnet.ChainNodeStatusMsg
+			msg.Payload = make([]byte, 4)
+			binary.LittleEndian.PutUint32(msg.Payload, height)
+			pm.SendMsgnetMessage(pm.peerAddress(), "deploy:server", msg)
 		}
 	}
 }
@@ -514,6 +530,9 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		data_msg, msgtype := pm.msgrpc.InvokeRpcHandle(msg.Payload)
 		pm.msgrpc.HandleNetMsg(msgtype, pm.peerAddress(), src, data_msg)
 		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
+	case msgnet.ChainChangeCfgMsg:
+		chainID, peerID := parseID(src)
+		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
 	default:
 		log.Debug("not know msgnet.type...")
 	}

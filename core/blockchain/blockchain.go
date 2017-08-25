@@ -54,9 +54,10 @@ type Blockchain struct {
 	// network stack
 	pm NetworkStack
 
-	quitCh chan bool
-	txCh   chan *types.Transaction
-	blkCh  chan *types.Block
+	quitCh       chan bool
+	txCh         chan *types.Transaction
+	blkCh        chan *types.Block
+	heightStatus chan uint32
 
 	orphans *list.List
 	// 0 respresents sync block, 1 respresents sync done
@@ -95,6 +96,7 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 		quitCh:             make(chan bool),
 		txCh:               make(chan *types.Transaction, 10000),
 		blkCh:              make(chan *types.Block, 10),
+		heightStatus:       make(chan uint32, 10),
 		currentBlockHeader: new(types.BlockHeader),
 		orphans:            list.New(),
 	}
@@ -266,9 +268,14 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 		bc.ledger.AppendBlock(blk, flag)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
+		bc.heightStatus <- blk.Height()
 		return true
 	}
 	return false
+}
+
+func (bc *Blockchain) HeightStatusChan() <-chan uint32 {
+	return bc.heightStatus
 }
 
 func (bc *Blockchain) merkleRootHash(txs []*types.Transaction) crypto.Hash {
