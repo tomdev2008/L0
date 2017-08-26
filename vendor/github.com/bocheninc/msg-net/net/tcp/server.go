@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -216,9 +216,11 @@ func (cc *clientConn) handleConn(c context.Context) {
 				case <-ctx.Done():
 					return
 				case msg := <-cc.RecvChannel():
-					if err := cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg); err != nil {
-						logger.Errorf("server %s failed to handle msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
-					}
+					go func() {
+						if err := cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg); err != nil {
+							logger.Errorf("server %s failed to handle msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
+						}
+					}()
 				case msg := <-cc.SendChannel():
 					if _, err := cc.Send(cc.conn, msg); err != nil {
 						logger.Errorf("server %s failed to send msg to client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
