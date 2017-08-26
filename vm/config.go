@@ -49,11 +49,11 @@ func DefaultConfig() *Config {
 		ExecLimitStackDepth:        100,
 		ExecLimitMaxOpcodeCount:    10000,
 		ExecLimitMaxRunTime:        1000,
-		ExecLimitMaxScriptSize:     5120, //5K
-		ExecLimitMaxStateValueSize: 5120, //5K
+		ExecLimitMaxScriptSize:     10240, //5K
+		ExecLimitMaxStateValueSize: 5120,  //5K
 		ExecLimitMaxStateItemCount: 1000,
 		ExecLimitMaxStateKeyLength: 256,
-		LuaVMExeFilePath:           "/home/itcast/go/src/github.com/bocheninc/L0/vm/luavm/main/luavm",
-		JSVMExeFilePath:            "/home/itcast/go/src/github.com/bocheninc/L0/vm/jsvm/main/jsvm",
+		LuaVMExeFilePath:           "bin/luavm",
+		JSVMExeFilePath:            "bin/jsvm",
 	}
 }
