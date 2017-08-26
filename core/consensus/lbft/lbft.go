@@ -292,6 +292,10 @@ func (lbft *Lbft) CommittedTxsChannel() <-chan *consensus.OutputTxs {
 	return lbft.committedTxsChan
 }
 
+func (lbft *Lbft) ChangeBlockSize(size int) {
+	lbft.options.BlockSize = size
+}
+
 func (lbft *Lbft) intersectionQuorum() int {
 	return lbft.options.Q
 }
@@ -411,7 +415,7 @@ func (lbft *Lbft) submitRequestBatches() {
 		return
 	}
 	txss := lbft.stack.FetchGroupingTxsInTxPool(lbft.options.MaxConcurrentNumFrom, lbft.options.BlockSize)
-
+	log.Debug("lbft block size: ", lbft.options.BlockSize)
 	id := time.Now().UnixNano()
 	height := uint32(0)
 	requestBatchList := make([]*RequestBatch, 0, len(txss))

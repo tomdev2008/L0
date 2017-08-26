@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"time"
@@ -532,7 +533,9 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
-		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v\n,payload: %s", msg.Cmd, id[0], id[1], src, string(msg.Payload))
+		size, _ := strconv.Atoi(string(msg.Payload))
+		pm.consenter.ChangeBlockSize(size)
+		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v, payload: %s", msg.Cmd, id[0], id[1], src, string(msg.Payload))
 	default:
 		log.Debug("not know msgnet.type...")
 	}
