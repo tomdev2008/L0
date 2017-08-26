@@ -559,9 +559,10 @@ func (lbft *Lbft) handleConsensusMsg() {
 					// } else if commit.Chain == lbft.options.Chain && commit.PrimaryID != lbft.primaryID {
 					// 	log.Errorf("Replica %s received commit message from %s for consensus %s : ignore diff primayID (%s==%s)", lbft.options.ID, commit.ReplicaID, commit.Name, commit.PrimaryID, lbft.primaryID)
 					// } else
-					if commit.Chain != lbft.options.Chain {
-						log.Errorf("Replica %s received committed message from %s for consensus %s : ignore diff chain (%s==%s) ", lbft.options.ID, commit.ReplicaID, commit.Name, commit.Chain, lbft.options.Chain)
-					} else if commit.SeqNo <= lbft.lastSeqNum() {
+					//if commit.Chain != lbft.options.Chain {
+					//	log.Errorf("Replica %s received committed message from %s for consensus %s : ignore diff chain (%s==%s) ", lbft.options.ID, commit.ReplicaID, commit.Name, commit.Chain, lbft.options.Chain)
+					//} else if
+					if commit.SeqNo <= lbft.lastSeqNum() {
 						log.Debugf("Replica %s received commit message from %s for consensus %s : ignore delay seqNo (%d > %d)", lbft.options.ID, commit.ReplicaID, commit.Name, commit.SeqNo, lbft.lastSeqNum())
 					} else {
 						lbft.handleLbftCoreMsg(commit.Name, msg)

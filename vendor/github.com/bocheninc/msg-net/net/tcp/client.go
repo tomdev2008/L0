@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"sync"
-	"time"
 
 	"encoding/json"
 
@@ -131,27 +130,31 @@ func (tc *Client) handleConn() {
 		go func(ctx context.Context) {
 			ws0.Add(1)
 			defer ws0.Done()
-			timer := time.NewTimer(time.Second)
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case msg := <-tc.RecvChannel():
-					go func ()  {
-						if err := tc.handleMsg(tc.conn, tc.SendChannel(), msg); err != nil {
-							logger.Errorf("clinet %s failed to handle msg from server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), err)
-						}	
-					}()
+					if err := tc.handleMsg(tc.conn, tc.SendChannel(), msg); err != nil {
+						logger.Errorf("clinet %s failed to handle msg from server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), err)
+					}
+				}
+			}
+		}(ctx0)
+
+		go func(ctx context.Context) {
+			ws0.Add(1)
+			defer ws0.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
 				case msg := <-tc.SendChannel():
 					if _, err := tc.Send(tc.conn, msg); err != nil {
 						logger.Errorf("client %s failed to send msg to server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), err)
 					} else {
 						logger.Debugf("client %s send msg to server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), msg)
 					}
-				// for Test
-				case <-timer.C:
-					logger.Debugln("SizeOf SendChannel:", len(tc.SendChannel()))
-					timer.Reset(time.Second)
 				}
 			}
 		}(ctx0)

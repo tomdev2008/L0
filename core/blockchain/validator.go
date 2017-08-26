@@ -465,7 +465,8 @@ func (vr *Validator) checkTransaction(tx *types.Transaction) bool {
 		fromChain := coordinate.HexToChainCoordinate(tx.FromChain())
 		toChain := coordinate.HexToChainCoordinate(tx.FromChain())
 
-		if !(len(fromChain) == len(toChain) && strings.Compare(fromChain.String(), "00") == 0) {
+		// && strings.Compare(fromChain.String(), "00") == 0)
+		if len(fromChain) != len(toChain) {
 			log.Errorf("[Validator] add: fail[should(the first floor)], Tx-hash: %v, tx_type: %v, tx_fchain: %v, tx_tchain: %v",
 				tx.Hash().String(), tx.GetType(), tx.FromChain(), tx.ToChain())
 			isOK = false
@@ -688,6 +689,7 @@ func (vr *Validator) GetCommittedTxs(groupingTxs []*consensus.CommittedTxs) (typ
 
 	log.Debugf("[Validator] receiveTxsLen: %d", len(groupingTxs))
 	for _, txs := range groupingTxs {
+		log.Println("isLocal", txs.IsLocalChain, "TxsSeqNo:", txs.SeqNo, "TxsSkip:", txs.Skip, "TxsTime", txs.Time, "TxsSize:", len(txs.Transactions))
 		if txs.Skip {
 			blockTime = txs.Time
 			totalTxs = txs.Transactions
