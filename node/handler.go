@@ -20,13 +20,13 @@ package node
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"encoding/json"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -246,11 +246,11 @@ func (pm *ProtocolManager) broadcastLoop() {
 func (pm *ProtocolManager) reportStatusLoop() {
 	for {
 		select {
-		case height := <-pm.Blockchain.HeightStatusChan():
+		case status := <-pm.Blockchain.HeightStatusChan():
 			msg := msgnet.Message{}
 			msg.Cmd = msgnet.ChainNodeStatusMsg
-			msg.Payload = make([]byte, 4)
-			binary.LittleEndian.PutUint32(msg.Payload, height)
+			payload, _ := json.Marshal(*status)
+			msg.Payload = payload
 			pm.SendMsgnetMessage(pm.peerAddress(), "deploy:server", msg)
 		}
 	}

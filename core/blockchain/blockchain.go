@@ -40,6 +40,11 @@ type NetworkStack interface {
 
 var validTxPoolSize = 1000000
 
+type Status struct {
+	Height uint32
+	Tps    int
+}
+
 // Blockchain is blockchain instance
 type Blockchain struct {
 	// global chain config
@@ -57,7 +62,7 @@ type Blockchain struct {
 	quitCh       chan bool
 	txCh         chan *types.Transaction
 	blkCh        chan *types.Block
-	heightStatus chan uint32
+	heightStatus chan *Status
 
 	orphans *list.List
 	// 0 respresents sync block, 1 respresents sync done
@@ -96,7 +101,7 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 		quitCh:             make(chan bool),
 		txCh:               make(chan *types.Transaction, 10000),
 		blkCh:              make(chan *types.Block, 10),
-		heightStatus:       make(chan uint32, 10),
+		heightStatus:       make(chan *Status, 100),
 		currentBlockHeader: new(types.BlockHeader),
 		orphans:            list.New(),
 	}
@@ -268,13 +273,13 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 		bc.ledger.AppendBlock(blk, flag)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
-		bc.heightStatus <- blk.Height()
+		bc.heightStatus <- &Status{Height: blk.Height(), Tps: len(blk.Transactions) / 10}
 		return true
 	}
 	return false
 }
 
-func (bc *Blockchain) HeightStatusChan() <-chan uint32 {
+func (bc *Blockchain) HeightStatusChan() <-chan *Status {
 	return bc.heightStatus
 }
 

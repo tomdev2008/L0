@@ -420,7 +420,7 @@ func (vr *Validator) checkTransaction(tx *types.Transaction) bool {
 	isOK := true
 
 	if !(strings.Compare(tx.FromChain(), params.ChainID.String()) == 0 || (strings.Compare(tx.ToChain(), params.ChainID.String()) == 0)) {
-		log.Errorf("[Validator] invalid transaction, fromCahin or toChain == params.ChainID")
+		log.Errorf("[Validator] invalid transaction, fromCahin %s or toChain %s == params.ChainID %s", tx.FromChain(), tx.ToChain(), params.ChainID.String())
 		return false
 	}
 
