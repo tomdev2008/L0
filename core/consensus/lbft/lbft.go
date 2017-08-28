@@ -19,6 +19,7 @@
 package lbft
 
 import (
+	"bytes"
 	"encoding/json"
 	"time"
 
@@ -365,7 +366,7 @@ func (lbft *Lbft) handleTransaction() {
 			lbft.voteViewChange.Clear()
 		case <-lbft.resendViewChangeTimer.C:
 			lbft.votedCnt++
-			if lbft.votedCnt > lbft.options.K*lbft.options.N {
+			if lbft.lastPrimaryID != "" && lbft.votedCnt > lbft.options.K {
 				lbft.voteViewChange.IterVoter(func(voter string, ticket vote.ITicket) {
 					tvc := ticket.(*ViewChange)
 					log.Infof("Replica %s received view change message from %s for voter %s , lastSeqNo %d", lbft.options.ID, tvc.ReplicaID, tvc.PrimaryID, tvc.SeqNo)
@@ -376,7 +377,7 @@ func (lbft *Lbft) handleTransaction() {
 			var vc *ViewChange
 			lbft.voteViewChange.IterVoter(func(voter string, ticket vote.ITicket) {
 				tvc := ticket.(*ViewChange)
-				if tvc.PrimaryID != lbft.lastPrimaryID && tvc.SeqNo == lbft.lastSeqNum() {
+				if tvc.PrimaryID != lbft.lastPrimaryID && tvc.SeqNo == lbft.lastSeqNum() && bytes.Equal(tvc.OptHash, lbft.options.Hash()) {
 					if vc == nil {
 						vc = tvc
 					} else if tvc.Priority < vc.Priority {
@@ -453,9 +454,7 @@ func (lbft *Lbft) submitRequestBatches() {
 func (lbft *Lbft) resetViewChangePeriodTimer() {
 	lbft.viewChangePeriodTimer.Stop()
 	if lbft.hasPrimary() && lbft.options.ViewChangePeriod > 0*time.Second {
-		t1 := time.Now()
-		t2 := t1.Truncate(lbft.options.ViewChangePeriod)
-		lbft.viewChangePeriodTimer.Reset(lbft.options.ViewChangePeriod - t1.Sub(t2))
+		lbft.viewChangePeriodTimer.Reset(lbft.options.ViewChangePeriod)
 	}
 }
 
@@ -613,11 +612,15 @@ func (lbft *Lbft) handleConsensusMsg() {
 						log.Errorf("Replica %s received null request from %s : ignore diff chain (%s==%s) ", lbft.options.ID, np.ReplicaID, np.Chain, lbft.options.Chain)
 						return
 					}
-					log.Debugf("Replica %s received null request from %s", lbft.options.ID, np.ReplicaID)
-					if lbft.primaryID != np.PrimaryID && np.PrimaryID != lbft.lastPrimaryID && np.PrimaryID == np.ReplicaID {
-						log.Infof("Replica %s view change : vote new PrimaryID %s (%s), null request", lbft.options.ID, np.PrimaryID, lbft.primaryID)
-						lbft.newView(&ViewChange{PrimaryID: np.PrimaryID, SeqNo: np.SeqNo, Height: np.Height})
+					if !bytes.Equal(np.OptHash, lbft.options.Hash()) {
+						log.Errorf("Replica %s received null request from %s : diff lbft options ", lbft.options.ID, np.ReplicaID)
+					} else {
+						if lbft.lastPrimaryID == "" && np.PrimaryID == np.ReplicaID {
+							log.Infof("Replica %s view change : vote new PrimaryID %s (%s), null request", lbft.options.ID, np.PrimaryID, lbft.primaryID)
+							lbft.newView(&ViewChange{PrimaryID: np.PrimaryID, SeqNo: np.SeqNo, Height: np.Height, OptHash: np.OptHash})
+						}
 					}
+					log.Debugf("Replica %s received null request from %s", lbft.options.ID, np.ReplicaID)
 					lbft.nullRequestTimerStart()
 				}
 			default:
@@ -639,6 +642,7 @@ func (lbft *Lbft) nullRequestHandler() {
 			PrimaryID: lbft.primaryID,
 			SeqNo:     lbft.lastSeqNum(),
 			Height:    lbft.lastHeightNum(),
+			OptHash:   lbft.options.Hash(),
 		}
 		lbft.broadcast(lbft.options.Chain, &Message{Type: MESSAGENULLREQUEST, Payload: serialize(nullRequest)})
 		lbft.nullRequestTimerStart()
@@ -677,6 +681,7 @@ func (lbft *Lbft) sendViewChange(vc *ViewChange) {
 		if vc.PrimaryID == lbft.options.ID {
 			vc.SeqNo = lbft.lastSeqNum()
 			vc.Height = lbft.lastHeightNum()
+			vc.OptHash = lbft.options.Hash()
 		}
 	} else {
 		vc = &ViewChange{
@@ -686,6 +691,7 @@ func (lbft *Lbft) sendViewChange(vc *ViewChange) {
 			PrimaryID: lbft.options.ID,
 			SeqNo:     lbft.lastSeqNum(),
 			Height:    lbft.lastHeightNum(),
+			OptHash:   lbft.options.Hash(),
 		}
 	}
 	lbft.recvViewChange(vc)
@@ -723,8 +729,10 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 	if cnt == 1 {
 		lbft.viewChangeTimer.Reset(lbft.options.ViewChange)
 	} else if cnt == lbft.intersectionQuorum() {
-		lbft.lastPrimaryID = lbft.primaryID
-		lbft.primaryID = ""
+		if lbft.primaryID != "" {
+			lbft.lastPrimaryID = lbft.primaryID
+			lbft.primaryID = ""
+		}
 		//lbft.blockTimer.Stop()
 		lbft.iterInstance(func(key string, instance *lbftCore) {
 			//if !instance.isPassCommit {
@@ -738,9 +746,10 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 		lbft.viewChangeTimer.Stop()
 		//lbft.resetViewChangePeriodTimer()
 		lbft.nullRequestTimerStart()
-		t1 := time.Now()
-		t2 := t1.Truncate(lbft.options.ResendViewChange)
-		lbft.resendViewChangeTimer.Reset(lbft.options.ResendViewChange - t1.Sub(t2))
+		// t1 := time.Now()
+		// t2 := t1.Truncate(lbft.options.ResendViewChange)
+		// lbft.resendViewChangeTimer.Reset(lbft.options.ResendViewChange - t1.Sub(t2))
+		lbft.resendViewChangeTimer.Reset(lbft.options.ResendViewChange)
 	}
 	if quorum, ticker := lbft.voteViewChange.Voter(); quorum >= lbft.intersectionQuorum() {
 		vc := ticker.(*ViewChange)
@@ -751,7 +760,11 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) {
 func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.resendViewChangeTimer.Stop()
 	lbft.voteViewChange.Clear()
+	if lbft.primaryID == vc.PrimaryID {
+		return
+	}
 	lbft.primaryID = vc.PrimaryID
+	lbft.lastPrimaryID = lbft.primaryID
 	if lbft.isPrimary() {
 		lbft.priority = time.Now().UnixNano()
 		lbft.blockTimer.Stop()
