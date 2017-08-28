@@ -336,7 +336,7 @@ func (lbft *Lbft) writeBlock() {
 	var seqNos []uint64
 	cts := []*consensus.CommittedTxs{}
 	for _, ctt := range lbft.committedBlock {
-		height = ctt.requestBatch.Height
+		//height = ctt.requestBatch.Height
 		seqNos = append(seqNos, ctt.seqNo)
 		txs := []*types.Transaction{}
 		for _, req := range ctt.requestBatch.Requests {
@@ -350,6 +350,7 @@ func (lbft *Lbft) writeBlock() {
 			cts = append(cts, &consensus.CommittedTxs{Skip: false, IsLocalChain: false, Time: ctt.requestBatch.Time, Transactions: txs, SeqNo: ctt.seqNo})
 		}
 	}
+	height = lbft.committedBlock[0].requestBatch.Height
 	log.Infof("Replica %s write block %v (%d transactions), height: %d", lbft.options.ID, seqNos, cnt, height)
 	lbft.committedTxsChan <- &consensus.OutputTxs{Outputs: cts, Height: height}
 	lbft.committedBlock = nil
@@ -517,10 +518,9 @@ func (lbft *Lbft) handleConsensusMsg() {
 					} else if lbft.isPrimary() {
 						if lbft.concurrentCntTo > lbft.options.MaxConcurrentNumTo {
 							log.Warnf("Replica %s received requestBatch message for consensus %s :  max concurrent %d ", lbft.options.ID, requestBatch.key(), lbft.options.MaxConcurrentNumTo)
-						} else {
-							lbft.concurrentCntTo++
-							lbft.handleRequestBatch(requestBatch)
-						}
+						} 
+						lbft.concurrentCntTo++
+						lbft.handleRequestBatch(requestBatch)
 					}
 				}
 			case MESSAGEPREPREPARE:
@@ -562,11 +562,11 @@ func (lbft *Lbft) handleConsensusMsg() {
 					//if commit.Chain != lbft.options.Chain {
 					//	log.Errorf("Replica %s received committed message from %s for consensus %s : ignore diff chain (%s==%s) ", lbft.options.ID, commit.ReplicaID, commit.Name, commit.Chain, lbft.options.Chain)
 					//} else if
-					if commit.SeqNo <= lbft.lastSeqNum() {
-						log.Debugf("Replica %s received commit message from %s for consensus %s : ignore delay seqNo (%d > %d)", lbft.options.ID, commit.ReplicaID, commit.Name, commit.SeqNo, lbft.lastSeqNum())
-					} else {
+					//if commit.SeqNo <= lbft.lastSeqNum() {
+				//		log.Debugf("Replica %s received commit message from %s for consensus %s : ignore delay seqNo (%d > %d)", lbft.options.ID, commit.ReplicaID, commit.Name, commit.SeqNo, lbft.lastSeqNum())
+				//	} else {
 						lbft.handleLbftCoreMsg(commit.Name, msg)
-					}
+				//	}
 				}
 			case MESSAGECOMMITTED:
 				if committed := msg.GetCommitted(); committed != nil {

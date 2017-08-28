@@ -186,8 +186,14 @@ func (bc *Blockchain) StartConsensusService() {
 		for {
 			select {
 			case commitedTxs := <-bc.consenter.CommittedTxsChannel():
-				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
+/*				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
 					break
+				}
+*/
+				//add lo
+				log.Infof("Outputs StartConsensusService len=%d",len(commitedTxs.Outputs))
+				for  x  :=range  commitedTxs.Outputs{
+					log.Infof("Outputs StartConsensusService %d",len(commitedTxs.Outputs[x].Transactions))
 				}
 				height, _ := bc.ledger.Height()
 				height++
