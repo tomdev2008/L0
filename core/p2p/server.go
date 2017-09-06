@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 )
@@ -41,7 +42,8 @@ import (
 // Config is the p2p network configuration
 type Config struct {
 	Address             string
-	PrivateKey          *crypto.PrivateKey
+	Crypter             string
+	PrivateKey          crypter.IPrivateKey
 	BootstrapNodes      []string
 	MaxPeers            int
 	ReconnectTimes      int
@@ -122,11 +124,11 @@ func (srv *Server) Start() {
 }
 
 // Sign signs data with node key
-func (srv *Server) Sign(data []byte) (*crypto.Signature, error) {
+func (srv *Server) Sign(data []byte) ([]byte, error) {
 	h := crypto.Sha256(data)
 
 	if config.PrivateKey != nil {
-		return config.PrivateKey.Sign(h[:])
+		return crypter.MustCrypter(config.Crypter).Sign(config.PrivateKey, h[:])
 	}
 
 	return nil, fmt.Errorf("Node private key not config")

@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
-//
+
 // This file is part of L0
-//
+
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-//
+
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//
+
 // GNU General Public License for more details.
-//
+
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -85,5 +85,60 @@ func TestLoadAndSaveECDSA(t *testing.T) {
 	priv2, _ := LoadECDSA("nodekey")
 	if !bytes.Equal(priv.SecretBytes(), priv2.SecretBytes()) {
 		t.Errorf("load and save private key error %s != %s", priv, priv2)
+	}
+}
+
+func BenchmarkSign(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		priv, _ := HexToECDSA(testPrivateKey)
+		msg := Sha256([]byte("hello"))
+
+		sig, err := priv.Sign(msg[:])
+		if err != nil {
+			b.Errorf("Sign Error %s", err)
+		}
+
+		if !sig.Validate() {
+			b.Errorf("Signature Validate error %s", err)
+		}
+
+		pub, err := sig.RecoverPublicKey(msg[:])
+		if err != nil {
+			b.Errorf("SigToPub Error %v - %v - %s", sig, pub, err)
+		}
+
+		pub2 := priv.Public()
+		if !bytes.Equal(pub.Bytes(), pub2.Bytes()) {
+			b.Errorf("public key not match! %0x - %0x ", pub.Bytes(), pub2.Bytes())
+		}
+
+	}
+}
+
+func BenchmarkSign2(b *testing.B) {
+	b.StopTimer()
+	priv, _ := HexToECDSA(testPrivateKey)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		msg := Sha256([]byte("hello"))
+		sig, err := priv.Sign(msg[:])
+		if err != nil {
+			b.Errorf("Sign Error %s", err)
+		}
+
+		if !sig.Validate() {
+			b.Errorf("Signature Validate error %s", err)
+		}
+
+		pub, err := sig.RecoverPublicKey(msg[:])
+		if err != nil {
+			b.Errorf("SigToPub Error %v - %v - %s", sig, pub, err)
+		}
+
+		pub2 := priv.Public()
+		if !bytes.Equal(pub.Bytes(), pub2.Bytes()) {
+			b.Errorf("public key not match! %0x - %0x ", pub.Bytes(), pub2.Bytes())
+		}
+
 	}
 }

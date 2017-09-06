@@ -19,9 +19,11 @@
 package p2p
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 )
@@ -85,11 +87,13 @@ func GetEncHandshake() *EncHandshake {
 	if encHandshake == nil {
 		// TODO　Generate random string
 		h := crypto.Sha256([]byte("random string"))
-		sign, err := config.PrivateKey.Sign(h[:])
+		sign, err := crypter.MustCrypter(config.Crypter).Sign(config.PrivateKey, h[:])
 		if err != nil {
 			log.Error(err.Error())
 		}
 		encHandshake = &EncHandshake{
+			Crypter:   config.Crypter,
+			PublicKey: config.PrivateKey.Public(),
 			Signature: sign,
 			Hash:      &h,
 			ID:        getPeerID(),
@@ -122,7 +126,9 @@ func (proto *ProtoHandshake) matchProtocol(i interface{}) bool {
 // EncHandshake is encryption handshake. implement the interface of Protocol
 type EncHandshake struct {
 	ID        []byte
-	Signature *crypto.Signature
+	Crypter   string
+	PublicKey crypter.IPublicKey
+	Signature []byte
 	Hash      *crypto.Hash
 }
 
@@ -130,11 +136,15 @@ type EncHandshake struct {
 func (enc *EncHandshake) matchProtocol(i interface{}) bool {
 	if e, ok := i.(*EncHandshake); ok {
 		if enc != nil && enc.Hash != nil {
-			_, err := e.Signature.RecoverPublicKey(enc.Hash.Bytes())
-			if err == nil {
+			crypter, err := crypter.Crypter(e.Crypter)
+			if err != nil {
+				log.Errorf("enc handshake error %v", err)
+				return false
+			}
+			if crypter.Verify(e.PublicKey, e.Hash.Bytes(), e.Signature) {
 				return true
 			}
-			log.Errorf("enc handshake error %v", err.Error())
+			log.Errorf("enc handshake error %v", fmt.Errorf("invalid signature"))
 		}
 		log.Errorf("enc handshake error, decode nil content %v", enc)
 	}

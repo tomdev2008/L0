@@ -27,6 +27,7 @@ import (
 	"sync"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/utils"
 
@@ -126,8 +127,8 @@ func (ks *KeyStore) Accounts() ([]string, error) {
 }
 
 // NewAccount creates a new account
-func (ks *KeyStore) NewAccount(passphrase string, accountType uint32) (accounts.Account, error) {
-	_, a, err := storeNewKey(ks.storage, crand.Reader, passphrase)
+func (ks *KeyStore) NewAccount(passphrase string, accountType uint32, crypter string) (accounts.Account, error) {
+	_, a, err := storeNewKey(ks.storage, crand.Reader, passphrase, crypter)
 	if err != nil {
 		return accounts.Account{}, err
 	}
@@ -143,7 +144,7 @@ func (ks *KeyStore) NewAccount(passphrase string, accountType uint32) (accounts.
 func (ks *KeyStore) Delete(a accounts.Account, passphrase string) error {
 	a, key, err := ks.getDecryptedKey(a, passphrase)
 	if key != nil {
-		crypto.ZeroKey((*crypto.PrivateKey)(key.PrivateKey))
+		//crypto.ZeroKey((*crypto.PrivateKey)(key.PrivateKey))
 	}
 	if err != nil {
 		return err
@@ -174,17 +175,17 @@ func (ks *KeyStore) SignTx(a accounts.Account, tx *types.Transaction, pass strin
 
 	genTxSender(tx, key.PrivateKey.Public())
 
-	sig, err := key.PrivateKey.Sign(tx.Hash().Bytes())
+	sig, err := crypter.MustCrypter(a.Crypter).Sign(key.PrivateKey, tx.Hash().Bytes())
 	if err != nil {
 		return nil, err
 	}
-	tx.WithSignature(sig)
+	tx.WithSignature(crypter.MustCrypter(a.Crypter).Name(), key.PrivateKey.Public().Bytes(), sig)
 	return tx, nil
 }
 
-func genTxSender(tx *types.Transaction, publicKey *crypto.PublicKey) {
+func genTxSender(tx *types.Transaction, publicKey crypter.IPublicKey) {
 	//generated sender address by PublicKey
-	tx.Data.Sender = accounts.PublicKeyToAddress(*publicKey)
+	tx.Data.Sender = accounts.PublicKeyToAddress(publicKey)
 
 	//contract init transaction generated contract address  by sender address and contract code
 	if tx.GetType() == types.TypeLuaContractInit || tx.GetType() == types.TypeJSContractInit {
@@ -209,16 +210,16 @@ func (ks *KeyStore) SignHashWithPassphrase(a accounts.Account, passphrase string
 	if err != nil {
 		return []byte{}, err
 	}
-	defer crypto.ZeroKey(key.PrivateKey)
-	sig, err := key.PrivateKey.Sign(hash)
+	//defer crypto.ZeroKey(key.PrivateKey)
+	sig, err := crypter.MustCrypter(a.Crypter).Sign(key.PrivateKey, hash)
 	if err != nil {
 		return []byte{}, err
 	}
-	return sig.Bytes(), nil
+	return sig, nil
 }
 
 func (ks *KeyStore) getDecryptedKey(a accounts.Account, auth string) (accounts.Account, *Key, error) {
-	addr := accounts.PublicKeyToAddress(*a.PublicKey)
+	addr := accounts.PublicKeyToAddress(a.PublicKey)
 	key, err := ks.storage.GetKey(addr, a.URL.Path, auth)
 	return a, key, err
 }

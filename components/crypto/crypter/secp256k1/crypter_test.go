@@ -15,25 +15,37 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
+package secp256k1
 
-package params
-
-import "github.com/bocheninc/L0/core/coordinate"
-
-const (
-	// ProtocolName represents the name of the p2p protocol
-	ProtocolName = "L0-NETWORK"
-	// ProtocolVersion represents the version of the p2p protocol
-	ProtocolVersion = "0.0.1"
+import (
+	"fmt"
+	"testing"
 )
 
-// ChainID  chain ID
-var (
-	ChainID       = coordinate.NewChainCoordinate([]byte{0, 1, 3})
-	Crypters      []string
-	PeerID        string
-	PublicAddress []string
-	ConnNums      int
-	LocalIp       string
-	Validator     bool
-)
+func TestSecp256k1_1(t *testing.T) {
+	crypter := &Crypter{}
+	priv, pub, err := crypter.GenerateKey()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("org:", priv, pub)
+	fmt.Println("trs:", crypter.ToPrivateKey(priv.Bytes()), crypter.ToPublicKey(pub.Bytes()))
+}
+
+func TestSecp256k1_2(t *testing.T) {
+	crypter := &Crypter{}
+	priv, pub, err := crypter.GenerateKey()
+	if err != nil {
+		panic(err)
+	}
+
+	msg := []byte("testing")
+	sign, err := crypter.Sign(priv, msg)
+	if err != nil {
+		panic(err)
+	}
+
+	if !crypter.Verify(pub, msg, sign) {
+		panic("err")
+	}
+}

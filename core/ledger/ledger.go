@@ -457,7 +457,7 @@ func (ledger *Ledger) executeACrossChainTx(writeBatchs []*db.WriteBatch, tx *typ
 func (ledger *Ledger) executeMergedTx(writeBatchs []*db.WriteBatch, tx *types.Transaction) ([]*db.WriteBatch, error) {
 	//mergeTx not continue merge
 	if tx.GetType() == types.TypeMerged && ledger.checkCoordinate(tx) {
-		sender := tx.Data.Signature.Bytes()
+		sender := tx.Data.Signature
 		senderAddress := accounts.NewAddress(sender)
 		TxWriteBatchs, err := ledger.state.Transfer(senderAddress, tx.Recipient(), tx.Fee(), state.NewBalance(tx.Amount(), tx.Nonce()), tx.GetType())
 		if err != nil {

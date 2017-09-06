@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -32,8 +32,8 @@ import (
 	"golang.org/x/crypto/scrypt"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/core/accounts"
-	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto/randentropy"
 	"github.com/pborman/uuid"
 )
@@ -105,7 +105,7 @@ func EncryptKey(key *Key, auth string, scryptN, scryptP int) ([]byte, error) {
 		return nil, err
 	}
 	encryptKey := derivedKey[:16]
-	keyBytes := math.PaddedBigBytes(key.PrivateKey.D, 32)
+	keyBytes := key.PrivateKey.Bytes()
 
 	iv := randentropy.GetEntropyCSPRNG(aes.BlockSize) // 16
 	cipherText, err := crypto.AesCTRXOR(encryptKey, keyBytes, iv)
@@ -138,6 +138,7 @@ func EncryptKey(key *Key, auth string, scryptN, scryptP int) ([]byte, error) {
 		hex.EncodeToString(key.Address[:]),
 		cryptoStruct,
 		key.Id.String(),
+		key.Crypter,
 	}
 	return json.Marshal(encryptedKeyJSON)
 }
@@ -158,10 +159,10 @@ func DecryptKey(keyjson []byte, auth string) (*Key, error) {
 	if err1 != nil {
 		return nil, err1
 	}
-	key := crypto.ToECDSA(keyBytes)
+	key := crypter.MustCrypter(k.Crypter).ToPrivateKey(keyBytes)
 	return &Key{
 		Id:         uuid.UUID(keyId),
-		Address:    accounts.PublicKeyToAddress((crypto.PublicKey)(key.PublicKey)),
+		Address:    accounts.PublicKeyToAddress(key.Public()),
 		PrivateKey: key,
 	}, nil
 }

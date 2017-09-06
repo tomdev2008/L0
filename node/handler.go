@@ -21,7 +21,6 @@ package node
 import (
 	"bytes"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -113,7 +112,7 @@ func (pm *ProtocolManager) Start() {
 }
 
 // Sign signs data with nodekey
-func (pm ProtocolManager) Sign(data []byte) (*crypto.Signature, error) {
+func (pm ProtocolManager) Sign(data []byte) ([]byte, error) {
 	return pm.Server.Sign(data)
 }
 
@@ -467,19 +466,19 @@ func (pm *ProtocolManager) SendMsgnetMessage(src, dst string, msg msgnet.Message
 }
 
 func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signature []byte) error {
-	sig := crypto.Signature{}
-	copy(sig[:], signature)
+	// sig := crypto.Signature{}
+	// copy(sig[:], signature)
 
-	if !sig.Validate() {
-		return errors.New("msg-net signature error")
-	}
+	// if !sig.Validate() {
+	// 	return errors.New("msg-net signature error")
+	// }
 
-	h := crypto.Sha256(append(payload, src+dst...))
-	pub, err := sig.RecoverPublicKey(h[:])
-	if pub == nil || err != nil {
-		log.Debug("PubilcKey verify error")
-		return errors.New("PubilcKey verify error")
-	}
+	// h := crypto.Sha256(append(payload, src+dst...))
+	// pub, err := sig.RecoverPublicKey(h[:])
+	// if pub == nil || err != nil {
+	// 	log.Debug("PubilcKey verify error")
+	// 	return errors.New("PubilcKey verify error")
+	// }
 
 	msg := msgnet.Message{}
 	msg.Deserialize(payload)

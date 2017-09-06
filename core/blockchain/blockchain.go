@@ -241,7 +241,7 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	// step 1: validate and mark transaction
 	// step 2: add transaction to txPool
 	// if atomic.LoadUint32(&bc.synced) == 0 {
-	log.Debugf("[Blockchain] new tx, tx_hash: %v, tx_sender: %v, tx_nonce: %v", tx.Hash().String(), tx.Sender().String(), tx.Nonce())
+	log.Debugf("[Blockchain] new tx, crypter: %v, tx_hash: %v, tx_sender: %v, tx_nonce: %v", tx.Data.Crypter, tx.Hash().String(), tx.Sender().String(), tx.Nonce())
 	if bc.txValidator == nil {
 		return true
 	}

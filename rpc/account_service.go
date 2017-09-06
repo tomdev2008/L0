@@ -27,7 +27,7 @@ import (
 )
 
 type AccountInterface interface {
-	NewAccount(passphrase string, accountType uint32) (accounts.Account, error)
+	NewAccount(passphrase string, accountType uint32, crypter string) (accounts.Account, error)
 	Accounts() ([]string, error)
 	HasAddress(addr accounts.Address) bool
 	Find(addr accounts.Address) *accounts.Account
@@ -50,7 +50,7 @@ type AccountNewArgs struct {
 
 // NewAccount
 func (a *Account) New(args *AccountNewArgs, reply *accounts.Address) error {
-	newAccount, err := a.ai.NewAccount(args.Passphrase, args.AccountType)
+	newAccount, err := a.ai.NewAccount(args.Passphrase, args.AccountType, "secp256k1")
 	if err != nil {
 		return err
 	}

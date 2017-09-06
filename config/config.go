@@ -21,7 +21,6 @@ package config
 import (
 	"path/filepath"
 
-	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
@@ -53,8 +52,6 @@ var (
 		LogLevel: "debug",
 		LogFile:  defaultLogFilename,
 	}
-
-	privkey *crypto.PrivateKey
 )
 
 // Config Represents the global config of lcnd
@@ -173,8 +170,10 @@ func (cfg *Config) read() string {
 /*set chainid from config file just for test*/
 func (cfg *Config) readParamConfig() {
 	str := getString("blockchain.id", "NET_NOT_SET")
+	crypters := getStringSlice("blockchain.crypters", []string{})
 	pk := getStringSlice("issueaddr.addr", []string{})
 	params.ChainID = utils.HexToBytes(str)
+	params.Crypters = crypters
 	params.PublicAddress = pk
 	viper.SetDefault("blockchain.validator", true)
 	params.Validator = viper.GetBool("blockchain.validator")

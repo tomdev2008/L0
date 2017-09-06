@@ -1,3 +1,6 @@
+export DYLD_LIBRARY_PATH=../components/crypto/crypter/sm2c/openssl:$DYLD_LIBRARY_PATH
+export LD_LIBRARY_PATH=../components/crypto/crypter/sm2c/openssl:$LD_LIBRARY_PATH
+
 # Build path
 BUILD_BIN_PATH=../../../../../bin
 LUAVM=luavm

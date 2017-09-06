@@ -19,9 +19,11 @@
 package config
 
 import (
+	"encoding/hex"
 	"path/filepath"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/p2p"
 	"github.com/spf13/viper"
@@ -31,31 +33,41 @@ import (
 func NetConfig(nodeDir string) *p2p.Config {
 	var (
 		config        = p2p.DefaultConfig()
-		privkey       *crypto.PrivateKey
+		crypterName   string
+		privkey       crypter.IPrivateKey
 		hexPrivateKey string
 		nodeKeyFile   = filepath.Join(nodeDir, defaultNodeKeyFilename)
 		err           error
 	)
 
-	if !utils.FileExist(nodeKeyFile) {
-		// no configuration and node, generate a new key and store it
-		privkey, _ = crypto.GenerateKey()
-		privkey.SaveECDSA(nodeKeyFile)
-	} else {
-		privkey, err = crypto.LoadECDSA(nodeKeyFile)
-		if err != nil {
-			privkey, _ = crypto.GenerateKey()
-			privkey.SaveECDSA(nodeKeyFile)
-		}
+	if crypterName = viper.GetString("net.crypter"); crypterName == "" {
+		crypterName = "secp256k1"
 	}
 
+	crypter := crypter.MustCrypter(crypterName)
 	if hexPrivateKey = viper.GetString("net.privateKey"); hexPrivateKey != "" {
-		privkey, _ = crypto.HexToECDSA(hexPrivateKey)
-		privkey.SaveECDSA(nodeKeyFile)
+		privBytes, err := hex.DecodeString(hexPrivateKey)
+		if err != nil {
+			panic(err)
+		}
+		privkey = crypter.ToPrivateKey(privBytes)
+	} else {
+		if !utils.FileExist(nodeKeyFile) {
+			// no configuration and node, generate a new key and store it
+			privkey, _, _ = crypter.GenerateKey()
+			crypto.SaveCrypter(nodeKeyFile, crypter.Name(), privkey)
+		} else {
+			privkey, err = crypto.LoadCrypter(nodeKeyFile, crypter.Name())
+			if err != nil {
+				privkey, _, _ = crypter.GenerateKey()
+				crypto.SaveCrypter(nodeKeyFile, crypter.Name(), privkey)
+			}
+		}
 	}
 
 	config.Address = getString("net.listenAddr", config.Address)
 	config.BootstrapNodes = getStringSlice("net.bootstrapNodes", config.BootstrapNodes)
+	config.Crypter = crypterName
 	config.PrivateKey = privkey
 	config.MaxPeers = getInt("net.maxPeers", config.MaxPeers)
 	config.ReconnectTimes = getInt("net.reconnectTimes", config.ReconnectTimes)

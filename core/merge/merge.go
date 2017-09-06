@@ -211,9 +211,7 @@ func (tm *TxMerge) maketransaction(fromchain, tochain coordinate.ChainCoordinate
 	tx := types.NewTransaction(fromchain.ParentCoorinate(), tochain.ParentCoorinate(), types.TypeMerged, uint32(0), accounts.ChainCoordinateToAddress(params.ChainID), accounts.ChainCoordinateToAddress(tochain), amount, fee, timeStamp)
 	//merge transaction reused tx.Data.Signature for sender
 	senderAddress := accounts.ChainCoordinateToAddress(fromchain)
-	sig := &crypto.Signature{}
-	copy(sig[:], senderAddress[:])
-	tx.WithSignature(sig)
+	tx.WithSignature("", nil, senderAddress.Bytes())
 	return tx
 }
 

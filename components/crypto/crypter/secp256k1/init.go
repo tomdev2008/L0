@@ -15,25 +15,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
+package secp256k1
 
-package params
+import "github.com/bocheninc/L0/components/crypto/crypter"
 
-import "github.com/bocheninc/L0/core/coordinate"
-
-const (
-	// ProtocolName represents the name of the p2p protocol
-	ProtocolName = "L0-NETWORK"
-	// ProtocolVersion represents the version of the p2p protocol
-	ProtocolVersion = "0.0.1"
-)
-
-// ChainID  chain ID
-var (
-	ChainID       = coordinate.NewChainCoordinate([]byte{0, 1, 3})
-	Crypters      []string
-	PeerID        string
-	PublicAddress []string
-	ConnNums      int
-	LocalIp       string
-	Validator     bool
-)
+func init() {
+	tcrypter := &Crypter{}
+	crypter.RegisterCrypter(tcrypter.Name(), tcrypter)
+}

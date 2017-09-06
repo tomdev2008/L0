@@ -103,8 +103,8 @@ func (va *validatorAccount) addTransaction(tx *types.Transaction) bool {
 			va.nonce++
 		}
 
-		log.Debugf("[Validator] add: new tx, tx_hash: %v, tx_sender: %v, tx_type: %v, tx_amount: %v, tx_nonce: %v, va.amount: %v, va.nonce: %v",
-			tx.Hash().String(), tx.Sender().String(), tx.GetType(), tx.Amount(), tx.Nonce(), va.amount, va.nonce)
+		log.Debugf("[Validator] add: new tx,  crypter: %v, tx_hash: %v, tx_sender: %v, tx_type: %v, tx_amount: %v, tx_nonce: %v, va.amount: %v, va.nonce: %v",
+			tx.Data.Crypter, tx.Hash().String(), tx.Sender().String(), tx.GetType(), tx.Amount(), tx.Nonce(), va.amount, va.nonce)
 		return true
 	}
 
@@ -563,9 +563,20 @@ func (vr *Validator) PushTxInTxPool(tx *types.Transaction) bool {
 		return false
 	}
 
+	var supported bool
+	for _, c := range params.Crypters {
+		if c == tx.Data.Crypter {
+			supported = true
+		}
+	}
+	if !supported {
+		log.Debugf("[Validator] Varify fail, not allowed crypter %v", tx.Data.Crypter)
+		return false
+	}
+
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[Validator] Varify fail, tx_hash: %s,%s,%s", tx.Hash().String(), address.String(), tx.Sender().String())
+		log.Debugf("[Validator] Varify fail %v, tx_hash: %s,%s,%s", err, tx.Hash().String(), address.String(), tx.Sender().String())
 		return false
 	}
 

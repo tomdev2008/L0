@@ -19,6 +19,7 @@ blockchain:
   datadir: "datadir/4"
   cpuprofile: "profile/prof_node4"
   profPort: "6064"
+  crypters: ["secp256k1","sm2_double256"]
 
 issueaddr:
   addr: ["6ce1bb0858e71b50d603ebe4bec95b11d8833e6d"]

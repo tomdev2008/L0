@@ -36,11 +36,12 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/utils"
 )
 
 var (
-	priKey       *crypto.PrivateKey
+	priKey       crypter.IPrivateKey
 	conn         []net.Conn
 	biggetNumber int32 = 1024 * 1024 * 1024
 )
@@ -88,7 +89,9 @@ type ProtoHandshake struct {
 
 type EncHandshake struct {
 	ID        []byte
-	Signature *crypto.Signature
+	Crypter   string
+	PublicKey crypter.IPublicKey
+	Signature []byte
 	Hash      *crypto.Hash
 }
 
@@ -230,8 +233,10 @@ func processMsg(m *Msg, c net.Conn) {
 		fmt.Println("handshakeMsg")
 	case handshakeAckMsg:
 		h := crypto.Sha256([]byte("random string"))
-		sign, _ := priKey.Sign(h[:])
+		sign, _ := crypter.MustCrypter("secp256k1").Sign(priKey, h[:])
 		enc := &EncHandshake{
+			Crypter:   "secp256k1",
+			PublicKey: priKey.Public(),
 			Signature: sign,
 			Hash:      &h,
 			ID:        []byte(nodeID),
@@ -271,7 +276,7 @@ func NewMsg(MsgType uint8, payload []byte) *Msg {
 
 // TCPSend sends transaction with tcp
 func TCPSend(srvAddress []string) {
-	priKey, _ = crypto.GenerateKey()
+	priKey, _, _ = crypter.MustCrypter("secp256k1").GenerateKey()
 
 	for _, address := range srvAddress {
 		c, err := net.Dial("tcp", address)

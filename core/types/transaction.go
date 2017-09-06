@@ -19,12 +19,15 @@
 package types
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"sync/atomic"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -59,7 +62,9 @@ type txdata struct {
 	Recipient  accounts.Address           `json:"recipient"`
 	Amount     *big.Int                   `json:"amount"`
 	Fee        *big.Int                   `json:"fee"`
-	Signature  *crypto.Signature          `json:"signature"`
+	Crypter    string                     `json:"crypter"`
+	PublicKey  []byte                     `json:"publickey"`
+	Signature  []byte                     `json:"signature"`
 	CreateTime uint32                     `json:"createTime"`
 }
 
@@ -165,11 +170,18 @@ func (tx *Transaction) Verfiy() (accounts.Address, error) {
 			if sender := tx.sender.Load(); sender != nil {
 				return sender.(accounts.Address), nil
 			}
-			p, err := tx.Data.Signature.RecoverPublicKey(tx.SignHash().Bytes())
+			ecdsa, err := crypter.Crypter(tx.Data.Crypter)
 			if err != nil {
 				return a, err
 			}
-			a = accounts.PublicKeyToAddress(*p)
+			publicKey := ecdsa.ToPublicKey(tx.Data.PublicKey)
+			if !ecdsa.Verify(publicKey, tx.SignHash().Bytes(), tx.Data.Signature) {
+				return a, fmt.Errorf("invalid signature")
+			}
+			a = accounts.PublicKeyToAddress(publicKey)
+			if !bytes.Equal(a.Bytes(), tx.Sender().Bytes()) {
+				return a, fmt.Errorf("sender dismatch publicKey")
+			}
 			tx.sender.Store(a)
 		} else {
 			err = ErrEmptySignature
@@ -211,8 +223,10 @@ func (tx *Transaction) Nonce() uint32 { return tx.Data.Nonce }
 func (tx *Transaction) Fee() *big.Int { return tx.Data.Fee }
 
 // WithSignature returns a new transaction with the given signature.
-func (tx *Transaction) WithSignature(sig *crypto.Signature) {
+func (tx *Transaction) WithSignature(crypter string, publicKey, sig []byte) {
 	//TODO: sender cache
+	tx.Data.Crypter = crypter
+	tx.Data.PublicKey = publicKey
 	tx.Data.Signature = sig
 }
 

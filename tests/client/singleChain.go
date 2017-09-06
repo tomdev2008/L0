@@ -20,6 +20,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -27,7 +28,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/crypto/crypter"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/types"
@@ -42,7 +43,8 @@ var (
 		//"127.0.0.1:20170",
 	}
 
-	list           = make(chan *crypto.PrivateKey, 10)
+	list_secp256   = make(chan crypter.IPrivateKey, 10)
+	list_sm2       = make(chan crypter.IPrivateKey, 10)
 	txChan         = make(chan *types.Transaction, 1000)
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 )
@@ -70,15 +72,15 @@ func generateAtomicTx() {
 
 	for {
 		select {
-		case key := <-list:
-			go func(privateKey *crypto.PrivateKey) {
+		case key := <-list_secp256:
+			go func(privateKey crypter.IPrivateKey) {
 				time.Sleep(time.Second * 60)
-				sender := accounts.PublicKeyToAddress(*privateKey.Public())
+				sender := accounts.PublicKeyToAddress(privateKey.Public())
 				nonce := uint32(0)
 				for {
 					nonce++
-					privkey, _ := crypto.GenerateKey()
-					addr := accounts.PublicKeyToAddress(*privkey.Public())
+					privkey, _, _ := crypter.MustCrypter("secp256k1").GenerateKey()
+					addr := accounts.PublicKeyToAddress(privkey.Public())
 					tx := types.NewTransaction(
 						coordinate.NewChainCoordinate(fromChain),
 						coordinate.NewChainCoordinate(toChain),
@@ -90,8 +92,33 @@ func generateAtomicTx() {
 						big.NewInt(1),
 						uint32(time.Now().Unix()),
 					)
-					sig, _ := privateKey.Sign(tx.SignHash().Bytes())
-					tx.WithSignature(sig)
+					sig, _ := crypter.MustCrypter("secp256k1").Sign(privateKey, tx.SignHash().Bytes())
+					tx.WithSignature(crypter.MustCrypter("secp256k1").Name(), privateKey.Public().Bytes(), sig)
+					txChan <- tx
+				}
+			}(key)
+		case key := <-list_sm2:
+			go func(privateKey crypter.IPrivateKey) {
+				time.Sleep(time.Second * 60)
+				sender := accounts.PublicKeyToAddress(privateKey.Public())
+				nonce := uint32(0)
+				for {
+					nonce++
+					privkey, _, _ := crypter.MustCrypter("sm2_double256").GenerateKey()
+					addr := accounts.PublicKeyToAddress(privkey.Public())
+					tx := types.NewTransaction(
+						coordinate.NewChainCoordinate(fromChain),
+						coordinate.NewChainCoordinate(toChain),
+						uint32(0),
+						nonce,
+						sender,
+						addr,
+						big.NewInt(10),
+						big.NewInt(1),
+						uint32(time.Now().Unix()),
+					)
+					sig, _ := crypter.MustCrypter("sm2_double256").Sign(privateKey, tx.SignHash().Bytes())
+					tx.WithSignature(crypter.MustCrypter("sm2_double256").Name(), privateKey.Public().Bytes(), sig)
 					txChan <- tx
 				}
 			}(key)
@@ -105,13 +132,14 @@ func generateIssueTx() {
 		toChain   = []byte{0}
 	)
 	nonce := getNonce()
-	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
-	sender := accounts.PublicKeyToAddress(*issueKey.Public())
+	b, _ := hex.DecodeString(issuePriKeyHex)
+	issueKey := crypter.MustCrypter("secp256k1").ToPrivateKey(b)
+	sender := accounts.PublicKeyToAddress(issueKey.Public())
 
 	for i := 0; i < 1; i++ {
-		privateKey, _ := crypto.GenerateKey()
-		list <- privateKey
-		addr := accounts.PublicKeyToAddress(*privateKey.Public())
+		privateKey, _, _ := crypter.MustCrypter("secp256k1").GenerateKey()
+		list_secp256 <- privateKey
+		addr := accounts.PublicKeyToAddress(privateKey.Public())
 		tx := types.NewTransaction(
 			coordinate.NewChainCoordinate(fromChain),
 			coordinate.NewChainCoordinate(toChain),
@@ -123,8 +151,29 @@ func generateIssueTx() {
 			big.NewInt(1),
 			uint32(time.Now().Unix()),
 		)
-		sig, _ := issueKey.Sign(tx.SignHash().Bytes())
-		tx.WithSignature(sig)
+		sig, _ := crypter.MustCrypter("secp256k1").Sign(issueKey, tx.SignHash().Bytes())
+		tx.WithSignature(crypter.MustCrypter("secp256k1").Name(), issueKey.Public().Bytes(), sig)
+		txChan <- tx
+		nonce = nonce + 1
+	}
+
+	for i := 0; i < 1; i++ {
+		privateKey, _, _ := crypter.MustCrypter("sm2_double256").GenerateKey()
+		list_sm2 <- privateKey
+		addr := accounts.PublicKeyToAddress(privateKey.Public())
+		tx := types.NewTransaction(
+			coordinate.NewChainCoordinate(fromChain),
+			coordinate.NewChainCoordinate(toChain),
+			uint32(5),
+			nonce,
+			sender,
+			addr,
+			big.NewInt(10e11),
+			big.NewInt(1),
+			uint32(time.Now().Unix()),
+		)
+		sig, _ := crypter.MustCrypter("secp256k1").Sign(issueKey, tx.SignHash().Bytes())
+		tx.WithSignature(crypter.MustCrypter("secp256k1").Name(), issueKey.Public().Bytes(), sig)
 		txChan <- tx
 		nonce = nonce + 1
 	}
@@ -137,8 +186,9 @@ func getNonce() uint32 {
 		},
 	}
 
-	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
-	address := accounts.PublicKeyToAddress(*issueKey.Public()).String()
+	b, _ := hex.DecodeString(issuePriKeyHex)
+	issueKey := crypter.MustCrypter("secp256k1").ToPrivateKey(b)
+	address := accounts.PublicKeyToAddress(issueKey.Public()).String()
 	req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(
 		`{"id":1,"method":"Ledger.GetBalance","params":["`+address+`"]}`,
 	))
