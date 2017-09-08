@@ -21,8 +21,6 @@ package p2p
 import (
 	"bytes"
 	"testing"
-
-	"github.com/bocheninc/L0/components/crypto"
 )
 
 func TestProtocolHandshake(t *testing.T) {
@@ -46,33 +44,33 @@ func TestProtocolHandshake(t *testing.T) {
 	}
 }
 
-func TestEncryptionHandshake(t *testing.T) {
+// func TestEncryptionHandshake(t *testing.T) {
 
-	pri, _ := crypto.GenerateKey()
-	h := crypto.Sha256([]byte("msg"))
-	sign, _ := pri.Sign(h[:])
-	encHandshake := EncHandshake{
-		Signature: sign,
-		Hash:      &h,
-	}
+// 	pri, _ := crypto.GenerateKey()
+// 	h := crypto.Sha256([]byte("msg"))
+// 	sign, _ := pri.Sign(h[:])
+// 	encHandshake := EncHandshake{
+// 		Signature: sign,
+// 		Hash:      &h,
+// 	}
 
-	buf := encHandshake.serialize()
+// 	buf := encHandshake.serialize()
 
-	enc := &EncHandshake{
-		Signature: new(crypto.Signature),
-		Hash:      new(crypto.Hash),
-	}
+// 	enc := &EncHandshake{
+// 		Signature: new(crypto.Signature),
+// 		Hash:      new(crypto.Hash),
+// 	}
 
-	enc.deserialize(buf)
+// 	enc.deserialize(buf)
 
-	t.Log(enc.Hash)
-	if !bytes.Equal(enc.ID[:], encHandshake.ID[:]) {
-		t.Error("error")
-	}
-	if !bytes.Equal(enc.Signature[:], encHandshake.Signature[:]) {
-		t.Error("error")
-	}
-	if !bytes.Equal(enc.Hash.Bytes(), encHandshake.Hash.Bytes()) {
-		t.Error("error")
-	}
-}
+// 	t.Log(enc.Hash)
+// 	if !bytes.Equal(enc.ID[:], encHandshake.ID[:]) {
+// 		t.Error("error")
+// 	}
+// 	if !bytes.Equal(enc.Signature[:], encHandshake.Signature[:]) {
+// 		t.Error("error")
+// 	}
+// 	if !bytes.Equal(enc.Hash.Bytes(), encHandshake.Hash.Bytes()) {
+// 		t.Error("error")
+// 	}
+// }

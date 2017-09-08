@@ -19,6 +19,7 @@
 package p2p
 
 import (
+	"crypto/sha256"
 	"io"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -81,18 +82,26 @@ func GetProtoHandshake() *ProtoHandshake {
 }
 
 // GetEncHandshake returns enchandshake message
-func GetEncHandshake() *EncHandshake {
+func GetEncHandshake(cert, key []byte) *EncHandshake {
 	if encHandshake == nil {
-		// TODO　Generate random string
-		h := crypto.Sha256([]byte("random string"))
-		sign, err := config.PrivateKey.Sign(h[:])
+		privateKey, err := crypto.ParseKey(key)
 		if err != nil {
-			log.Error(err.Error())
+			log.Errorf("parse key error: %s", err)
+			return nil
 		}
+
+		// TODO　Generate random string
+		sign, err := crypto.SignRsa(privateKey, []byte("random string"))
+		if err != nil {
+			log.Errorf("sign rsa error: %s", err)
+			return nil
+		}
+
 		encHandshake = &EncHandshake{
 			Signature: sign,
-			Hash:      &h,
+			Hashed:    sha256.Sum256([]byte("random string")),
 			ID:        getPeerID(),
+			Cert:      cert,
 		}
 	}
 	return encHandshake
@@ -111,8 +120,7 @@ func (proto *ProtoHandshake) deserialize(data []byte) {
 // matchProtocol returns the result of handshake
 func (proto *ProtoHandshake) matchProtocol(i interface{}) bool {
 	if p, ok := i.(*ProtoHandshake); ok {
-		log.Debugln("matchProtocol")
-		if p.Name == proto.Name || p.Version == proto.Version {
+		if p.Name == proto.Name && p.Version == proto.Version {
 			return true
 		}
 	}
@@ -122,21 +130,40 @@ func (proto *ProtoHandshake) matchProtocol(i interface{}) bool {
 // EncHandshake is encryption handshake. implement the interface of Protocol
 type EncHandshake struct {
 	ID        []byte
-	Signature *crypto.Signature
-	Hash      *crypto.Hash
+	Signature []byte
+	Hashed    [sha256.Size]byte
+	Cert      []byte
 }
 
 // matchProtocol returns the result of handshake
 func (enc *EncHandshake) matchProtocol(i interface{}) bool {
-	if e, ok := i.(*EncHandshake); ok {
-		if enc != nil && enc.Hash != nil {
-			_, err := e.Signature.RecoverPublicKey(enc.Hash.Bytes())
-			if err == nil {
-				return true
-			}
-			log.Errorf("enc handshake error %v", err.Error())
+	if enc != nil && len(enc.Hashed) != 0 && enc.Cert != nil {
+		cert, err := crypto.ParseCrt(enc.Cert)
+		if err != nil {
+			log.Errorf("parseCrt error: %s", err)
+			return false
 		}
-		log.Errorf("enc handshake error, decode nil content %v", enc)
+
+		if cert.IsCA {
+			return true
+		}
+
+		rootCert, err := crypto.ParseCrt(i.([]byte))
+		if err != nil {
+			log.Errorf("parseCrt error: %s", err)
+			return false
+		}
+
+		if err := crypto.VerifyCertificate(rootCert, cert); err != nil {
+			log.Errorf("Verify Certificate error: %s", err)
+			return false
+		}
+
+		if err := crypto.VerifySign(enc.Hashed, enc.Signature, cert); err != nil {
+			log.Errorf("enc handshake error %s", err)
+			return false
+		}
+		return true
 	}
 	return false
 }
@@ -153,41 +180,4 @@ func (enc *EncHandshake) deserialize(data []byte) {
 
 func getPeerID() []byte {
 	return getPeerManager().localPeer.ID[:]
-}
-
-type SecMsg struct {
-	Cert  []byte
-	Nonce uint32
-}
-
-func NewSecMsg(cert []byte, nonce uint32) *SecMsg {
-	secMsg := &SecMsg{
-		Cert:  cert,
-		Nonce: nonce,
-	}
-	return secMsg
-}
-
-// serialize SecMsg instance to []byte
-func (secMsg *SecMsg) serialize() []byte {
-	return utils.Serialize(secMsg)
-}
-
-// deserialize buffer to SecMsg instance
-func (secMsg *SecMsg) deserialize(data []byte) {
-	utils.Deserialize(data, secMsg)
-}
-
-type CertSign struct {
-	Sign []byte
-}
-
-// serialize SecSign instance to []byte
-func (certSign *CertSign) serialize() []byte {
-	return utils.Serialize(certSign)
-}
-
-// deserialize buffer to SecSign instance
-func (certSign *CertSign) deserialize(data []byte) {
-	utils.Deserialize(data, certSign)
 }

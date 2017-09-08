@@ -172,7 +172,7 @@ func (cfg *Config) read() string {
 
 /*set chainid from config file just for test*/
 func (cfg *Config) readParamConfig() {
-	str := getString("blockchain.id", "NET_NOT_SET")
+	str := getString("blockchain.chainId", "NET_NOT_SET")
 	pk := getStringSlice("issueaddr.addr", []string{})
 	params.ChainID = utils.HexToBytes(str)
 	params.PublicAddress = pk

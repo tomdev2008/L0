@@ -20,22 +20,17 @@ package p2p
 
 import (
 	"bytes"
-	ccrypto "crypto"
-	crand "crypto/rand"
+	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/rand"
-	"strconv"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 // Config is the p2p network configuration
@@ -52,17 +47,16 @@ type Config struct {
 	Protocols           []Protocol
 	RouteAddress        []string
 
+	CAEnabled bool
 	KeyPath   string
 	CrtPath   string
 	CAPath    string
-	CAEnabled bool
 	NodeID    string
 }
 
 var (
 	defaultListenAddr = ":20166"
 	config            *Config
-	biggetNumber      int32 = 1024 * 1024 * 1024
 )
 
 //DefaultConfig defines the default network configuration
@@ -85,12 +79,21 @@ type Server struct {
 
 	tcpServer *TCPServer
 	quit      chan struct{}
+
+	PrivateKey      []byte
+	RootCertificate []byte
+	Certificate     []byte
 }
 
 // NewServer returns a new p2p server
 func NewServer(db *db.BlockchainDB, cfg *Config) *Server {
 	dbInstance = db
 	config = cfg
+
+	if db == nil || cfg == nil {
+		log.Errorln("NewServer: database instance or config instance is nil.")
+		return nil
+	}
 
 	srv := &Server{
 		Config: *config,
@@ -100,10 +103,54 @@ func NewServer(db *db.BlockchainDB, cfg *Config) *Server {
 		peerManager: getPeerManager(),
 	}
 
-	if db == nil || cfg == nil {
-		log.Errorln("NewServer: database instance or config instance is nil.")
-		return nil
+	if !utils.FileExist(cfg.CAPath) || !utils.FileExist(cfg.CrtPath) || !utils.FileExist(cfg.KeyPath) {
+		log.Warn("Certificate or rootCertificate or  file if not exist")
+		srv.CAEnabled = false
 	}
+
+	var privateKey, rootCertificate, certificate []byte
+	var err error
+
+	if srv.CAEnabled {
+		privateKey, err = ioutil.ReadFile(cfg.KeyPath)
+		if err != nil {
+			log.Errorf("read file %s error: %s ", cfg.KeyPath, err)
+			return nil
+		}
+		certificate, err = ioutil.ReadFile(cfg.CrtPath)
+		if err != nil {
+			log.Errorf("read file %s error: %s ", cfg.CrtPath, err)
+			return nil
+		}
+		rootCertificate, err = ioutil.ReadFile(cfg.CAPath)
+		if err != nil {
+			log.Errorf("read file %s error: %s ", cfg.CAPath, err)
+			return nil
+		}
+	} else {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			log.Errorf("generate privatekey err: %s", err)
+			return nil
+		}
+		privateKey, err = crypto.GeneratePrivateKeyBytes(key)
+		if err != nil {
+			log.Errorf("Generate private Key Bytes error: %s", err)
+			return nil
+		}
+
+		rootCertificate, err = crypto.GenerateRootCertificateBytes(crypto.NewCertificate(crypto.CertInformation{IsCA: true}), key)
+		if err != nil {
+			log.Errorf("Generate root Certificate  Bytes error: %s", err)
+			return nil
+		}
+
+		certificate = nil
+	}
+
+	srv.PrivateKey = privateKey
+	srv.RootCertificate = rootCertificate
+	srv.Certificate = certificate
 
 	log.Debugf("P2P Network Server database instance %v", db)
 	log.Debugf("P2P Network Server config instance %v", cfg)
@@ -149,185 +196,19 @@ func (srv *Server) init() {
 	// srv.tcpServer.OnNewMessage(srv.onMessage)
 }
 
-//func (srv *Server) onNewPeer(c *Connection) {
-//	go func() {
-//		if err := srv.doHandshake(c); err != nil {
-//			log.Errorf("Handshake error %s", err)
-//			srv.onPeerClose(c)
-//			return
-//		}
-//	}()
-//}
-
 func (srv *Server) onNewPeer(c *Connection) {
 	go func() {
-		if err := srv.doSecHandshake(c); err != nil {
-			log.Errorf("Sec Handshake error %s", err)
+		if err := srv.doHandshake(c); err != nil {
+			log.Errorf("Handshake error %s", err)
 			srv.onPeerClose(c)
 			return
 		}
 	}()
 }
 
-func getNonce() uint32 {
-	rand.Seed(int64(time.Now().Nanosecond()))
-	nonce := rand.Int31n(biggetNumber)
-	return uint32(nonce)
-}
-
-func (srv *Server) doSecHandshake(c *Connection) error {
-	if srv.Config.CAEnabled {
-		err := srv.verify(c)
-		if err != nil {
-			return err
-		}
-	}
-
-	err := srv.doHandshake(c)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (srv *Server) verify(c *Connection) error {
-	// send msg, including local crt and local nonce
-	localNonce := getNonce()
-	log.Debugln("local nonce:", localNonce)
-	localCrt, err := ioutil.ReadFile(srv.Config.CrtPath)
-	if err != nil {
-		return fmt.Errorf("read crt error\n")
-	}
-
-	log.Debugln("local crt:", string(localCrt))
-	log.Debugln("local crt path:", srv.Config.CrtPath)
-
-	localSecMsg := NewSecMsg(localCrt, localNonce)
-	localMsg := NewMsg(secMsg, localSecMsg.serialize())
-	n, err := SendMessage(c.conn, localMsg)
-	if n <= 0 || err != nil {
-		return err
-	}
-
-	// receive msg, including remote crt and remote nonce
-	m, err := readMsg(c.conn)
-	if m == nil && err != nil {
-		return err
-	}
-
-	recvMsg := &SecMsg{}
-	recvMsg.deserialize(m.Payload)
-
-	log.Debugln("recvMsg nonce:", recvMsg.Nonce)
-	log.Debugln("recvMsg crt:", string(recvMsg.Cert))
-
-	// if ca is enabled, use local root crt verify remote crt
-	caPath := srv.Config.CAPath
-	ca, err := ioutil.ReadFile(caPath)
-	if err != nil {
-		return fmt.Errorf("read ca error\n")
-	}
-
-	remoteCrt := recvMsg.Cert
-	isPassed := verifyCrt(ca, remoteCrt)
-	if !isPassed {
-		srv.onPeerClose(c)
-		return fmt.Errorf("verify remote crt error\n")
-	}
-	log.Debugln("verify crt success")
-
-	// send msg, including sign with remote nonce
-	tmpSign, err := generateSign(recvMsg.Nonce, srv.Config.KeyPath)
-	certSign := new(CertSign)
-	certSign.Sign = tmpSign
-
-	if err != nil {
-		return fmt.Errorf("can't generate sign\n")
-	}
-
-	n, err = SendMessage(c.conn, NewMsg(signMsg, certSign.serialize()))
-	if n <= 0 || err != nil {
-		return err
-	}
-
-	// receive msg, including sign with local nonce
-	recv, err := readMsg(c.conn)
-	if m == nil && err != nil {
-		return err
-	}
-
-	recvSign := &CertSign{}
-	recvSign.deserialize(recv.Payload)
-
-	recvCrt := recvMsg.Cert
-	// check if local nonce equals reveive msg nonce
-	isOk := verifySign(localNonce, recvCrt, recvSign.Sign)
-	if !isOk {
-		srv.onPeerClose(c)
-		return fmt.Errorf("verify remote sign error\n")
-	}
-
-	log.Debugln("verify sign success")
-	return nil
-}
-
-// verifyCrt use local crt to verify recvSign
-func verifySign(nonce uint32, recvCrt []byte, recvSign []byte) bool {
-	p, _ := pem.Decode(recvCrt)
-	if p == nil || p.Type != "CERTIFICATE" {
-		log.Errorln("failed to decode PEM block containing public key")
-		return false
-	}
-	certificate, err := x509.ParseCertificate(p.Bytes)
-	if err != nil {
-		log.Errorln(err)
-		return false
-	}
-
-	// verify
-	message := []byte(strconv.Itoa(int(nonce)))
-	hashed := sha256.Sum256(message)
-	err = rsa.VerifyPKCS1v15(certificate.PublicKey.(*rsa.PublicKey), ccrypto.SHA256, hashed[:], recvSign)
-	if err != nil {
-		log.Errorln("verify sign failed")
-		return false
-	}
-	return true
-}
-
-func generateSign(nonce uint32, localKeyPath string) ([]byte, error) {
-	key, err := ioutil.ReadFile(localKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("can't read local key\n")
-	}
-
-	block, _ := pem.Decode(key)
-	if block == nil || block.Type != "PRIVATE KEY" {
-		return nil, fmt.Errorf("failed to decode PEM block containing public key\n")
-	}
-
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error: %v\n", err)
-	}
-
-	rng := crand.Reader
-	message := []byte(strconv.Itoa(int(nonce)))
-	hashed := sha256.Sum256(message)
-	sign, err := rsa.SignPKCS1v15(rng, privateKey, ccrypto.SHA256, hashed[:])
-	if err != nil {
-		return nil, fmt.Errorf("Error from signing: %v\nc", err)
-	}
-	return sign, nil
-}
-
 func (srv *Server) onPeerClose(c *Connection) {
 	srv.peerManager.delPeer <- c.conn
 }
-
-// func (srv *Server) onMessage(c *Connection, msg *Msg) {
-// 	// msg.handle(c, srv)
-// }
 
 func (srv *Server) run() {
 	for {
@@ -375,13 +256,21 @@ func (srv Server) doProtoHandshake(c *Connection) error {
 }
 
 func (srv Server) doEncHandshake(c *Connection) error {
-	respMsg := NewMsg(handshakeAckMsg, GetEncHandshake().serialize())
+	var cert []byte
+
+	if srv.CAEnabled {
+		cert = srv.Certificate
+	} else {
+		cert = srv.RootCertificate
+	}
+
+	respMsg := NewMsg(handshakeAckMsg, GetEncHandshake(cert, srv.PrivateKey).serialize())
 	n, err := SendMessage(c.conn, respMsg)
 	if n <= 0 || err != nil {
 		return err
 	}
 
-	if err := srv.readEncHandshake(c); err != nil {
+	if err := srv.readEncHandshake(c, cert); err != nil {
 		return err
 	}
 	return nil
@@ -396,9 +285,7 @@ func (srv Server) readProtoHandshake(c *Connection) error {
 
 	proto := &ProtoHandshake{}
 	proto.deserialize(m.Payload)
-
 	if !proto.matchProtocol(GetProtoHandshake()) {
-		log.Debug("protocol error")
 		srv.onPeerClose(c)
 		return fmt.Errorf("protocol handshake error")
 	}
@@ -417,7 +304,7 @@ func (srv Server) readProtoHandshake(c *Connection) error {
 	return nil
 }
 
-func (srv Server) readEncHandshake(c *Connection) error {
+func (srv Server) readEncHandshake(c *Connection, cert []byte) error {
 	log.Debugln("readEncHandshake")
 	m, err := readMsg(c.conn)
 	if m == nil && err != nil {
@@ -427,8 +314,7 @@ func (srv Server) readEncHandshake(c *Connection) error {
 	respMsg := &Msg{}
 	enc := &EncHandshake{}
 	enc.deserialize(m.Payload)
-	if !enc.matchProtocol(GetEncHandshake()) {
-		log.Debugln("encryption verify error")
+	if !enc.matchProtocol(srv.RootCertificate) {
 		srv.onPeerClose(c)
 		return fmt.Errorf("Encryption Verify Error")
 	}
@@ -436,7 +322,7 @@ func (srv Server) readEncHandshake(c *Connection) error {
 		srv.handshakings.remove(c.conn)
 		srv.peerManager.addPeer <- p
 
-		respMsg = NewMsg(handshakeAckMsg, GetEncHandshake().serialize())
+		respMsg = NewMsg(handshakeAckMsg, GetEncHandshake(srv.PrivateKey, cert).serialize())
 		respMsg.write(c.conn)
 		return nil
 
@@ -458,39 +344,4 @@ func readMsg(r io.Reader) (*Msg, error) {
 	}
 
 	return msg, nil
-}
-
-// verifyCrt use ca crt to verify remote crt
-func verifyCrt(ca []byte, remoteCrt []byte) bool {
-	// get remote certificate
-	pRemote, _ := pem.Decode(remoteCrt)
-	if pRemote == nil || pRemote.Type != "CERTIFICATE" {
-		log.Errorln("failed to decode PEM block containing public key")
-		return false
-	}
-	certRemote, err := x509.ParseCertificate(pRemote.Bytes)
-	if err != nil {
-		log.Errorln("error:", err)
-		return false
-	}
-
-	// get ca certificate
-	pCA, _ := pem.Decode(ca)
-	if pCA == nil || pCA.Type != "CERTIFICATE" {
-		log.Errorln("failed to decode PEM block containing public key")
-		return false
-	}
-	certCA, err := x509.ParseCertificate(pCA.Bytes)
-	if err != nil {
-		log.Errorln("error:", err)
-		return false
-	}
-
-	// verify
-	err = certRemote.CheckSignatureFrom(certCA)
-	if err != nil {
-		log.Errorln("error:", err)
-		return false
-	}
-	return true
 }
