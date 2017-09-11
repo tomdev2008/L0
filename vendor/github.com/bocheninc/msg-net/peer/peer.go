@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -22,9 +22,8 @@ import (
 	"context"
 	"encoding/json"
 	"net"
-	"time"
-
 	"strings"
+	"time"
 
 	"github.com/bocheninc/msg-net/config"
 	"github.com/bocheninc/msg-net/logger"
@@ -41,15 +40,14 @@ func NewPeer(id string, addresses []string, function func(srcID, dstID string, p
 
 //Peer Define Peer class connected to Router
 type Peer struct {
-	id                 string
-	addresses          []string
-	chainMessageHandle func(srcID, dstID string, payload []byte, signature []byte) error
-
+	id                    string
+	addresses             []string
+	chainMessageHandle    func(srcID, dstID string, payload []byte, signature []byte) error
 	client                *tcp.Client
 	durationKeepAlive     time.Duration
 	timerKeepAliveTimeout *time.Timer
 	cancel                context.CancelFunc
-	index                 int
+	isConned              bool
 }
 
 //IsRunning Running or not
@@ -57,10 +55,10 @@ func (p *Peer) IsRunning() bool {
 	return p.client != nil && p.client.IsConnected()
 }
 
-//Start Start peer service
+//Start Start peer serviceH
 func (p *Peer) Start() bool {
 	if p.IsRunning() {
-		logger.Warnf("peer %s is alreay running", p.id)
+		logger.Warnf("peer %s is already running", p.id)
 		return true
 	}
 
@@ -76,80 +74,11 @@ func (p *Peer) Start() bool {
 	} else {
 		logger.Warnf("failed to parse router.timeout.keepalive, set default timeout 5s --- %v", err)
 	}
-
-	var conn net.Conn
-	for index, address := range p.addresses {
-		p.index = index
-		p.client = tcp.NewClient(address, func() common.IMsg {
-			return &pb.Message{}
-		}, p.handleMsg)
-
-		if conn = p.client.Connect(); conn != nil {
-			break
-		}
-		logger.Warnf("peer %s failed to start to server address %s", p.id, address)
-	}
 	p.timerKeepAliveTimeout = time.NewTimer(2 * p.durationKeepAlive)
-	if conn == nil {
-		logger.Errorf("peer %s failed to start", p.id)
-		return false
-	}
-
-	peer := pb.Peer{Id: p.id}
-	bytes, _ := peer.Serialize()
-	p.client.SendChannel() <- &pb.Message{Type: pb.Message_PEER_HELLO, Payload: bytes}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
-	go func(ctx context.Context) {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-p.timerKeepAliveTimeout.C:
-				if p.client != nil {
-					p.client.Disconnect()
-				}
-				go func(ctx context.Context) {
-					ctx0, cancel0 := context.WithCancel(ctx)
-					_ = cancel0
-					duration := time.Second * 5
-					if d, err := time.ParseDuration(config.GetString("router.reconnect.interval")); err == nil {
-						duration = d
-					}
-					max := 5
-					if n := config.GetInt("router.reconnect.max"); n != 0 {
-						max = n
-					}
-					for {
-						select {
-						case <-ctx0.Done():
-							return
-						default:
-						}
-						p.index = p.index + 1
-						if p.index == len(p.addresses) {
-							p.index = 0
-						}
-						for i := max; i > 0; i-- {
-							logger.Warnf("peer %s connection timeout， reconnecting", p.id)
-							address := p.addresses[p.index]
-							p.client = tcp.NewClient(address, func() common.IMsg {
-								return &pb.Message{}
-							}, p.handleMsg)
-							if conn := p.client.Connect(); conn != nil {
-								peer := pb.Peer{Id: p.id}
-								bytes, _ := peer.Serialize()
-								p.client.SendChannel() <- &pb.Message{Type: pb.Message_PEER_HELLO, Payload: bytes}
-								return
-							}
-							time.Sleep(duration)
-						}
-					}
-				}(ctx)
-			}
-		}
-	}(ctx)
+	go p.connect(ctx)
 
 	return true
 }
@@ -161,7 +90,7 @@ func (p *Peer) Send(id string, payload []byte, signature []byte) bool {
 		return false
 	}
 	if !strings.Contains(id, ":") {
-		logger.Infof("broadcast all chain %s peers\n", id)
+		logger.Infof("broadcast all chain %s peers", id)
 		id = id + ":"
 	}
 	chainMsg := pb.ChainMessage{SrcId: p.id, DstId: id, Payload: payload, Signature: signature}
@@ -178,15 +107,15 @@ func (p *Peer) Stop() {
 	}
 	p.cancel()
 
-	peer := pb.Peer{Id: p.id}
-	bytes, _ := peer.Serialize()
+	pr := pb.Peer{Id: p.id}
+	bytes, _ := pr.Serialize()
 	p.client.SendChannel() <- &pb.Message{Type: pb.Message_PEER_CLOSE, Payload: bytes}
 
 	p.client.Disconnect()
 	p.client = nil
 }
 
-//String Get Peer Infomation
+//String Get Peer Information
 func (p *Peer) String() string {
 	m := make(map[string]interface{})
 	m["id"] = p.id
@@ -225,6 +154,39 @@ func (p *Peer) handleMsg(conn net.Conn, channel chan<- common.IMsg, m common.IMs
 
 	p.timerKeepAliveTimeout.Reset(2 * p.durationKeepAlive)
 	return nil
+}
+
+func (p *Peer) connect(ctx context.Context) {
+	duration := time.Second * 5
+	if d, err := time.ParseDuration(config.GetString("router.reconnect.interval")); err == nil {
+		duration = d
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-p.timerKeepAliveTimeout.C:
+			p.isConned = false
+		default:
+		}
+
+		if !p.isConned {
+			for _, addr := range p.addresses {
+				p.client = tcp.NewClient(addr, func() common.IMsg {
+					return &pb.Message{}
+				}, p.handleMsg)
+				if conn := p.client.Connect(); conn != nil {
+					p.isConned = true
+					pr := pb.Peer{Id: p.id}
+					bytes, _ := pr.Serialize()
+					p.client.SendChannel() <- &pb.Message{Type: pb.Message_PEER_HELLO, Payload: bytes}
+					break
+				}
+			}
+		}
+		time.Sleep(duration)
+	}
 }
 
 //SetLogOut set log out path

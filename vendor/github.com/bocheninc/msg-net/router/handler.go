@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -88,7 +88,7 @@ func (h *Handler) Init() {
 func (h *Handler) HandleMsg(conn net.Conn, sendChannel chan<- common.IMsg, iMsg common.IMsg) error {
 	msg, ok := iMsg.(*pb.Message)
 	if !ok {
-		return fmt.Errorf("Received unexpected message type")
+		return fmt.Errorf("received unexpected message type")
 	}
 	logger.Debugf("handling Message of type: %s in state %s", msg.Type, h.fsm.Current())
 	if h.fsm.Cannot(msg.Type.String()) {
@@ -124,28 +124,28 @@ func (h *Handler) HandleMsg(conn net.Conn, sendChannel chan<- common.IMsg, iMsg 
 
 func (h *Handler) afterRouterHello(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
 	sendChannel := e.Args[1].(chan<- common.IMsg)
 	conn := e.Args[2].(net.Conn)
 	//Recv
-	router := &pb.Router{}
-	if err := router.Deserialize(msg.Payload); err != nil {
+	r := &pb.Router{}
+	if err := r.Deserialize(msg.Payload); err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
 	}
 
 	//Send
-	router0 := &pb.Router{Id: h.router.id, Address: h.router.address}
-	if h.router.routerExist(router.Address) {
-		router0.Id = "unkown"
+	tmp := &pb.Router{Id: h.router.id, Address: h.router.address}
+	if h.router.exist(r.Address) {
+		tmp.Id = "unkown"
 	} else {
-		h.router.routerAdd(router.Address, router, conn)
+		h.router.addRouter(r.Address, r, conn)
 		h.router.connKeepAliveAdd(conn, true)
 	}
-	bytes, err := router0.Serialize()
+	bytes, err := tmp.Serialize()
 	if err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
@@ -156,7 +156,7 @@ func (h *Handler) afterRouterHello(e *fsm.Event) {
 
 func (h *Handler) afterRouterHelloAck(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
@@ -164,15 +164,15 @@ func (h *Handler) afterRouterHelloAck(e *fsm.Event) {
 	conn := e.Args[2].(net.Conn)
 
 	//Recv
-	router := &pb.Router{}
-	if err := router.Deserialize(msg.Payload); err != nil {
+	r := &pb.Router{}
+	if err := r.Deserialize(msg.Payload); err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
 	}
-	if router.Id == "unkown" {
+	if r.Id == "unkown" {
 		go h.router.server.Disconnect(conn)
 	} else {
-		h.router.routerAdd(router.Address, router, conn)
+		h.router.addRouter(r.Address, r, conn)
 		h.router.connKeepAliveAdd(conn, true)
 		sendChannel <- &pb.Message{Type: pb.Message_ROUTER_GET, Payload: nil}
 	}
@@ -180,19 +180,19 @@ func (h *Handler) afterRouterHelloAck(e *fsm.Event) {
 
 func (h *Handler) afterRouterGet(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
 	sendChannel := e.Args[1].(chan<- common.IMsg)
 
 	//Send
-	routers := &pb.Routers{}
-	routers.Id = h.router.address
-	h.router.routerIterFunc(func(key string, router *pb.Router) {
-		routers.Routers = append(routers.Routers, &pb.Router{Id: router.Id, Address: router.Address})
+	r := &pb.Routers{}
+	r.Id = h.router.address
+	h.router.iterFunc(func(key string, router *pb.Router) {
+		r.Routers = append(r.Routers, &pb.Router{Id: router.Id, Address: router.Address})
 	})
-	bytes, err := routers.Serialize()
+	bytes, err := r.Serialize()
 	if err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
@@ -202,47 +202,47 @@ func (h *Handler) afterRouterGet(e *fsm.Event) {
 
 func (h *Handler) afterRouterGetAck(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
 	//sendChannel := e.Args[1].(chan<- common.IMsg)
 
 	//Recv
-	routers := &pb.Routers{}
-	if err := routers.Deserialize(msg.Payload); err != nil {
+	r := &pb.Routers{}
+	if err := r.Deserialize(msg.Payload); err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
 	}
 	addresses := []string{}
-	for _, router := range routers.Routers {
-		addresses = append(addresses, router.Address)
+	for _, tmp := range r.Routers {
+		addresses = append(addresses, tmp.Address)
 	}
 	h.router.Discovery(addresses)
 }
 
 func (h *Handler) afterRouterSync(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
 	//sendChannel := e.Args[1].(chan<- common.IMsg)
 
 	if h.router.msgUniqueAdd(msg) {
-		routers := &pb.Routers{}
-		if err := routers.Deserialize(msg.Payload); err != nil {
+		r := &pb.Routers{}
+		if err := r.Deserialize(msg.Payload); err != nil {
 			e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 			return
 		}
-		h.router.updateRouters(routers.Id, routers.Routers)
+		h.router.updateRouters(r.Id, r.Routers)
 		h.router.broadcastMsg(msg)
 	}
 }
 
 func (h *Handler) afterRouterClose(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
@@ -250,35 +250,38 @@ func (h *Handler) afterRouterClose(e *fsm.Event) {
 	conn := e.Args[2].(net.Conn)
 
 	//Recv
-	router := &pb.Router{}
-	if err := router.Deserialize(msg.Payload); err != nil {
+	r := &pb.Router{}
+	if err := r.Deserialize(msg.Payload); err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
 	}
-	h.router.routerRemove(router.Address)
+	h.router.removeRouter(r.Address)
 	h.router.connKeepAliveRemove(conn)
 }
 
 func (h *Handler) afterPeerHello(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
 	sendChannel := e.Args[1].(chan<- common.IMsg)
 	conn := e.Args[2].(net.Conn)
-	//Recv
+
 	peer := &pb.Peer{}
 	if err := peer.Deserialize(msg.Payload); err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
 	}
-	h.router.peerAdd(peer, conn)
+	h.router.peerAdd(peer, peerConn{
+		c:  conn,
+		cn: sendChannel,
+	})
 	h.router.connKeepAliveAdd(conn, true)
 
 	//Send
-	router := &pb.Router{Id: h.router.id, Address: h.router.address}
-	bytes, err := router.Serialize()
+	r := &pb.Router{Id: h.router.id, Address: h.router.address}
+	bytes, err := r.Serialize()
 	if err != nil {
 		e.Cancel(fmt.Errorf("failed to handle message (%s) --- %s", msg.Type.String(), err))
 		return
@@ -288,7 +291,7 @@ func (h *Handler) afterPeerHello(e *fsm.Event) {
 
 func (h *Handler) afterPeerSync(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
@@ -306,7 +309,7 @@ func (h *Handler) afterPeerSync(e *fsm.Event) {
 
 func (h *Handler) afterPeerClose(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
@@ -325,7 +328,7 @@ func (h *Handler) afterPeerClose(e *fsm.Event) {
 
 func (h *Handler) afterKeepAlive(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	//msg := e.Args[0].(*pb.Message)
@@ -336,7 +339,7 @@ func (h *Handler) afterKeepAlive(e *fsm.Event) {
 
 func (h *Handler) afterKeepAliveAck(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)
@@ -347,7 +350,7 @@ func (h *Handler) afterKeepAliveAck(e *fsm.Event) {
 
 func (h *Handler) afterChainMessage(e *fsm.Event) {
 	if _, ok := e.Args[0].(*pb.Message); !ok {
-		e.Cancel(fmt.Errorf("Received unexpected message type"))
+		e.Cancel(fmt.Errorf("received unexpected message type"))
 		return
 	}
 	msg := e.Args[0].(*pb.Message)

@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -41,47 +41,46 @@ type P2P struct {
 	address   string
 	newMsg    func() common.IMsg
 	handleMsg func(net.Conn, chan<- common.IMsg, common.IMsg) error
-
-	server  *tcp.Server
-	clients map[net.Conn]*tcp.Client
+	Server    *tcp.Server
+	clients   map[net.Conn]*tcp.Client
 	sync.RWMutex
 }
 
 //IsRunning Running or not for supply services
 func (p *P2P) IsRunning() bool {
-	return p.server != nil && p.server.IsRunning()
+	return p.Server != nil && p.Server.IsRunning()
 }
 
-//Start Start server for supply services
+//Start Start Server for supply services
 func (p *P2P) Start() {
 	if p.IsRunning() {
-		logger.Warnf("server %s is already runing.", p.address)
+		logger.Warnf("Server %s is already runing.", p.address)
 		return
 	}
 
 	p.clients = nil
-	p.server = nil
+	p.Server = nil
 	p.clients = make(map[net.Conn]*tcp.Client)
-	p.server = tcp.NewServer(p.address, p.newMsg, p.handleMsg)
-	p.server.Start()
+	p.Server = tcp.NewServer(p.address, p.newMsg, p.handleMsg)
+	p.Server.Start()
 }
 
-//Stop Stop server for supply services
+//Stop Stop Server for supply services
 func (p *P2P) Stop() {
 	if !p.IsRunning() {
-		logger.Warnf("server %s is already stopped.", p.address)
+		logger.Warnf("Server %s is already stopped.", p.address)
 		return
 	}
 
-	p.server.Stop()
-	//p.server = nil
+	p.Server.Stop()
+	//p.Server = nil
 	p.iterFunc(func(conn net.Conn, tc *tcp.Client) {
 		go tc.Disconnect()
 	})
 	p.clients = nil
 }
 
-//Connect Connect to tcp server
+//Connect Connect to tcp Server
 func (p *P2P) Connect(address string) net.Conn {
 	clinet := tcp.NewClient(address, p.newMsg, p.handleMsg)
 	if conn := clinet.Connect(); conn != nil {
@@ -96,40 +95,40 @@ func (p *P2P) Disconnect(conn net.Conn) {
 	if tc := p.remove(conn); tc != nil {
 		tc.Disconnect()
 	} else {
-		p.server.Disconnect(conn)
+		p.Server.Disconnect(conn)
 	}
 }
 
 //BroadCastToServer Broadcast msg
-func (p *P2P) BroadCastToServer(msg common.IMsg, function func(net.Conn, common.IMsg) error) {
+func (p *P2P) BroadCastToServer(msg common.IMsg, function func(*tcp.Client, common.IMsg) error) {
 	p.iterFunc(func(conn net.Conn, tc *tcp.Client) {
-		if err := function(conn, msg); err != nil {
-			logger.Errorf("server %s failed to broadcast msg to %s  --- %v", p.address, conn.RemoteAddr().String(), err)
+		if err := function(tc, msg); err != nil {
+			logger.Errorf("Server %s failed to broadcast msg to %s  --- %v", p.address, conn.RemoteAddr().String(), err)
 		}
 	})
 }
 
 //BroadCastToClient Broadcast msg
-func (p *P2P) BroadCastToClient(msg common.IMsg, function func(net.Conn, common.IMsg) error) {
-	p.server.BroadCast(msg, function)
+func (p *P2P) BroadCastToClient(msg common.IMsg, function func(*tcp.ClientConn, common.IMsg) error) {
+	p.Server.BroadCast(msg, function)
 }
 
-//String Get tcp server information
+//String Get tcp Server information
 func (p *P2P) String() string {
 	m := make(map[string]interface{})
 
 	m["address"] = p.address
 	f := make([]interface{}, 0)
-	p.BroadCastToClient(nil, func(conn net.Conn, msg common.IMsg) error {
-		f = append(f, conn.RemoteAddr().String())
+	p.BroadCastToClient(nil, func(conn *tcp.ClientConn, msg common.IMsg) error {
+		f = append(f, conn.Conn().RemoteAddr().String())
 		return nil
 	})
 	m["clients"] = f
 	m["client_cnt"] = len(f)
 
 	v := make([]interface{}, 0)
-	p.BroadCastToServer(nil, func(conn net.Conn, msg common.IMsg) error {
-		v = append(v, conn.RemoteAddr().String())
+	p.BroadCastToServer(nil, func(conn *tcp.Client, msg common.IMsg) error {
+		v = append(v, conn.RemoteAddr())
 		return nil
 	})
 	m["servers"] = v

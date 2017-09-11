@@ -37,7 +37,7 @@ var newMsg = func() common.IMsg {
 }
 
 var handleMsgServer = func(conn net.Conn, send chan<- common.IMsg, msg common.IMsg) error {
-	logger.Infoln("server received ", msg)
+	logger.Infoln("Server received ", msg)
 	msg.(*pb.Message).Payload = []byte("reply")
 	send <- msg
 	return nil

@@ -21,13 +21,9 @@ package tcp
 
 import (
 	"context"
-	"io"
-	"net"
-
 	"encoding/json"
-
+	"net"
 	"sync"
-
 	"time"
 
 	"github.com/bocheninc/msg-net/logger"
@@ -46,7 +42,7 @@ type Server struct {
 	newMsg    func() common.IMsg
 	handleMsg func(net.Conn, chan<- common.IMsg, common.IMsg) error
 
-	connMap    map[net.Conn]*clientConn
+	connMap    map[net.Conn]*ClientConn
 	cancelFunc context.CancelFunc
 	//ws         *sync.WaitGroup
 	sync.RWMutex
@@ -79,12 +75,11 @@ func (ts *Server) Start() {
 	}
 	defer listener.Close()
 
-	ts.connMap = make(map[net.Conn]*clientConn)
+	ts.connMap = make(map[net.Conn]*ClientConn)
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	ts.cancelFunc = cancelFunc
 	//ts.ws = &sync.WaitGroup{}
 	logger.Infof("server %s started successfully", ts.address)
-	logger.Debugf("server %s try to accept ...", ts.address)
 
 	// ts.ws.Add(1)
 	// defer ts.ws.Done()
@@ -103,7 +98,7 @@ func (ts *Server) Start() {
 			}
 		} else {
 			logger.Debugf("server %s accept a client %s ...", ts.address, conn.RemoteAddr().String())
-			cc := &clientConn{ts: ts, conn: conn}
+			cc := &ClientConn{ts: ts, conn: conn}
 			ts.add(conn, cc)
 			cc.handleConn(ctx)
 			logger.Infof("server %s information : %s", ts.address, ts.String())
@@ -137,9 +132,9 @@ func (ts *Server) Disconnect(conn net.Conn) {
 }
 
 //BroadCast Broadcast msg
-func (ts *Server) BroadCast(msg common.IMsg, function func(net.Conn, common.IMsg) error) {
-	ts.iterFunc(func(conn net.Conn, cc *clientConn) {
-		if err := function(conn, msg); err != nil {
+func (ts *Server) BroadCast(msg common.IMsg, function func(*ClientConn, common.IMsg) error) {
+	ts.IterFunc(func(conn net.Conn, cc *ClientConn) {
+		if err := function(cc, msg); err != nil {
 			logger.Errorf("server %s failed to broadcast msg to %s  --- %v", ts.address, conn.RemoteAddr().String(), err)
 		}
 	})
@@ -151,7 +146,7 @@ func (ts *Server) String() string {
 
 	m["address"] = ts.address
 	v := make([]interface{}, 0)
-	ts.iterFunc(func(conn net.Conn, cc *clientConn) {
+	ts.IterFunc(func(conn net.Conn, cc *ClientConn) {
 		v = append(v, conn.RemoteAddr().String())
 	})
 	m["clients_cnt"] = len(v)
@@ -164,13 +159,13 @@ func (ts *Server) String() string {
 	return string(bytes)
 }
 
-func (ts *Server) add(conn net.Conn, cc *clientConn) {
+func (ts *Server) add(conn net.Conn, cc *ClientConn) {
 	ts.Lock()
 	defer ts.Unlock()
 	ts.connMap[conn] = cc
 }
 
-func (ts *Server) remove(conn net.Conn) *clientConn {
+func (ts *Server) remove(conn net.Conn) *ClientConn {
 	ts.Lock()
 	defer ts.Unlock()
 	cc, ok := ts.connMap[conn]
@@ -180,7 +175,7 @@ func (ts *Server) remove(conn net.Conn) *clientConn {
 	return cc
 }
 
-func (ts *Server) iterFunc(function func(net.Conn, *clientConn)) {
+func (ts *Server) IterFunc(function func(net.Conn, *ClientConn)) {
 	ts.RLock()
 	defer ts.RUnlock()
 	for conn, cc := range ts.connMap {
@@ -188,90 +183,62 @@ func (ts *Server) iterFunc(function func(net.Conn, *clientConn)) {
 	}
 }
 
-// clientConn Server connection class
-type clientConn struct {
-	ts *Server
-
+// ClientConn Server connection class
+type ClientConn struct {
+	ts     *Server
 	conn   net.Conn
 	cancel context.CancelFunc
 	//ws     *sync.WaitGroup
 	common.Handler
 }
 
-func (cc *clientConn) handleConn(c context.Context) {
+func (cc *ClientConn) handleConn(c context.Context) {
 	cc.Handler.Init()
 	ctx, cancel := context.WithCancel(c)
 	cc.cancel = cancel
 	//cc.ws = &sync.WaitGroup{}
+
 	go func(ctx context.Context) {
-		// cc.ws.Add(1)
-		// defer cc.ws.Done()
-		ctx0, cancel0 := context.WithCancel(context.Background())
-		ws0 := &sync.WaitGroup{}
-		go func(ctx context.Context) {
-			ws0.Add(1)
-			defer ws0.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case msg := <-cc.RecvChannel():
-					go func() {
-						if err := cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg); err != nil {
-							logger.Errorf("server %s failed to handle msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
-						}
-					}()
-				case msg := <-cc.SendChannel():
-					if _, err := cc.Send(cc.conn, msg); err != nil {
-						logger.Errorf("server %s failed to send msg to client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
-					} else {
-						logger.Debugf("server %s send msg to client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), msg)
-					}
-				}
-			}
-		}(ctx0)
 		for {
 			select {
 			case <-ctx.Done():
-				cc.ts.remove(cc.conn)
-				cancel0()
-				ws0.Wait()
-				if err := cc.conn.Close(); err != nil {
-					logger.Errorf("server %s failed to disconnect to client %s --- %v.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
-				} else {
-					logger.Infof("server %s disconnected to client %s.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String())
-				}
-				cc.conn = nil
 				return
-			default:
-			}
-			msg := cc.ts.newMsg()
-			switch err := cc.Recv(cc.conn, msg); err {
-			case io.EOF:
-				cc.ts.remove(cc.conn)
-				cancel0()
-				ws0.Wait()
-				cc.conn.Close()
-				logger.Infof("server %s received close from client %s.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String())
-				cc.conn = nil
-				cc.cancel = nil
-				//cc.ws = nil
-				return
-			case nil:
-				cc.RecvChannel() <- msg
-				logger.Debugf("server %s received msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), msg)
-			default:
-				if opErr, ok := err.(*net.OpError); ok && (opErr.Timeout() || opErr.Temporary()) {
-					logger.Debugf("server %s failed to receive msg from client %s --- %v.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
+			case msg := <-cc.SendChannel():
+				if _, err := common.Send(cc.conn, msg); err != nil {
+					logger.Errorf("server %s failed to send msg to client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
 				} else {
-					logger.Errorf("server %s failed to receive msg from client %s --- %v.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
+					logger.Debugf("server %s send msg to client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), msg)
 				}
 			}
 		}
 	}(ctx)
+
+	go func(ctx context.Context) {
+		for {
+			select {
+			case <-ctx.Done():
+				cc.ts.Disconnect(cc.conn)
+				return
+			default:
+			}
+			msg := cc.ts.newMsg()
+			if err := common.Recv(cc.conn, msg); err != nil {
+				logger.Infof("server %s receive msg error from client %s. %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
+				cc.ts.Disconnect(cc.conn)
+				return
+			}
+
+			logger.Debugf("server %s receive msg success from client %s.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String())
+
+			if err := cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg); err != nil {
+				logger.Errorf("server %s failed to handle msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
+			}
+
+		}
+	}(ctx)
 }
 
-func (cc *clientConn) disconnect() {
+func (cc *ClientConn) disconnect() {
 	if cc.conn == nil {
 		logger.Warnf("server %s already disconnected to client", cc.ts.address)
 		return
@@ -279,7 +246,12 @@ func (cc *clientConn) disconnect() {
 
 	logger.Debugf("server %s try to disconnect to client %s ...", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String())
 	cc.cancel()
+	cc.conn.Close()
 	//cc.ws.Wait()
 	cc.cancel = nil
 	//cc.ws = nil
+}
+
+func (cc *ClientConn) Conn() net.Conn {
+	return cc.conn
 }

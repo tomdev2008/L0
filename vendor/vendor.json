@@ -27,28 +27,28 @@
 			"revisionTime": "2017-06-15T08:49:54Z"
 		},
 		{
-			"checksumSHA1": "dxXKoDpRbjDJItxi2SSbx3JWCpw=",
+			"checksumSHA1": "KznjAZuHFfLJbG3Ojf7tCl2Jpus=",
 			"path": "github.com/bocheninc/msg-net/net/common",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
-			"checksumSHA1": "XhwsKEIZznHy1REKPHCbucIl8js=",
+			"checksumSHA1": "wLMx7WNu+jEhXIX7pd5lDhjwMdU=",
 			"path": "github.com/bocheninc/msg-net/net/p2p",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
-			"checksumSHA1": "qd/gVYtkrStjc9oX2+HMdaoJdVE=",
+			"checksumSHA1": "Vh4t8hu8UxzrGmO5rmNweg72AdY=",
 			"path": "github.com/bocheninc/msg-net/net/tcp",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
-			"checksumSHA1": "CaZIzQg8EzepyUs1e4HVSM0n7KI=",
+			"checksumSHA1": "4ZSTRo8MX2huOjIzRbJsXrtXpk0=",
 			"path": "github.com/bocheninc/msg-net/peer",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
 			"checksumSHA1": "ELv9livY0oLK7n7J/f9pj/AVSZw=",
@@ -57,22 +57,22 @@
 			"revisionTime": "2017-06-15T08:49:54Z"
 		},
 		{
-			"checksumSHA1": "NTO30ynsQY7xq+adhaK90NKAfGs=",
+			"checksumSHA1": "2cS/roRCGnO/g/A8iaKNjFvnEv4=",
 			"path": "github.com/bocheninc/msg-net/router",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
 			"checksumSHA1": "gjz/bpDRCupr5kOoJaqXtXZQGXU=",
 			"path": "github.com/bocheninc/msg-net/router/route",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
-			"checksumSHA1": "uKWV6+UBcKdkOXyyIVItkxY+4WU=",
+			"checksumSHA1": "1mI2qW7WrTtx9WMFJtCPYuBkWF8=",
 			"path": "github.com/bocheninc/msg-net/util",
-			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
-			"revisionTime": "2017-06-15T08:49:54Z"
+			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
+			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
 			"checksumSHA1": "KNCQ13HZhy1vnc9i4lBiKy120XM=",
