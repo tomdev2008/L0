@@ -2,8 +2,7 @@ net:
   maxPeers: 8
   bootstrapNodes: []
   listenAddr: "127.0.0.1:20166"
-  privatekey: "111c2857d4598e37fb9647507e47a309d6133539bf21a8b9cb6df88fd5232032"
-  
+
   msgnet:
     routeAddress: ["127.0.0.1:9999"]
 
@@ -15,7 +14,8 @@ jrpc:
   port: "8881"
 
 blockchain:
-  id: "00"
+  chainId: "00"
+  nodeId: "0001_abc"  
   datadir: "datadir/1"
   cpuprofile: "profile/prof_node1"
   profPort: "6061"
@@ -32,7 +32,6 @@ consensus:
     blockInterval: 10s
 
   lbft:
-    id: "ID0001"
     "N": 4
     Q: 3
     K: 10
@@ -77,13 +76,12 @@ vm:
   luaVMExeFilePath: "bin/luavm"
   jsVMExeFilePath: "bin/jsvm"
 
-cert:
-  keyPath: ca_certificate/0001_abc/0001_abc.key
-  crtPath: ca_certificate/0001_abc/0001_abc.crt
-  caPath: ca_certificate/0001_abc/ca.crt
 ca:
   enabled: true
+  
+  cert:
+    keyPath: ca_certificate/0001_abc/0001_abc.key
+    crtPath: ca_certificate/0001_abc/0001_abc.crt
+    caPath: ca_certificate/0001_abc/ca.crt
 
-nodeid: 0001_abc
-update_time: 1502180797
 

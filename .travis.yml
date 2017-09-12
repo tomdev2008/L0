@@ -43,7 +43,7 @@ env:
 
 install:
   - cd build
-  - travis_wait 20 make
+  - travis_wait 30 make
 
 cache:
   directories:

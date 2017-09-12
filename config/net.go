@@ -24,17 +24,15 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/p2p"
-	"github.com/spf13/viper"
 )
 
 // NetConfig returns a p2p network configuration
 func NetConfig(nodeDir string) *p2p.Config {
 	var (
-		config        = p2p.DefaultConfig()
-		privkey       *crypto.PrivateKey
-		hexPrivateKey string
-		nodeKeyFile   = filepath.Join(nodeDir, defaultNodeKeyFilename)
-		err           error
+		config      = p2p.DefaultConfig()
+		privkey     *crypto.PrivateKey
+		nodeKeyFile = filepath.Join(nodeDir, defaultNodeKeyFilename)
+		err         error
 	)
 
 	if !utils.FileExist(nodeKeyFile) {
@@ -49,11 +47,6 @@ func NetConfig(nodeDir string) *p2p.Config {
 		}
 	}
 
-	if hexPrivateKey = viper.GetString("net.privateKey"); hexPrivateKey != "" {
-		privkey, _ = crypto.HexToECDSA(hexPrivateKey)
-		privkey.SaveECDSA(nodeKeyFile)
-	}
-
 	config.Address = getString("net.listenAddr", config.Address)
 	config.BootstrapNodes = getStringSlice("net.bootstrapNodes", config.BootstrapNodes)
 	config.PrivateKey = privkey
@@ -65,11 +58,11 @@ func NetConfig(nodeDir string) *p2p.Config {
 	config.MinPeers = getInt("net.minPeers", config.MinPeers)
 	config.RouteAddress = getStringSlice("net.msgnet.routeAddress", config.RouteAddress)
 
-	config.KeyPath = getString("cert.keyPath", config.KeyPath)
-	config.CrtPath = getString("cert.crtPath", config.CrtPath)
-	config.CAPath = getString("cert.caPath", config.CAPath)
+	config.KeyPath = getString("ca.cert.keyPath", config.KeyPath)
+	config.CrtPath = getString("ca.cert.crtPath", config.CrtPath)
+	config.CAPath = getString("ca.cert.caPath", config.CAPath)
 	config.CAEnabled = getbool("ca.enabled", config.CAEnabled)
-	config.NodeID = getString("nodeid", config.NodeID)
+	config.NodeID = getString("blockchain.nodeId", config.NodeID)
 
 	return config
 }

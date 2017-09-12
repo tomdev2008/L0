@@ -19,15 +19,17 @@
 package crypto
 
 import (
+	"bytes"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"io/ioutil"
+	"fmt"
 	"math/big"
 	rd "math/rand"
-	"os"
 	"time"
 )
 
@@ -43,76 +45,67 @@ type CertInformation struct {
 	Province           []string
 	Locality           []string
 	CommonName         string
-	CrtName, KeyName   string
 	IsCA               bool
 	Names              []pkix.AttributeTypeAndValue
 }
 
-func CreateCRT(RootCa *x509.Certificate, RootKey *rsa.PrivateKey, info CertInformation) error {
-	Crt := newCertificate(info)
-	Key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return err
-	}
-
-	var buf []byte
-	if RootCa == nil || RootKey == nil {
-		buf, err = x509.CreateCertificate(rand.Reader, Crt, Crt, &Key.PublicKey, Key)
-	} else {
-		buf, err = x509.CreateCertificate(rand.Reader, Crt, RootCa, &Key.PublicKey, RootKey)
-	}
-	if err != nil {
-		return err
-	}
-
-	err = write(info.CrtName, "CERTIFICATE", buf)
-	if err != nil {
-		return err
-	}
-
-	buf = x509.MarshalPKCS1PrivateKey(Key)
-	return write(info.KeyName, "PRIVATE KEY", buf)
-}
-
-func write(filename, Type string, p []byte) error {
-	File, err := os.Create(filename)
-	defer File.Close()
-	if err != nil {
-		return err
-	}
-	var b *pem.Block = &pem.Block{Bytes: p, Type: Type}
-	return pem.Encode(File, b)
-}
-
-func Parse(crtPath, keyPath string) (rootcertificate *x509.Certificate, rootPrivateKey *rsa.PrivateKey, err error) {
-	rootcertificate, err = ParseCrt(crtPath)
+func Parse(cert, key []byte) (rootCertificate *x509.Certificate, rootPrivateKey *rsa.PrivateKey, err error) {
+	rootCertificate, err = ParseCrt(cert)
 	if err != nil {
 		return
 	}
-	rootPrivateKey, err = ParseKey(keyPath)
+	rootPrivateKey, err = ParseKey(key)
 	return
 }
 
-func ParseCrt(path string) (*x509.Certificate, error) {
-	buf, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	p := &pem.Block{}
-	p, buf = pem.Decode(buf)
+func ParseCrt(data []byte) (*x509.Certificate, error) {
+	p, _ := pem.Decode(data)
 	return x509.ParseCertificate(p.Bytes)
 }
 
-func ParseKey(path string) (*rsa.PrivateKey, error) {
-	buf, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	p, buf := pem.Decode(buf)
+func ParseKey(data []byte) (*rsa.PrivateKey, error) {
+	p, _ := pem.Decode(data)
 	return x509.ParsePKCS1PrivateKey(p.Bytes)
 }
 
-func newCertificate(info CertInformation) *x509.Certificate {
+func GenerateRootCertificateBytes(rootCertificate *x509.Certificate, rootPrivateKey *rsa.PrivateKey) ([]byte, error) {
+	cert, err := x509.CreateCertificate(rand.Reader, rootCertificate, rootCertificate, &rootPrivateKey.PublicKey, rootPrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("create root cert error: %s", err)
+	}
+
+	buffer := new(bytes.Buffer)
+
+	if err := pem.Encode(buffer, &pem.Block{Bytes: cert, Type: "CERTIFICATE"}); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func GeneratePrivateKeyBytes(privateKey *rsa.PrivateKey) ([]byte, error) {
+	buffer := new(bytes.Buffer)
+	key := x509.MarshalPKCS1PrivateKey(privateKey)
+	if err := pem.Encode(buffer, &pem.Block{Bytes: key, Type: "PRIVATE KEY"}); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+// VerifyCertificate use root Certificate  to verify remote Certificate
+func VerifyCertificate(rootCertificate, Certificate *x509.Certificate) error {
+	return Certificate.CheckSignatureFrom(rootCertificate)
+}
+
+func SignRsa(privateKey *rsa.PrivateKey, data []byte) ([]byte, error) {
+	hashed := sha256.Sum256(data)
+	return rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed[:])
+}
+
+func VerifySign(hashed [sha256.Size]byte, sign []byte, Certificate *x509.Certificate) error {
+	return rsa.VerifyPKCS1v15(Certificate.PublicKey.(*rsa.PublicKey), crypto.SHA256, hashed[:], sign)
+}
+
+func NewCertificate(info CertInformation) *x509.Certificate {
 	return &x509.Certificate{
 		SerialNumber: big.NewInt(rd.Int63()),
 		Subject: pkix.Name{
