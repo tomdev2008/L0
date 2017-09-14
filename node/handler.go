@@ -23,6 +23,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/rpc"
+	"net/rpc/jsonrpc"
 	"strconv"
 	"strings"
 
@@ -57,10 +59,11 @@ type ProtocolManager struct {
 	consenter consensus.Consenter
 	msgnet    msgnet.Stack
 	merger    *merge.Helper
-	msgrpc    *msgnet.RpcHelper
-	msgCh     chan *p2p.Msg
-	isStarted bool
-	highest   uint32
+	// msgrpc     *msgnet.RpcHelper
+	msgCh      chan *p2p.Msg
+	isStarted  bool
+	highest    uint32
+	jrpcServer *rpc.Server
 
 	filter *bloom.BloomFilter
 }
@@ -95,8 +98,9 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	})
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
-	manager.msgrpc = msgnet.NewRpcHelper(manager)
-	go jrpc.StartServer(config.JrpcConfig(), manager)
+	manager.jrpcServer = jrpc.NewServer(manager)
+
+	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
 
@@ -104,6 +108,8 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 func (pm *ProtocolManager) Start() {
 	pm.Server.Start()
 	pm.merger.Start()
+
+	go jrpc.StartServer(pm.jrpcServer, config.JrpcConfig())
 
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
@@ -528,9 +534,13 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		log.Debugf("mergeRecv cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
 	case msgnet.ChainRpcMsg:
 		chainID, peerID := parseID(src)
-		data_msg, msgtype := pm.msgrpc.InvokeRpcHandle(msg.Payload)
-		pm.msgrpc.HandleNetMsg(msgtype, pm.peerAddress(), src, data_msg)
+		in := new(bytes.Buffer)
+		out := new(bytes.Buffer)
+		in.Write(msg.Payload)
+		pm.jrpcServer.ServeRequest(jsonrpc.NewServerCodec(jrpc.NewHttConn(in, out)))
 		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
+		pm.SendMsgnetMessage(pm.peerAddress(), src, msgnet.Message{Cmd: msg.Cmd, Payload: out.Bytes()})
+		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
 		size, _ := strconv.Atoi(string(msg.Payload))
