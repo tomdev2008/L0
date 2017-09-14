@@ -377,12 +377,6 @@
 			"revisionTime": "2017-03-29T20:20:08Z"
 		},
 		{
-			"checksumSHA1": "AjOAcEMWUhDcoX6HjzGf+FaKTxc=",
-			"path": "github.com/twinj/uuid",
-			"revision": "7bbe408d339787c56ec15568c947c0959db1b275",
-			"revisionTime": "2016-09-09T07:54:38Z"
-		},
-		{
 			"checksumSHA1": "TUQci/+avtkeZM/rOthi2T6UWvk=",
 			"path": "github.com/willf/bitset",
 			"revision": "988f4f24992fc745de53c42df0da6581e42a6686",
