@@ -21,6 +21,12 @@
 			"revisionTime": "2017-06-15T08:49:54Z"
 		},
 		{
+			"checksumSHA1": "7Gvf2h04YVcrSPAFDje+96EsxVA=",
+			"path": "github.com/bocheninc/msg-net/jrpc",
+			"revision": "4f18021054a3b600876227e2a9925a7e6a26fa06",
+			"revisionTime": "2017-09-14T05:56:54Z"
+		},
+		{
 			"checksumSHA1": "Fve0rgX2wtuanz4s9bMJ/3ZIb9o=",
 			"path": "github.com/bocheninc/msg-net/logger",
 			"revision": "c189649e89ea996049de95bd13cae2ae5dfb3df2",
@@ -57,10 +63,10 @@
 			"revisionTime": "2017-06-15T08:49:54Z"
 		},
 		{
-			"checksumSHA1": "2cS/roRCGnO/g/A8iaKNjFvnEv4=",
+			"checksumSHA1": "WafBcxlKN+8wKc3+xWsdTXbIUD8=",
 			"path": "github.com/bocheninc/msg-net/router",
-			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
-			"revisionTime": "2017-08-26T13:39:08Z"
+			"revision": "4f18021054a3b600876227e2a9925a7e6a26fa06",
+			"revisionTime": "2017-09-14T05:56:54Z"
 		},
 		{
 			"checksumSHA1": "gjz/bpDRCupr5kOoJaqXtXZQGXU=",
@@ -69,10 +75,10 @@
 			"revisionTime": "2017-08-26T13:39:08Z"
 		},
 		{
-			"checksumSHA1": "1mI2qW7WrTtx9WMFJtCPYuBkWF8=",
+			"checksumSHA1": "Pg8iDObtTcysRFOBlK8BZH6EHuc=",
 			"path": "github.com/bocheninc/msg-net/util",
-			"revision": "d8c19e52e0d452dc4395ab3ce38da9f48b5062a8",
-			"revisionTime": "2017-08-26T13:39:08Z"
+			"revision": "4f18021054a3b600876227e2a9925a7e6a26fa06",
+			"revisionTime": "2017-09-14T05:56:54Z"
 		},
 		{
 			"checksumSHA1": "KNCQ13HZhy1vnc9i4lBiKy120XM=",
@@ -269,12 +275,6 @@
 			"revisionTime": "2017-03-02T17:43:01Z"
 		},
 		{
-			"checksumSHA1": "RZOdTSZN/PgcTqko5LzIAzw+UT4=",
-			"path": "github.com/pmezard/go-difflib/difflib",
-			"revision": "792786c7400a136282c1664665ae0a8db921c6c2",
-			"revisionTime": "2016-01-10T10:55:54Z"
-		},
-		{
 			"checksumSHA1": "vVgpBvsjdZyfgb2MOeFniTpt/kM=",
 			"path": "github.com/robertkrimen/otto",
 			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
@@ -363,12 +363,6 @@
 			"path": "github.com/spf13/viper",
 			"revision": "7538d73b4eb9511d85a9f1dfef202eeb8ac260f4",
 			"revisionTime": "2017-02-17T16:38:17Z"
-		},
-		{
-			"checksumSHA1": "Y9SmG2U/qez70e6PIe03dts063Y=",
-			"path": "github.com/stretchr/testify/assert",
-			"revision": "890a5c3458b43e6104ff5da8dfa139d013d77544",
-			"revisionTime": "2017-07-05T02:17:15Z"
 		},
 		{
 			"checksumSHA1": "MUAQ4UlTyTX7Rv4PVI83kXYSxbk=",

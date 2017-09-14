@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/bocheninc/msg-net/config"
-	rpcserver "github.com/bocheninc/msg-net/http-rpc-server"
+	rpcserver "github.com/bocheninc/msg-net/jrpc"
 	"github.com/bocheninc/msg-net/logger"
 	"github.com/bocheninc/msg-net/net/common"
 	"github.com/bocheninc/msg-net/net/p2p"
