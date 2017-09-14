@@ -42,29 +42,41 @@ type HttpConn struct {
 	out io.Writer
 }
 
+func NewHttConn(in io.Reader, out io.Writer) *HttpConn {
+	return &HttpConn{
+		in:  in,
+		out: out,
+	}
+}
+
 func (c *HttpConn) Read(p []byte) (n int, err error)  { return c.in.Read(p) }
 func (c *HttpConn) Write(d []byte) (n int, err error) { return c.out.Write(d) }
 func (c *HttpConn) Close() error                      { return nil }
 
-// StartServer with Test instance as a service
-func StartServer(option *Option, pmHandler pmHandler) {
-	if option.Enabled == false {
-		return
-	}
+func NewServer(pmHandler pmHandler) *rpc.Server {
 
 	server := rpc.NewServer()
+
 	server.Register(NewAccount(pmHandler))
 	server.Register(NewTransaction(pmHandler))
 	server.Register(NewNet(pmHandler))
 	server.Register(NewLedger(pmHandler))
 
-	listener, err := net.Listen("tcp", ":"+option.Port)
+	return server
+}
 
+// StartServer with Test instance as a service
+func StartServer(server *rpc.Server, option *Option) {
+	if option.Enabled == false {
+		return
+	}
+
+	listener, err := net.Listen("tcp", ":"+option.Port)
 	if err != nil {
 		log.Fatal("listen error:", err)
 	}
-
 	defer listener.Close()
+
 	http.Serve(listener, http.HandlerFunc(BasicAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			serverCodec := jsonrpc.NewServerCodec(&HttpConn{in: r.Body, out: w})

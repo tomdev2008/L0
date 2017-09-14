@@ -40,6 +40,11 @@ type NetworkStack interface {
 
 var validTxPoolSize = 1000000
 
+type Status struct {
+	Height uint32
+	Tps    int
+}
+
 // Blockchain is blockchain instance
 type Blockchain struct {
 	// global chain config
@@ -54,9 +59,10 @@ type Blockchain struct {
 	// network stack
 	pm NetworkStack
 
-	quitCh chan bool
-	txCh   chan *types.Transaction
-	blkCh  chan *types.Block
+	quitCh       chan bool
+	txCh         chan *types.Transaction
+	blkCh        chan *types.Block
+	heightStatus chan *Status
 
 	orphans *list.List
 	// 0 respresents sync block, 1 respresents sync done
@@ -95,6 +101,7 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 		quitCh:             make(chan bool),
 		txCh:               make(chan *types.Transaction, 10000),
 		blkCh:              make(chan *types.Block, 10),
+		heightStatus:       make(chan *Status, 100),
 		currentBlockHeader: new(types.BlockHeader),
 		orphans:            list.New(),
 	}
@@ -148,13 +155,14 @@ func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) 
 // GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
-	if tx == nil && bc.txValidator != nil {
+	if bc.txValidator != nil && err != nil {
 		var ok bool
-		if tx, ok = bc.txValidator.getTransactionByHash(txHash); !ok {
-			return nil, err
+		if tx, ok = bc.txValidator.getTransactionByHash(txHash); ok {
+			return tx, nil
 		}
 	}
-	return tx, nil
+
+	return tx, err
 }
 
 // Start starts blockchain services
@@ -178,8 +186,14 @@ func (bc *Blockchain) StartConsensusService() {
 		for {
 			select {
 			case commitedTxs := <-bc.consenter.CommittedTxsChannel():
-				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
+/*				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
 					break
+				}
+*/
+				//add lo
+				log.Infof("Outputs StartConsensusService len=%d",len(commitedTxs.Outputs))
+				for  x  :=range  commitedTxs.Outputs{
+					log.Infof("Outputs StartConsensusService %d",len(commitedTxs.Outputs[x].Transactions))
 				}
 				height, _ := bc.ledger.Height()
 				height++
@@ -265,9 +279,14 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 		bc.ledger.AppendBlock(blk, flag)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
+		bc.heightStatus <- &Status{Height: blk.Height(), Tps: len(blk.Transactions) / 10}
 		return true
 	}
 	return false
+}
+
+func (bc *Blockchain) HeightStatusChan() <-chan *Status {
+	return bc.heightStatus
 }
 
 func (bc *Blockchain) merkleRootHash(txs []*types.Transaction) crypto.Hash {

@@ -88,6 +88,7 @@ func (msg *ViewChange) Serialize() []byte {
 	m.Priority = 0
 	m.SeqNo = 0
 	m.Height = 0
+	m.OptHash = nil
 	return serialize(m)
 }
 

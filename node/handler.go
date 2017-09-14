@@ -23,8 +23,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/rpc"
+	"net/rpc/jsonrpc"
+	"strconv"
 	"strings"
 
+	"encoding/json"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -55,9 +59,11 @@ type ProtocolManager struct {
 	consenter consensus.Consenter
 	msgnet    msgnet.Stack
 	merger    *merge.Helper
-	msgCh     chan *p2p.Msg
-	isStarted bool
-	highest   uint32
+	// msgrpc     *msgnet.RpcHelper
+	msgCh      chan *p2p.Msg
+	isStarted  bool
+	highest    uint32
+	jrpcServer *rpc.Server
 
 	filter *bloom.BloomFilter
 }
@@ -92,7 +98,9 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	})
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
-	go jrpc.StartServer(config.JrpcConfig(), manager)
+	manager.jrpcServer = jrpc.NewServer(manager)
+
+	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
 
@@ -101,8 +109,12 @@ func (pm *ProtocolManager) Start() {
 	pm.Server.Start()
 	pm.merger.Start()
 
+	go jrpc.StartServer(pm.jrpcServer, config.JrpcConfig())
+
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
+
+	go pm.reportStatusLoop()
 
 	go func() {
 		for {
@@ -233,6 +245,19 @@ func (pm *ProtocolManager) broadcastLoop() {
 		select {
 		case msg := <-pm.msgCh:
 			pm.Broadcast(msg)
+		}
+	}
+}
+
+func (pm *ProtocolManager) reportStatusLoop() {
+	for {
+		select {
+		case status := <-pm.Blockchain.HeightStatusChan():
+			msg := msgnet.Message{}
+			msg.Cmd = msgnet.ChainNodeStatusMsg
+			payload, _ := json.Marshal(*status)
+			msg.Payload = payload
+			pm.SendMsgnetMessage(pm.peerAddress(), "deploy:server", msg)
 		}
 	}
 }
@@ -460,6 +485,7 @@ func (pm *ProtocolManager) SendMsgnetMessage(src, dst string, msg msgnet.Message
 	}
 
 	if pm.msgnet != nil {
+		log.Debugf("==============send data=========== cmd : %v, payload: %v ", msg.Cmd, msg.Payload)
 		return pm.msgnet.Send(dst, msg.Serialize(), sig[:])
 	}
 
@@ -470,15 +496,17 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 	sig := crypto.Signature{}
 	copy(sig[:], signature)
 
-	if !sig.Validate() {
+	if signature != nil && !sig.Validate() {
 		return errors.New("msg-net signature error")
 	}
 
-	h := crypto.Sha256(append(payload, src+dst...))
-	pub, err := sig.RecoverPublicKey(h[:])
-	if pub == nil || err != nil {
-		log.Debug("PubilcKey verify error")
-		return errors.New("PubilcKey verify error")
+	if signature != nil {
+		h := crypto.Sha256(append(payload, src+dst...))
+		pub, err := sig.RecoverPublicKey(h[:])
+		if pub == nil || err != nil {
+			log.Debug("PubilcKey verify error")
+			return errors.New("PubilcKey verify error")
+		}
 	}
 
 	msg := msgnet.Message{}
@@ -504,6 +532,20 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		chainID, peerID := parseID(src)
 		pm.merger.HandleNetMsg(msg.Cmd, chainID.String(), peerID.String(), msg)
 		log.Debugf("mergeRecv cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
+	case msgnet.ChainRpcMsg:
+		chainID, peerID := parseID(src)
+		in := new(bytes.Buffer)
+		out := new(bytes.Buffer)
+		in.Write(msg.Payload)
+		pm.jrpcServer.ServeRequest(jsonrpc.NewServerCodec(jrpc.NewHttConn(in, out)))
+		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
+		pm.SendMsgnetMessage(pm.peerAddress(), src, msgnet.Message{Cmd: msg.Cmd, Payload: out.Bytes()})
+		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
+	case msgnet.ChainChangeCfgMsg:
+		id := strings.Split(src, ":")
+		size, _ := strconv.Atoi(string(msg.Payload))
+		pm.consenter.ChangeBlockSize(size)
+		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v, payload: %s", msg.Cmd, id[0], id[1], src, string(msg.Payload))
 	default:
 		log.Debug("not know msgnet.type...")
 	}

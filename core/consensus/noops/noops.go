@@ -133,3 +133,7 @@ func (noops *Noops) BroadcastConsensusChannel() <-chan *consensus.BroadcastConse
 func (noops *Noops) CommittedTxsChannel() <-chan *consensus.OutputTxs {
 	return noops.committedTxsChan
 }
+
+func (noops *Noops) ChangeBlockSize(size int) {
+	noops.options.BlockSize = size
+}

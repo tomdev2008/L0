@@ -177,10 +177,11 @@ func (instance *lbftCore) handleRequestBatch(seqNo uint64, requestBatch *Request
 			pass := instance.lbft.stack.VerifyTxsInConsensus(instance.lbft.toTxs(requestBatch), true)
 			log.Debugf("Replica %s VerifyTxsInConsensus elapsed %s for consensus %s(%d)", instance.lbft.options.ID, time.Now().Sub(t), instance.name, instance.seqNo)
 			_ = pass
-			if instance.fromChain != instance.toChain {
-				log.Infof("Replica %s broadcast requestBatch message to %s  for consensus %s (%d transactions)", instance.lbft.options.ID, instance.toChain, instance.name, len(requestBatch.Requests))
-				instance.lbft.broadcast(instance.toChain, &Message{Type: MESSAGEREQUESTBATCH, Payload: serialize(requestBatch)})
-			}
+
+		}
+		if instance.fromChain != instance.toChain && instance.fromChain == instance.lbft.options.Chain {
+			log.Infof("Replica %s broadcast requestBatch message to %s  for consensus %s (%d transactions)", instance.lbft.options.ID, instance.toChain, instance.name, len(requestBatch.Requests))
+			instance.lbft.broadcast(instance.toChain, &Message{Type: MESSAGEREQUESTBATCH, Payload: serialize(requestBatch)})
 		}
 
 		instance.lbft.incrVerifySeqNum()

@@ -43,8 +43,8 @@ func NoopsOptions() *noops.Options {
 
 func LbftOptions() *lbft.Options {
 	option := lbft.NewDefaultOptions()
-	option.Chain = getString("blockchain.id", option.Chain)
-	option.ID = option.Chain + ":" + utils.BytesToHex(crypto.Ripemd160([]byte(getString("consensus.lbft.id", option.ID)+option.Chain)))
+	option.Chain = getString("blockchain.chainId", option.Chain)
+	option.ID = option.Chain + ":" + utils.BytesToHex(crypto.Ripemd160([]byte(getString("blockchain.nodeId", option.ID)+option.Chain)))
 	option.N = getInt("consensus.lbft.N", option.N)
 	option.Q = getInt("consensus.lbft.Q", option.Q)
 	option.K = getInt("consensus.lbft.K", option.K)

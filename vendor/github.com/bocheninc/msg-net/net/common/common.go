@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -25,8 +25,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
-	"strings"
 	"time"
 )
 
@@ -48,20 +46,20 @@ type IMsg interface {
 
 //Handler Message send and receive interface
 type Handler struct {
-	recvChannel chan IMsg
+	//recvChannel chan IMsg
 	sendChannel chan IMsg
 }
 
 //Init Initialization
 func (h *Handler) Init() {
-	h.recvChannel = make(chan IMsg, channelCap)
+	//h.recvChannel = make(chan IMsg, channelCap)
 	h.sendChannel = make(chan IMsg, channelCap)
 }
 
 //RecvChannel Message receive channel
-func (h *Handler) RecvChannel() chan IMsg {
-	return h.recvChannel
-}
+//func (h *Handler) RecvChannel() chan IMsg {
+//	return h.recvChannel
+//}
 
 //SendChannel Message send channel
 func (h *Handler) SendChannel() chan IMsg {
@@ -69,23 +67,25 @@ func (h *Handler) SendChannel() chan IMsg {
 }
 
 // Send sends message
-func (h *Handler) Send(conn net.Conn, m IMsg) (int, error) {
+func Send(conn net.Conn, m IMsg) (int, error) {
 	var buf bytes.Buffer
-	bytes, err := m.Serialize()
+	data, err := m.Serialize()
 	if err != nil {
 		return 0, err
 	}
 	//head
 	preBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(preBytes, uint64(len(bytes)))
+	binary.BigEndian.PutUint64(preBytes, uint64(len(data)))
 	preNum, err := buf.Write(preBytes)
 	if err != nil {
 		return 0, err
 	}
-	if _, err := buf.Write(bytes); err != nil {
+	if _, err := buf.Write(data); err != nil {
 		return 0, err
 	}
 	//message data
+
+	conn.SetWriteDeadline(time.Now().Add(time.Second))
 	num, err := conn.Write(buf.Bytes())
 	if err != nil {
 		return 0, err
@@ -94,10 +94,9 @@ func (h *Handler) Send(conn net.Conn, m IMsg) (int, error) {
 }
 
 //Recv receives message
-func (h *Handler) Recv(conn net.Conn, m IMsg) error {
+func Recv(conn net.Conn, m IMsg) error {
 	preBytes := make([]byte, 8)
-	conn.SetReadDeadline(time.Now().Add(Deadline))
-	if n, err := io.ReadFull(conn, preBytes); err != nil {
+	if n, err := conn.Read(preBytes); err != nil {
 		return err
 	} else if n != 8 {
 		return fmt.Errorf("missing (8 == %v)", n)
@@ -108,113 +107,112 @@ func (h *Handler) Recv(conn net.Conn, m IMsg) error {
 		return fmt.Errorf("message too big: %v", num)
 	}
 	//fmt.Println("------> ", num)
-	bytes := make([]byte, num)
-	conn.SetReadDeadline(time.Now().Add(Deadline))
-	if n, err := io.ReadFull(conn, bytes); err != nil {
+	data := make([]byte, num)
+	if n, err := io.ReadFull(conn, data); err != nil {
 		//if _, err := conn.Read(bytes); err != nil {
 		return err
 	} else if uint64(n) != num {
 		return fmt.Errorf("missing (%v == %v)", num, n)
 	}
-	return m.Deserialize(bytes)
+	return m.Deserialize(data)
 }
 
 //IsLocalAddress determines whether the local network address
-func IsLocalAddress(address string) bool {
-	if !IsValidAddress(address) {
-		return false
-	}
-	return IsLocalIP(strings.Split(address, ":")[0])
-}
+//func IsLocalAddress(address string) bool {
+//	if !IsValidAddress(address) {
+//		return false
+//	}
+//	return IsLocalIP(strings.Split(address, ":")[0])
+//}
 
 //IsLocalIP determines whether the local network IP
-func IsLocalIP(ip string) bool {
-	if !IsValidIP(ip) {
-		return false
-	}
-	addrs, _ := net.InterfaceAddrs()
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback then display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				if ipnet.IP.String() == ip {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
+//func IsLocalIP(ip string) bool {
+//	if !IsValidIP(ip) {
+//		return false
+//	}
+//	addrs, _ := net.InterfaceAddrs()
+//	for _, address := range addrs {
+//		// check the address type and if it is not a loopback then display it
+//		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+//			if ipnet.IP.To4() != nil {
+//				if ipnet.IP.String() == ip {
+//					return true
+//				}
+//			}
+//		}
+//	}
+//	return false
+//}
 
 //IsValidAddress determines whether a valid network address
-func IsValidAddress(address string) bool {
-	strs := strings.Split(address, ":")
-	if len(strs) != 2 {
-		return false
-	}
-	if !IsValidIP(strs[0]) {
-		return false
-	}
-	if _, err := strconv.Atoi(strs[1]); err != nil {
-		return false
-	}
-	return true
-}
+//func IsValidAddress(address string) bool {
+//	strs := strings.Split(address, ":")
+//	if len(strs) != 2 {
+//		return false
+//	}
+//	if !IsValidIP(strs[0]) {
+//		return false
+//	}
+//	if _, err := strconv.Atoi(strs[1]); err != nil {
+//		return false
+//	}
+//	return true
+//}
 
 //IsValidIP Determine whether a valid network IP
-func IsValidIP(ip string) bool {
-	return net.ParseIP(ip) != nil
-}
+//func IsValidIP(ip string) bool {
+//	return net.ParseIP(ip) != nil
+//}
 
 //NameByIP gets network card name based on local IP
-func NameByIP(ip string) string {
-	if !IsValidIP(ip) {
-		return ""
-	}
-	interfaces, _ := net.Interfaces()
-	for _, inter := range interfaces {
-		addrs, _ := inter.Addrs()
-		for _, address := range addrs {
-			// check the address type and if it is not a loopback then display it
-			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil {
-					if ipnet.IP.String() == ip {
-						return inter.Name
-					}
-				}
-			}
-		}
-	}
-	return ""
-}
+//func NameByIP(ip string) string {
+//	if !IsValidIP(ip) {
+//		return ""
+//	}
+//	interfaces, _ := net.Interfaces()
+//	for _, inter := range interfaces {
+//		addrs, _ := inter.Addrs()
+//		for _, address := range addrs {
+//			// check the address type and if it is not a loopback then display it
+//			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+//				if ipnet.IP.To4() != nil {
+//					if ipnet.IP.String() == ip {
+//						return inter.Name
+//					}
+//				}
+//			}
+//		}
+//	}
+//	return ""
+//}
 
 //NameByIndex gets network card name base on index
-func NameByIndex(index int) string {
-	if inter, err := net.InterfaceByIndex(index); err == nil {
-		return inter.Name
-	}
-	return ""
-}
+//func NameByIndex(index int) string {
+//	if inter, err := net.InterfaceByIndex(index); err == nil {
+//		return inter.Name
+//	}
+//	return ""
+//}
 
 //IPByName gets IP base on network name
-func IPByName(name string) string {
-	name = strings.ToLower(name)
-	interfaces, _ := net.Interfaces()
-	for _, inter := range interfaces {
-		if strings.ToLower(inter.Name) == name {
-			addrs, _ := inter.Addrs()
-			for _, address := range addrs {
-				// check the address type and if it is not a loopback then display it
-				if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-					if ipnet.IP.To4() != nil {
-						return ipnet.IP.String()
-					}
-				}
-			}
-		}
-	}
-	return ""
-}
+//func IPByName(name string) string {
+//	name = strings.ToLower(name)
+//	interfaces, _ := net.Interfaces()
+//	for _, inter := range interfaces {
+//		if strings.ToLower(inter.Name) == name {
+//			addrs, _ := inter.Addrs()
+//			for _, address := range addrs {
+//				// check the address type and if it is not a loopback then display it
+//				if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+//					if ipnet.IP.To4() != nil {
+//						return ipnet.IP.String()
+//					}
+//				}
+//			}
+//		}
+//	}
+//	return ""
+//}
 
 //IPByIndex gets IP base on index
 func IPByIndex(index int) string {
@@ -248,14 +246,14 @@ func ChooseInterface() string {
 	fmt.Println("When choosing an interface, it is usually the one that is being used to connect to the internet.")
 	fmt.Printf("%c[0m", 0x1B)
 
-	bytes, _ := json.Marshal(indexs)
+	data, _ := json.Marshal(indexs)
 	if len(indexs) == 1 {
 		index := indexs[0]
-		fmt.Println("Which interface should the network bridge to", string(bytes), "?", index)
+		fmt.Println("Which interface should the network bridge to", string(data), "?", index)
 		return IPByIndex(index)
 	}
 	for {
-		fmt.Print("Which interface should the network bridge to", string(bytes), "? ")
+		fmt.Print("Which interface should the network bridge to", string(data), "? ")
 		var index int
 		fmt.Scanln(&index)
 		if ip := IPByIndex(index); ip != "" {

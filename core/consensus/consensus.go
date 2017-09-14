@@ -49,6 +49,7 @@ type Consenter interface {
 	RecvConsensus([]byte)
 	BroadcastConsensusChannel() <-chan *BroadcastConsensus
 	CommittedTxsChannel() <-chan *OutputTxs
+	ChangeBlockSize(size int)
 }
 
 // ITxPool Interface for tx containter, input

@@ -41,8 +41,6 @@ const (
 	handshakeAckMsg
 	getPeersMsg
 	peersMsg
-	secMsg
-	signMsg
 )
 
 var (

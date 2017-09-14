@@ -176,6 +176,7 @@ type ViewChange struct {
 	PrimaryID string `protobuf:"bytes,4,opt,name=primaryID" json:"primaryID,omitempty"`
 	SeqNo     uint64 `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
 	Height    uint32 `protobuf:"varint,6,opt,name=height" json:"height,omitempty"`
+	OptHash   []byte `protobuf:"varint,7,opt,name=optHash" json:"optHash,omitempty"`
 }
 
 //NullRequest Define struct
@@ -183,8 +184,9 @@ type NullRequest struct {
 	ReplicaID string `protobuf:"bytes,1,opt,name=replicaID" json:"replicaID,omitempty"`
 	Chain     string `protobuf:"bytes,2,opt,name=chain" json:"chain,omitempty"`
 	PrimaryID string `protobuf:"bytes,3,opt,name=primaryID" json:"primaryID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	Height    uint32 `protobuf:"varint,6,opt,name=height" json:"height,omitempty"`
+	SeqNo     uint64 `protobuf:"varint,4,opt,name=seqNo" json:"seqNo,omitempty"`
+	Height    uint32 `protobuf:"varint,5,opt,name=height" json:"height,omitempty"`
+	OptHash   []byte `protobuf:"varint,6,opt,name=optHash" json:"optHash,omitempty"`
 }
 
 //MessageType

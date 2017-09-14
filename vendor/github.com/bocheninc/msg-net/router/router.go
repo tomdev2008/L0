@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
-// This file is part of msg-net 
-// 
+// This file is part of msg-net
+//
 // The msg-net is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The msg-net is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -20,21 +20,21 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
+	"strings"
+	"sync"
 	"time"
 
-	"sync"
-
-	"strings"
-
-	"bytes"
-
 	"github.com/bocheninc/msg-net/config"
+	rpcserver "github.com/bocheninc/msg-net/jrpc"
 	"github.com/bocheninc/msg-net/logger"
 	"github.com/bocheninc/msg-net/net/common"
 	"github.com/bocheninc/msg-net/net/p2p"
+	"github.com/bocheninc/msg-net/net/tcp"
 	pb "github.com/bocheninc/msg-net/protos"
 	"github.com/bocheninc/msg-net/router/route"
 )
@@ -59,7 +59,7 @@ type Router struct {
 	routers     map[string]*pb.Router
 	rwRouters   sync.RWMutex
 	allRouters  *route.Route
-	peers       map[string]net.Conn
+	peers       map[string]peerConn
 	rwPeers     sync.RWMutex
 	allPeers    *Peers
 
@@ -77,6 +77,11 @@ type Router struct {
 	durationNetworkRouters time.Duration
 	timerNetworkPeers      *time.Timer
 	durationNetworkPeers   time.Duration
+}
+
+type peerConn struct {
+	c  net.Conn
+	cn chan<- common.IMsg
 }
 
 //IsRunning Running or not for supply services
@@ -98,8 +103,6 @@ func (r *Router) Start() {
 
 	done := make(chan struct{})
 
-	go StartReport(r)
-
 	//sever start
 	go func() {
 
@@ -115,6 +118,9 @@ func (r *Router) Start() {
 		}
 		time.Sleep(time.Millisecond)
 		if r.server.IsRunning() {
+			go func() {
+				rpcserver.RunRpcServer(config.GetString("rpcserver.port"), config.GetString("router.address"))
+			}()
 			break
 		}
 	}
@@ -125,7 +131,7 @@ func (r *Router) Start() {
 	r.connRouters = make(map[string]net.Conn)
 	r.routers = make(map[string]*pb.Router)
 	r.allRouters = route.NewRoute(r.address)
-	r.peers = make(map[string]net.Conn)
+	r.peers = make(map[string]peerConn)
 	r.allPeers = NewPeers()
 	r.msgUnique = make(map[string]time.Time)
 	r.connKeepAlive = make(map[net.Conn]time.Time)
@@ -185,7 +191,7 @@ func (r *Router) Start() {
 			r.broadcastMsg(&pb.Message{Type: pb.Message_KEEPALIVE})
 			r.timerKeepAlive.Reset(r.durationKeepAlive)
 		case <-r.timerRouters.C:
-			logger.Debugf("p2p information : %s", r.server.String())
+			logger.Infof("p2p information : %s", r.server.String())
 			logger.Infof("router information : %s", r.String())
 			r.broadcastRouters()
 		case <-r.timerNetworkPeers.C:
@@ -205,13 +211,12 @@ func (r *Router) Stop() {
 		return
 	}
 
-	router := &pb.Router{Id: r.id, Address: r.address}
-	bytes, _ := router.Serialize()
-	msg := &pb.Message{Type: pb.Message_ROUTER_CLOSE, Payload: bytes}
+	rt := &pb.Router{Id: r.id, Address: r.address}
+	data, _ := rt.Serialize()
+	msg := &pb.Message{Type: pb.Message_ROUTER_CLOSE, Payload: data}
 	r.broadcastMsg(msg)
 
 	r.server.Stop()
-	//r.server = nil
 
 	r.cancelFunc()
 	//r.ws.Wait()
@@ -224,15 +229,17 @@ func (r *Router) Discovery(addresses []string) {
 		if address == r.address {
 			continue
 		}
-		if r.routerExist(address) {
+		if r.exist(address) {
 			continue
 		}
 		if conn := r.server.Connect(address); conn != nil {
 			//send hello messge
-			router := &pb.Router{Id: r.id, Address: r.address}
-			payload, _ := router.Serialize()
+			rt := &pb.Router{Id: r.id, Address: r.address}
+			payload, _ := rt.Serialize()
 			msg := &pb.Message{Type: pb.Message_ROUTER_HELLO, Payload: payload}
-			(&common.Handler{}).Send(conn, msg)
+			if _, err := common.Send(conn, msg); err != nil {
+				r.server.Disconnect(conn)
+			}
 		} else {
 			unDiscovery = append(unDiscovery, address)
 		}
@@ -264,10 +271,13 @@ func (r *Router) RouteMessage(msg *pb.Message) error {
 	}
 	for _, key := range keys {
 		if key == r.address {
-			r.peerIterFunc(func(peer *pb.Peer, conn net.Conn) {
+			r.peerIterFunc(func(peer *pb.Peer, conn peerConn) {
 				if (strings.HasSuffix(dstID, ":") && strings.HasPrefix(peer.Id, dstID)) || peer.Id == dstID {
-					logger.Debugf("router %s route message %s to dstID %s (%s) successfully", r.address, chainMsg.SrcId, dstID, peer.Id)
-					(&common.Handler{}).Send(conn, msg)
+					if len(conn.cn) == cap(conn.cn) {
+						logger.Errorln("send channel full")
+						return
+					}
+					conn.cn <- msg
 				}
 			})
 		} else {
@@ -279,7 +289,9 @@ func (r *Router) RouteMessage(msg *pb.Message) error {
 
 				r.rwRouters.RLock()
 				if conn, ok := r.connRouters[nextKey]; ok {
-					(&common.Handler{}).Send(conn, msg)
+					if _, err := common.Send(conn, msg); err != nil {
+						r.server.Disconnect(conn)
+					}
 				}
 				r.rwRouters.RUnlock()
 			}
@@ -302,27 +314,51 @@ func (r *Router) String() string {
 	m["address"] = r.address
 
 	f := make([]interface{}, 0)
-	r.routerIterFunc(func(address string, router *pb.Router) {
+	r.iterFunc(func(address string, router *pb.Router) {
 		f = append(f, router.Address)
 	})
 	m["routers"] = f
 	m["routers_cnt"] = len(f)
 
 	v := make([]interface{}, 0)
-	r.peerIterFunc(func(peer *pb.Peer, conn net.Conn) {
+	r.peerIterFunc(func(peer *pb.Peer, conn peerConn) {
 		v = append(v, peer.Id)
 	})
 	m["peers"] = v
 	m["peers_cnt"] = len(v)
 
-	bytes, err := json.Marshal(m)
+	data, err := json.Marshal(m)
 	if err != nil {
 		logger.Errorf("failed to json marshal --- %v\n", err)
 	}
-	return string(bytes)
+	return string(data)
 }
 
-func (r *Router) routerAdd(key string, router *pb.Router, conn net.Conn) {
+// func (r *Router) IsPeerExist(id string) bool {
+// 	chainids := make(map[string]struct{}, 0)
+// 	conIds := make(map[string]struct{}, 0)
+// 	var (
+// 		exist bool
+// 	)
+// 	r.peerIterFunc(func(peer *pb.Peer, conn net.Conn) {
+// 		if strings.Compare(peer.Id, "01:595959") == 0 {
+// 			return
+// 		}
+// 		blockids := strings.Split(peer.Id, ":")
+// 		chainids[blockids[0]] = struct{}{}
+// 		conIds[peer.Id] = struct{}{}
+// 	})
+
+// 	if isContain := strings.Contains(id, ":"); !isContain {
+// 		_, exist = chainids[id]
+// 	} else {
+// 		_, exist = conIds[id]
+// 	}
+
+// 	return exist
+// }
+
+func (r *Router) addRouter(key string, router *pb.Router, conn net.Conn) {
 	logger.Infoln("add new router :", key)
 	r.rwRouters.Lock()
 
@@ -334,7 +370,7 @@ func (r *Router) routerAdd(key string, router *pb.Router, conn net.Conn) {
 	r.broadcastNetworkRouters()
 }
 
-func (r *Router) routerRemove(key string) {
+func (r *Router) removeRouter(key string) {
 	logger.Infoln("remove router :", key)
 	r.rwRouters.Lock()
 
@@ -346,15 +382,15 @@ func (r *Router) routerRemove(key string) {
 	r.broadcastNetworkRouters()
 }
 
-func (r *Router) routerIterFunc(function func(string, *pb.Router)) {
+func (r *Router) iterFunc(function func(string, *pb.Router)) {
 	r.rwRouters.RLock()
 	defer r.rwRouters.RUnlock()
-	for key, router := range r.routers {
-		function(key, router)
+	for key, rt := range r.routers {
+		function(key, rt)
 	}
 }
 
-func (r *Router) routerConnIterFunc(function func(string, net.Conn)) {
+func (r *Router) connIterFunc(function func(string, net.Conn)) {
 	r.rwRouters.RLock()
 	defer r.rwRouters.RUnlock()
 	for key, conn := range r.connRouters {
@@ -362,7 +398,7 @@ func (r *Router) routerConnIterFunc(function func(string, net.Conn)) {
 	}
 }
 
-func (r *Router) routerExist(key string) bool {
+func (r *Router) exist(key string) bool {
 	if key == "" {
 		return false
 	}
@@ -372,11 +408,11 @@ func (r *Router) routerExist(key string) bool {
 	return ok
 }
 
-func (r *Router) peerAdd(peer *pb.Peer, conn net.Conn) {
+func (r *Router) peerAdd(peer *pb.Peer, conn peerConn) {
 	r.rwPeers.Lock()
 
-	bytes, _ := json.Marshal(peer)
-	r.peers[string(bytes)] = conn
+	data, _ := json.Marshal(peer)
+	r.peers[string(data)] = conn
 
 	r.rwPeers.Unlock()
 
@@ -386,32 +422,32 @@ func (r *Router) peerAdd(peer *pb.Peer, conn net.Conn) {
 func (r *Router) peerRemove(peer *pb.Peer) {
 	r.rwPeers.Lock()
 
-	bytes, _ := json.Marshal(peer)
-	delete(r.peers, string(bytes))
+	data, _ := json.Marshal(peer)
+	delete(r.peers, string(data))
 
 	r.rwPeers.Unlock()
 
 	r.broadcastNetworkPeers()
 }
 
-func (r *Router) peerIterFunc(function func(*pb.Peer, net.Conn)) {
+func (r *Router) peerIterFunc(function func(*pb.Peer, peerConn)) {
 	r.rwPeers.RLock()
 	defer r.rwPeers.RUnlock()
 	for key, conn := range r.peers {
-		peer := &pb.Peer{}
-		json.Unmarshal([]byte(key), peer)
-		function(peer, conn)
+		p := &pb.Peer{}
+		json.Unmarshal([]byte(key), p)
+		function(p, conn)
 	}
 }
 
 func (r *Router) isPeer(conn net.Conn) *pb.Peer {
 	r.rwPeers.RLock()
 	defer r.rwPeers.RUnlock()
-	for key, tconn := range r.peers {
-		if tconn == conn {
-			peer := &pb.Peer{}
-			json.Unmarshal([]byte(key), peer)
-			return peer
+	for key, tmp := range r.peers {
+		if tmp.c == conn {
+			p := &pb.Peer{}
+			json.Unmarshal([]byte(key), p)
+			return p
 		}
 	}
 	return nil
@@ -420,11 +456,11 @@ func (r *Router) isPeer(conn net.Conn) *pb.Peer {
 func (r *Router) msgUniqueAdd(msg *pb.Message) bool {
 	r.rwMsg.Lock()
 	defer r.rwMsg.Unlock()
-	bytes, _ := json.Marshal(msg)
-	if _, ok := r.msgUnique[string(bytes)]; ok {
+	data, _ := json.Marshal(msg)
+	if _, ok := r.msgUnique[string(data)]; ok {
 		return false
 	}
-	r.msgUnique[string(bytes)] = time.Now()
+	r.msgUnique[string(data)] = time.Now()
 	return true
 }
 
@@ -472,14 +508,14 @@ func (r *Router) connKeepAliveUpdate(ctx context.Context, duration time.Duration
 			r.peerRemove(peer)
 		} else {
 			var key string
-			r.routerConnIterFunc(func(tkey string, tconn net.Conn) {
+			r.connIterFunc(func(tkey string, tconn net.Conn) {
 				if conn == tconn {
 					key = tkey
 				}
 			})
 
 			if key != "" {
-				r.routerRemove(key)
+				r.removeRouter(key)
 			}
 			localAddr := conn.LocalAddr().String()
 			remoteAddr := conn.RemoteAddr().String()
@@ -498,14 +534,14 @@ func (r *Router) connKeepAliveUpdate(ctx context.Context, duration time.Duration
 						default:
 						}
 						logger.Warnf("connection %s -> %s timeout， reconnecting key %s..", localAddr, remoteAddr, key)
-						if r.routerExist(r.address) {
+						if r.exist(r.address) {
 							break
 						}
 						if conn := r.server.Connect(remoteAddr); conn != nil {
 							//发送HELLO消息
-							router := &pb.Router{Id: r.id, Address: r.address}
-							payload, _ := router.Serialize()
-							(&common.Handler{}).Send(conn, &pb.Message{Type: pb.Message_ROUTER_HELLO, Payload: payload})
+							rt := &pb.Router{Id: r.id, Address: r.address}
+							payload, _ := rt.Serialize()
+							common.Send(conn, &pb.Message{Type: pb.Message_ROUTER_HELLO, Payload: payload})
 							break
 						}
 						time.Sleep(duration)
@@ -527,16 +563,16 @@ func (r *Router) broadcastRouters() {
 
 func (r *Router) broadcastNetworkRouters() {
 	r.timerNetworkRouters.Stop()
-	routers := &pb.Routers{}
-	routers.Id = r.address
-	r.routerIterFunc(func(address string, router *pb.Router) {
-		routers.Routers = append(routers.Routers, router)
+	rt := &pb.Routers{}
+	rt.Id = r.address
+	r.iterFunc(func(address string, router *pb.Router) {
+		rt.Routers = append(rt.Routers, router)
 	})
-	bytes, _ := routers.Serialize()
-	msg := &pb.Message{Type: pb.Message_ROUTER_SYNC, Payload: bytes}
+	data, _ := rt.Serialize()
+	msg := &pb.Message{Type: pb.Message_ROUTER_SYNC, Payload: data}
 	msg.Metadata = append(msg.Metadata, []byte(time.Now().String()+":"+r.address)...)
 
-	r.updateRouters(routers.Id, routers.Routers)
+	r.updateRouters(rt.Id, rt.Routers)
 	r.msgUniqueAdd(msg)
 	r.broadcastMsg(msg)
 	r.timerNetworkRouters.Reset(r.durationNetworkRouters)
@@ -546,11 +582,11 @@ func (r *Router) broadcastNetworkPeers() {
 	r.timerNetworkPeers.Stop()
 	peers := &pb.Peers{}
 	peers.Id = r.address
-	r.peerIterFunc(func(peer *pb.Peer, conn net.Conn) {
+	r.peerIterFunc(func(peer *pb.Peer, conn peerConn) {
 		peers.Peers = append(peers.Peers, &pb.Peer{Id: peer.Id})
 	})
-	bytes, _ := peers.Serialize()
-	msg := &pb.Message{Type: pb.Message_PEER_SYNC, Payload: bytes}
+	data, _ := peers.Serialize()
+	msg := &pb.Message{Type: pb.Message_PEER_SYNC, Payload: data}
 	msg.Metadata = append(msg.Metadata, []byte(time.Now().String()+":"+r.address)...)
 
 	r.updatePeers(peers.Id, peers.Peers)
@@ -560,14 +596,23 @@ func (r *Router) broadcastNetworkPeers() {
 }
 
 func (r *Router) broadcastMsg(msg *pb.Message) {
-	r.server.BroadCastToClient(msg, func(conn net.Conn, msg common.IMsg) error {
-		(&common.Handler{}).Send(conn, msg)
+
+	r.server.BroadCastToClient(msg, func(conn *tcp.ClientConn, msg common.IMsg) error {
+		if len(conn.SendChannel()) == cap(conn.SendChannel()) {
+			return errors.New("channel is full")
+		}
+		conn.SendChannel() <- msg
 		return nil
 	})
-	r.server.BroadCastToServer(msg, func(conn net.Conn, msg common.IMsg) error {
-		(&common.Handler{}).Send(conn, msg)
+
+	r.server.BroadCastToServer(msg, func(conn *tcp.Client, msg common.IMsg) error {
+		if len(conn.SendChannel()) == cap(conn.SendChannel()) {
+			return errors.New("channel is full")
+		}
+		conn.SendChannel() <- msg
 		return nil
 	})
+
 }
 
 func (r *Router) updatePeers(key string, peers []*pb.Peer) {
@@ -576,8 +621,8 @@ func (r *Router) updatePeers(key string, peers []*pb.Peer) {
 
 func (r *Router) updateRouters(key string, routers []*pb.Router) {
 	addresses := []string{}
-	for _, router := range routers {
-		addresses = append(addresses, router.Address)
+	for _, rt := range routers {
+		addresses = append(addresses, rt.Address)
 	}
 	if r.allRouters.UpdateNetworkTopology(route.NewNodeLink(key, addresses)) {
 		r.allRouters.UpdateNextHop()
