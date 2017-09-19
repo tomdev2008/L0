@@ -19,30 +19,13 @@
 package blockchain
 
 import (
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/types"
 )
 
-// var TxBufferPool = sync.Pool{
-// 	New: func() interface{} { return &types.Transaction{} },
-// }
-
 //VerifyTxsInConsensus verify
-func (bc *Blockchain) VerifyTxsInConsensus(txs []*types.Transaction, primary bool) bool {
-	return bc.txValidator.VerifyTxsInTxPool(txs, primary)
-}
-
-func (bc *Blockchain) FetchGroupingTxsInTxPool(groupingNum, maxSizeInGrouping int) []types.Transactions {
-	log.Debugf("[Validator] FetchGroupingTxsInTxPool groupingNum: %d, maxSizeInGrouping: %d", groupingNum, maxSizeInGrouping)
-	groupingTxs := bc.txValidator.FetchGroupingTxsInTxPool(groupingNum, maxSizeInGrouping)
-	for idx, txs := range groupingTxs {
-		log.Debugf("[Validator] idx: %d, len: %d", idx, len(txs))
-		//	for _, tx := range txs {
-		//		log.Debugf("[Validator] tx_hash: %s", tx.Hash().String())
-		//	}
-	}
-	return groupingTxs
+func (bc *Blockchain) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
+	return bc.validator.VerifyTxs(txs, primary)
 }
 
 func (bc *Blockchain) GetBlockchainInfo() *consensus.BlockchainInfo {

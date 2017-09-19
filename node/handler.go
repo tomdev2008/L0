@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"net/rpc"
 	"net/rpc/jsonrpc"
-	"strconv"
 	"strings"
 
 	"encoding/json"
@@ -66,6 +65,7 @@ type ProtocolManager struct {
 	jrpcServer *rpc.Server
 
 	filter *bloom.BloomFilter
+	jobs   chan *job
 }
 
 var (
@@ -99,7 +99,10 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
 	manager.jrpcServer = jrpc.NewServer(manager)
-
+	if params.MaxOccurs > 1 {
+		manager.jobs = make(chan *job, 1000)
+		startJobs(params.MaxOccurs, manager.jobs)
+	}
 	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
@@ -301,9 +304,22 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 
 	//log.Debugln("OnTx Hash=", tx.Hash(), " Nonce=", tx.Nonce())
 
-	if pm.Blockchain.ProcessTransaction(tx) {
-		pm.msgCh <- &m
+	if params.MaxOccurs > 1 {
+		pm.jobs <- &job{
+			In: tx,
+			Exec: func(in interface{}) {
+				tx := in.(*types.Transaction)
+				if pm.Blockchain.ProcessTransaction(tx) {
+					pm.msgCh <- &m
+				}
+			},
+		}
+	} else {
+		if pm.Blockchain.ProcessTransaction(tx) {
+			pm.msgCh <- &m
+		}
 	}
+
 }
 
 // OnGetBlocks processes getblocks message
@@ -543,8 +559,8 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
-		size, _ := strconv.Atoi(string(msg.Payload))
-		pm.consenter.ChangeBlockSize(size)
+		// size, _ := strconv.Atoi(string(msg.Payload))
+		//pm.consenter.ChangeBlockSize(size)
 		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v, payload: %s", msg.Cmd, id[0], id[1], src, string(msg.Payload))
 	default:
 		log.Debug("not know msgnet.type...")

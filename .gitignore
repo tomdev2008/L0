@@ -6,7 +6,7 @@ build/datadir/*
 .vscode/
 debug
 *.exe
-
+build/nohup
 cmd/lcnd/lcnd
 tests/tests
 .DS_Store
@@ -18,3 +18,4 @@ tests/Transaction/*
 !/tests/transaction/crossLayer_3/
 *.swp
 debug.test
+tests/client/client

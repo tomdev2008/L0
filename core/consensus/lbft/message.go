@@ -19,174 +19,137 @@
 package lbft
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
 	"strings"
 
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/types"
 )
 
 //Request Define struct
 type Request struct {
-	Transaction *types.Transaction `protobuf:"bytes,2,opt,name=transaction,proto3" json:"transaction,omitempty"`
+	ID     int64
+	Time   uint32
+	Height uint32
+	Func   func(int, types.Transactions)
+	Txs    types.Transactions
 }
 
-//Time Get create time
-func (m *Request) Time() uint32 {
-	if m != nil {
-		return m.Transaction.CreateTime()
+func (msg *Request) isValid() bool {
+	if msg.ID == EMPTYREQUEST {
+		return true
 	}
-	return 0
-}
-
-//FromChain Get from chain
-func (m *Request) FromChain() string {
-	if m != nil {
-		return m.Transaction.FromChain()
+	fromChains := map[string]string{}
+	toChains := map[string]string{}
+	for _, tx := range msg.Txs {
+		from := tx.FromChain()
+		to := tx.ToChain()
+		fromChains[from] = from
+		toChains[to] = to
 	}
-	return ""
-}
-
-//ToChain Get to chain
-func (m *Request) ToChain() string {
-	if m != nil {
-		return m.Transaction.ToChain()
-	}
-	return ""
-}
-
-//Nonce Get nonce
-func (m *Request) Nonce() uint32 {
-	if m != nil {
-		return m.Transaction.Nonce()
-	}
-	return 0
-}
-
-//RequestBatch Define struct
-type RequestBatch struct {
-	Time     uint32
-	Requests []*Request
-	ID       int64
-	Index    uint32
-	Height   uint32
+	return len(fromChains) == 1 && len(toChains) == 1
 }
 
 //fromChain from
-func (msg *RequestBatch) fromChain() (from string) {
-	if len(msg.Requests) == 0 {
-		return
-	}
-	fromChains := map[string]string{}
-	for _, req := range msg.Requests {
-		from = req.FromChain()
-		fromChains[from] = from
+func (msg *Request) fromChain() (from string) {
+	for _, tx := range msg.Txs {
+		from = tx.FromChain()
 		break
-	}
-	if len(fromChains) != 1 {
-		panic("illegal requestBatch")
 	}
 	return
 }
 
 //toChain to
-func (msg *RequestBatch) toChain() (to string) {
-	if len(msg.Requests) == 0 {
-		return
-	}
-	if msg.Index == 0 {
-		return msg.fromChain()
-	}
-	toChains := map[string]string{}
-	for _, req := range msg.Requests {
-		to = req.ToChain()
-		toChains[to] = to
+func (msg *Request) toChain() (to string) {
+	for _, tx := range msg.Txs {
+		to = tx.ToChain()
 		break
-	}
-	if len(toChains) != 1 {
-		panic("illegal requestBatch")
 	}
 	return
 }
 
 //key name
-func (msg *RequestBatch) key() string {
-	keys := make([]string, 3)
+func (msg *Request) Name() string {
+	keys := make([]string, 4)
 	keys[0] = msg.fromChain()
 	keys[1] = msg.toChain()
-	keys[2] = hash(msg)
-	key := strings.Join(keys, "-")
-	return key
+	r := &Request{
+		ID:   msg.ID,
+		Time: msg.Time,
+		//Height: msg.Height,
+		Func: msg.Func,
+		Txs:  msg.Txs,
+	}
+	hash := sha256.Sum256(utils.Serialize(r))
+	keys[2] = hex.EncodeToString(hash[:])
+	keys[3] = strconv.Itoa(len(msg.Txs))
+	return strings.Join(keys, "-")
 }
 
 //PrePrepare Define struct
 type PrePrepare struct {
-	Name      string        `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	PrimaryID string        `protobuf:"bytes,2,opt,name=primaryID" json:"primaryID,omitempty"`
-	Chain     string        `protobuf:"bytes,3,opt,name=chain" json:"chain,omitempty"`
-	ReplicaID string        `protobuf:"bytes,4,opt,name=replicaID" json:"replicaID,omitempty"`
-	SeqNo     uint64        `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	Digest    string        `protobuf:"bytes,6,opt,name=digest" json:"digest,omitempty"`
-	Quorum    uint64        `protobuf:"varint,7,opt,name=quorum" json:"quorum,omitempty"`
-	Requests  *RequestBatch `protobuf:"bytes,8,opt,name=requests" json:"requests,omitempty"`
+	PrimaryID string
+	SeqNo     uint32
+	Height    uint32
+	OptHash   string
+	// Digest    string
+	Quorum    int
+	Request   *Request
+	Chain     string
+	ReplicaID string
 }
 
 //Prepare Define struct
 type Prepare struct {
-	Name      string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	PrimaryID string `protobuf:"bytes,2,opt,name=primaryID" json:"primaryID,omitempty"`
-	Chain     string `protobuf:"bytes,3,opt,name=chain" json:"chain,omitempty"`
-	ReplicaID string `protobuf:"bytes,4,opt,name=replicaID" json:"replicaID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	Digest    string `protobuf:"bytes,6,opt,name=digest" json:"digest,omitempty"`
-	Quorum    uint64 `protobuf:"varint,7,opt,name=quorum" json:"quorum,omitempty"`
+	PrimaryID string
+	SeqNo     uint32
+	Height    uint32
+	OptHash   string
+	Digest    string
+	Quorum    int
+	Chain     string
+	ReplicaID string
 }
 
 //Commit Define struct
 type Commit struct {
-	Name      string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	PrimaryID string `protobuf:"bytes,2,opt,name=primaryID" json:"primaryID,omitempty"`
-	Chain     string `protobuf:"bytes,3,opt,name=chain" json:"chain,omitempty"`
-	ReplicaID string `protobuf:"bytes,4,opt,name=replicaID" json:"replicaID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	Digest    string `protobuf:"bytes,6,opt,name=digest" json:"digest,omitempty"`
-	Quorum    uint64 `protobuf:"varint,7,opt,name=quorum" json:"quorum,omitempty"`
+	PrimaryID string
+	SeqNo     uint32
+	Height    uint32
+	OptHash   string
+	Digest    string
+	Quorum    int
+	Chain     string
+	ReplicaID string
 }
 
 //Committed Define struct
 type Committed struct {
-	Name         string        `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
-	PrimaryID    string        `protobuf:"bytes,2,opt,name=primaryID" json:"primaryID,omitempty"`
-	Chain        string        `protobuf:"bytes,3,opt,name=chain" json:"chain,omitempty"`
-	ReplicaID    string        `protobuf:"bytes,4,opt,name=replicaID" json:"replicaID,omitempty"`
-	SeqNo        uint64        `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	RequestBatch *RequestBatch `protobuf:"bytes,6,opt,name=requestBatch" json:"requestBatch,omitempty"`
+	SeqNo     uint32
+	Request   *Request
+	Chain     string
+	ReplicaID string
 }
 
 //FetchCommitted Define struct
 type FetchCommitted struct {
-	Chain     string `protobuf:"bytes,1,opt,name=chain" json:"chain,omitempty"`
-	ReplicaID string `protobuf:"bytes,2,opt,name=replicaID" json:"replicaID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,3,opt,name=seqNo" json:"seqNo,omitempty"`
+	SeqNo     uint32
+	Chain     string
+	ReplicaID string
 }
 
 //ViewChange Define struct
 type ViewChange struct {
-	ReplicaID string `protobuf:"bytes,1,opt,name=replicaID" json:"replicaID,omitempty"`
-	Chain     string `protobuf:"bytes,2,opt,name=chain" json:"chain,omitempty"`
-	Priority  int64  `protobuf:"varint,3,opt,name=priority" json:"priority,omitempty"`
-	PrimaryID string `protobuf:"bytes,4,opt,name=primaryID" json:"primaryID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,5,opt,name=seqNo" json:"seqNo,omitempty"`
-	Height    uint32 `protobuf:"varint,6,opt,name=height" json:"height,omitempty"`
-	OptHash   []byte `protobuf:"varint,7,opt,name=optHash" json:"optHash,omitempty"`
-}
-
-//NullRequest Define struct
-type NullRequest struct {
-	ReplicaID string `protobuf:"bytes,1,opt,name=replicaID" json:"replicaID,omitempty"`
-	Chain     string `protobuf:"bytes,2,opt,name=chain" json:"chain,omitempty"`
-	PrimaryID string `protobuf:"bytes,3,opt,name=primaryID" json:"primaryID,omitempty"`
-	SeqNo     uint64 `protobuf:"varint,4,opt,name=seqNo" json:"seqNo,omitempty"`
-	Height    uint32 `protobuf:"varint,5,opt,name=height" json:"height,omitempty"`
-	OptHash   []byte `protobuf:"varint,6,opt,name=optHash" json:"optHash,omitempty"`
+	ID        string
+	Priority  int64
+	PrimaryID string
+	SeqNo     uint32
+	Height    uint32
+	OptHash   string
+	ReplicaID string
+	Chain     string
 }
 
 //MessageType
@@ -194,36 +157,34 @@ type MessageType uint32
 
 const (
 	MESSAGEUNDEFINED      MessageType = 0
-	MESSAGEREQUESTBATCH   MessageType = 1
+	MESSAGEREQUEST        MessageType = 1
 	MESSAGEPREPREPARE     MessageType = 2
 	MESSAGEPREPARE        MessageType = 3
 	MESSAGECOMMIT         MessageType = 4
 	MESSAGECOMMITTED      MessageType = 5
 	MESSAGEFETCHCOMMITTED MessageType = 6
-	MESSAGEVIEWCHANGE     MessageType = 11
-	MESSAGENULLREQUEST    MessageType = 12
+	MESSAGEVIEWCHANGE     MessageType = 7
 )
 
 //Message Define lbft message struct
 type Message struct {
 	// Types that are valid to be assigned to Payload:
-	//	*RequestBatch
+	//	*Request
 	//	*PrePrepare
 	//	*Prepare
 	//	*Commit
 	//	*Committed
 	//	*FetchCommitted
-	//	*Viewchange
-	//	*NullReqest
+	//	*ViewChange
 	Type    MessageType
-	Payload []byte `protobuf_oneof:"payload"`
+	Payload []byte
 }
 
 //GetRequestBatch
-func (m *Message) GetRequestBatch() *RequestBatch {
-	if m.Type == MESSAGEREQUESTBATCH {
-		x := &RequestBatch{}
-		if err := deserialize(m.Payload, x); err != nil {
+func (m *Message) GetRequest() *Request {
+	if m.Type == MESSAGEREQUEST {
+		x := &Request{}
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -235,7 +196,7 @@ func (m *Message) GetRequestBatch() *RequestBatch {
 func (m *Message) GetPrePrepare() *PrePrepare {
 	if m.Type == MESSAGEPREPREPARE {
 		x := &PrePrepare{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -247,7 +208,7 @@ func (m *Message) GetPrePrepare() *PrePrepare {
 func (m *Message) GetPrepare() *Prepare {
 	if m.Type == MESSAGEPREPARE {
 		x := &Prepare{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -259,7 +220,7 @@ func (m *Message) GetPrepare() *Prepare {
 func (m *Message) GetCommit() *Commit {
 	if m.Type == MESSAGECOMMIT {
 		x := &Commit{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -271,7 +232,7 @@ func (m *Message) GetCommit() *Commit {
 func (m *Message) GetCommitted() *Committed {
 	if m.Type == MESSAGECOMMITTED {
 		x := &Committed{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -283,7 +244,7 @@ func (m *Message) GetCommitted() *Committed {
 func (m *Message) GetFetchCommitted() *FetchCommitted {
 	if m.Type == MESSAGEFETCHCOMMITTED {
 		x := &FetchCommitted{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
@@ -291,42 +252,14 @@ func (m *Message) GetFetchCommitted() *FetchCommitted {
 	return nil
 }
 
-//GetViewchange
+//GetViewChange
 func (m *Message) GetViewChange() *ViewChange {
 	if m.Type == MESSAGEVIEWCHANGE {
 		x := &ViewChange{}
-		if err := deserialize(m.Payload, x); err != nil {
+		if err := utils.Deserialize(m.Payload, x); err != nil {
 			panic(err)
 		}
 		return x
 	}
 	return nil
-}
-
-//GetNullReqest
-func (m *Message) GetNullRequest() *NullRequest {
-	if m.Type == MESSAGENULLREQUEST {
-		x := &NullRequest{}
-		if err := deserialize(m.Payload, x); err != nil {
-			panic(err)
-		}
-		return x
-	}
-	return nil
-}
-
-//Broadcast Define consensus data for broadcast
-type Broadcast struct {
-	to  string
-	msg *Message
-}
-
-//To Get target for broadcast
-func (broadcast *Broadcast) To() string {
-	return broadcast.to
-}
-
-//Payload Get consensus data for broadcast
-func (broadcast *Broadcast) Payload() []byte {
-	return broadcast.msg.Serialize()
 }

@@ -27,9 +27,10 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
+
 	"github.com/bocheninc/L0/core/ledger"
-	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -38,8 +39,6 @@ type NetworkStack interface {
 	Relay(inv types.IInventory)
 }
 
-var validTxPoolSize = 1000000
-
 type Status struct {
 	Height uint32
 	Tps    int
@@ -47,13 +46,12 @@ type Status struct {
 
 // Blockchain is blockchain instance
 type Blockchain struct {
-	// global chain config
-	// config
 	mu                 sync.Mutex
 	wg                 sync.WaitGroup
 	currentBlockHeader *types.BlockHeader
 	ledger             *ledger.Ledger
-	txValidator        *Validator
+	// validator
+	validator validator.Validator
 	// consensus
 	consenter consensus.Consenter
 	// network stack
@@ -109,9 +107,18 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 	return bc
 }
 
+// SetBlockchainValidator sets the validator of the blockchain
+func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
+	bc.validator = validator
+	bc.ledger.Validator = bc.validator
+}
+
 // SetBlockchainConsenter sets the consenter of the blockchain
 func (bc *Blockchain) SetBlockchainConsenter(consenter consensus.Consenter) {
 	bc.consenter = consenter
+	if bc.consenter.Name() == "noops" {
+		bc.Start()
+	}
 }
 
 // SetNetworkStack sets the node of the blockchain
@@ -145,19 +152,19 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 
 // GetBalanceNonce returns balance and nonce
 func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) {
-	if bc.txValidator == nil {
+	if bc.validator == nil {
 		amount, nonce, _ := bc.ledger.GetBalance(addr)
-		return amount, nonce + 1
+		return amount, nonce
 	}
-	return bc.txValidator.getBalanceNonce(addr)
+	return bc.validator.GetBalance(addr)
 }
 
 // GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
-	if bc.txValidator != nil && err != nil {
+	if bc.validator != nil && err != nil {
 		var ok bool
-		if tx, ok = bc.txValidator.getTransactionByHash(txHash); ok {
+		if tx, ok = bc.validator.GetTransactionByHash(txHash); ok {
 			return tx, nil
 		}
 	}
@@ -171,7 +178,7 @@ func (bc *Blockchain) Start() {
 	// start consesnus
 	bc.StartConsensusService()
 	// start txpool
-	bc.StartTxPool()
+	bc.StartTxPoolService()
 	log.Debug("BlockChain Service start")
 	// bc.wg.Wait()
 }
@@ -185,16 +192,11 @@ func (bc *Blockchain) StartConsensusService() {
 	go func() {
 		for {
 			select {
-			case commitedTxs := <-bc.consenter.CommittedTxsChannel():
-/*				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
-					break
-				}
-*/
+			case commitedTxs := <-bc.consenter.OutputTxsChannel():
+
 				//add lo
-				log.Infof("Outputs StartConsensusService len=%d",len(commitedTxs.Outputs))
-				for  x  :=range  commitedTxs.Outputs{
-					log.Infof("Outputs StartConsensusService %d",len(commitedTxs.Outputs[x].Transactions))
-				}
+				log.Infof("Outputs StartConsensusService len=%d", len(commitedTxs.Txs))
+
 				height, _ := bc.ledger.Height()
 				height++
 				if commitedTxs.Height == height {
@@ -229,25 +231,15 @@ func (bc *Blockchain) StartConsensusService() {
 }
 
 func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
-	txs, time := bc.txValidator.GetCommittedTxs(output.Outputs)
-	//if txs != nil && len(txs) > 0 {
-	blk := bc.GenerateBlock(txs, time)
+	blk := bc.GenerateBlock(output.Txs, output.Time)
 	if blk.Height() == output.Height {
 		bc.pm.Relay(blk)
-		//bc.ProcessBlock(blk)
 	}
-	//}
 }
 
 // StartTxPool starts txpool service
-func (bc *Blockchain) StartTxPool() {
-	bc.txValidator = NewValidator(bc.ledger)
-	bc.ledger.Validator = bc.txValidator
-	if params.Validator {
-		bc.txValidator.startValidator()
-	} else {
-		bc.txValidator.stopValidator()
-	}
+func (bc *Blockchain) StartTxPoolService() {
+	bc.validator.Start()
 }
 
 // ProcessTransaction processes new transaction from the network
@@ -256,17 +248,13 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	// step 2: add transaction to txPool
 	// if atomic.LoadUint32(&bc.synced) == 0 {
 	log.Debugf("[Blockchain] new tx, tx_hash: %v, tx_sender: %v, tx_nonce: %v", tx.Hash().String(), tx.Sender().String(), tx.Nonce())
-	if bc.txValidator == nil {
+	if bc.validator == nil {
 		return true
 	}
-	if bc.txValidator.getValidatorSize() < validTxPoolSize {
-		if ok := bc.txValidator.PushTxInTxPool(tx); ok {
-			return true
-		}
-	} else {
-		log.Warnf("over max txs in txpool, %d", bc.txValidator.getValidatorSize())
+	if ok := bc.validator.ProcessTransaction(tx); ok {
 		return true
 	}
+
 	return false
 }
 
@@ -307,9 +295,6 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 		merkleRootHash crypto.Hash
 	)
 
-	// log.Debug("Generateblock ", atomicTxs, acrossChainTxs)
-	//merkleRootHash = bc.merkleRootHash(txs)
-
 	blk := types.NewBlock(bc.currentBlockHeader.Hash(),
 		createTime, bc.currentBlockHeader.Height+1,
 		uint32(100),
@@ -317,14 +302,4 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 		txs,
 	)
 	return blk
-}
-
-// StartReceiveTx starts validator tx services
-func (bc *Blockchain) StartReceiveTx() {
-	bc.txValidator.startValidator()
-}
-
-// StopReceiveTx stops validator tx services
-func (bc *Blockchain) StopReceiveTx() {
-	bc.txValidator.stopValidator()
 }

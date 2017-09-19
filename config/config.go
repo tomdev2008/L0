@@ -145,7 +145,6 @@ func loadConfig(cfgFile string) (conf *Config, err error) {
 	cfg.MergeConfig = MergeConfig(cfg.NodeDir)
 	cfg.readLogConfig()
 	vm.VMConf = VMConfig(cfg.LogFile, cfg.LogLevel)
-
 	return cfg, nil
 }
 
@@ -178,6 +177,8 @@ func (cfg *Config) readParamConfig() {
 	params.PublicAddress = pk
 	viper.SetDefault("blockchain.validator", true)
 	params.Validator = viper.GetBool("blockchain.validator")
+	viper.SetDefault("blockchain.maxOccurs", 1)
+	params.MaxOccurs = viper.GetInt("blockchain.maxOccurs")
 }
 
 func (cfg *Config) readLogConfig() {

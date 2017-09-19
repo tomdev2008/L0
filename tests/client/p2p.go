@@ -46,7 +46,7 @@ const (
 	statusMsg = 17
 )
 
-var nodeID string = "0005_abc"
+var nodeID string = "0005_abc" + "_" + time.Now().String()
 
 type Msg struct {
 	Cmd      uint8

@@ -17,8 +17,17 @@ blockchain:
   chainId: "00"
   nodeId: "0002_abc"
   datadir: "datadir/2"
+  maxOccurs: 1
   cpuprofile: "profile/prof_node2"
   profPort: "6062"
+
+validator:
+  status: true
+  blacklisttimeout: 60s
+  txpool:
+    capacity: 1000000
+    timeout: 30m
+    txdelay:  10000
 
 issueaddr:
   addr: ["6ce1bb0858e71b50d603ebe4bec95b11d8833e6d"]
@@ -26,26 +35,25 @@ issueaddr:
 #consensus
 consensus:
   plugin: "lbft"
-    
+
   noops:
-    blockSize: 100
-    blockInterval: 10s
+    batchSize: 10000
+    batchTimeout: 1s
+    blockSize: 10000
+    blockTimeout: 1s
 
   lbft:
     "N": 4
     Q: 3
     K: 10
-    blockSize: 2000
-    blockTimeout: 8s
-    blockInterval: 10s
-    blockDelay: 10s
-    viewChange: 5s
-    resendViewChange: 5s
+    batchSize: 10000
+    batchTimeout: 1s
+    blockSize: 10000
+    blockTimeout: 1s
+    request: 3s
+    viewChange: 2s
+    resendViewChange: 2s
     viewChangePeriod: 0s
-    nullRequest: 5s    
-    bufferSize: 100    
-    maxConcurrentNumFrom: 10
-    maxConcurrentNumTo: 10
 
 # vm
 vm:

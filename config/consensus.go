@@ -36,8 +36,10 @@ func ConsenterOptions() *consenter.Options {
 
 func NoopsOptions() *noops.Options {
 	option := noops.NewDefaultOptions()
+	option.BatchSize = getInt("consensus.noops.batchSize", option.BatchSize)
+	option.BatchTimeout = getDuration("consensus.noops.batchTimeout", option.BatchTimeout)
 	option.BlockSize = getInt("consensus.noops.blockSize", option.BlockSize)
-	option.BlockInterval = getDuration("consensus.noops.blockInterval", option.BlockInterval)
+	option.BlockTimeout = getDuration("consensus.noops.blockTimeout", option.BlockTimeout)
 	return option
 }
 
@@ -48,16 +50,13 @@ func LbftOptions() *lbft.Options {
 	option.N = getInt("consensus.lbft.N", option.N)
 	option.Q = getInt("consensus.lbft.Q", option.Q)
 	option.K = getInt("consensus.lbft.K", option.K)
+	option.BatchSize = getInt("consensus.lbft.batchSize", option.BatchSize)
+	option.BatchTimeout = getDuration("consensus.lbft.batchTimeout", option.BatchTimeout)
 	option.BlockSize = getInt("consensus.lbft.blockSize", option.BlockSize)
-	option.BlockInterval = getDuration("consensus.lbft.blockInterval", option.BlockInterval)
 	option.BlockTimeout = getDuration("consensus.lbft.blockTimeout", option.BlockTimeout)
-	option.BlockDelay = getDuration("consensus.bft.blockDelay", option.BlockDelay)
+	option.Request = getDuration("consensus.lbft.request", option.Request)
 	option.ViewChange = getDuration("consensus.lbft.viewChange", option.ViewChange)
 	option.ResendViewChange = getDuration("consensus.lbft.resendViewChange", option.ViewChange)
 	option.ViewChangePeriod = getDuration("consensus.lbft.viewChangePeriod", option.ViewChangePeriod)
-	option.NullRequest = getDuration("consensus.lbft.nullRequest", option.NullRequest)
-	option.BufferSize = getInt("consensus.lbft.bufferSize", option.BufferSize)
-	option.MaxConcurrentNumFrom = getInt("consensus.lbft.maxConcurrentNumFrom", option.MaxConcurrentNumFrom)
-	option.MaxConcurrentNumTo = getInt("consensus.lbft.maxConcurrentNumTo", option.MaxConcurrentNumTo)
 	return option
 }

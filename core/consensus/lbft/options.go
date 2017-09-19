@@ -20,6 +20,8 @@ package lbft
 
 import "time"
 import "github.com/bocheninc/L0/components/utils"
+import "encoding/hex"
+import "crypto/sha256"
 
 //NewDefaultOptions Create nbft options with default value
 func NewDefaultOptions() *Options {
@@ -29,52 +31,58 @@ func NewDefaultOptions() *Options {
 	options.N = 4
 	options.Q = 3
 	options.K = 20
+
+	options.BatchSize = 2000
+	options.BatchTimeout = 10 * time.Second
 	options.BlockSize = 2000
-	options.BlockTimeout = 8 * time.Second
-	options.BlockInterval = 10 * time.Second
-	options.BlockDelay = 10 * time.Second
-	options.ViewChange = 5 * time.Second
-	options.ResendViewChange = 5 * time.Second
-	options.ViewChangePeriod = 0 * time.Second
-	options.NullRequest = 4 * time.Second
+	options.BlockTimeout = 10 * time.Second
+	options.Request = 20 * time.Second
 	options.BufferSize = 100
-	options.MaxConcurrentNumFrom = 1
-	options.MaxConcurrentNumTo = 1
+
+	options.ViewChange = 2 * time.Second
+	options.ResendViewChange = 2 * time.Second
+	options.ViewChangePeriod = 300 * time.Second
 	return options
 }
 
 //Options Define nbft options
 type Options struct {
-	Chain                string
-	ID                   string
-	Primary              string
-	AutoVote             bool
-	N                    int
-	Q                    int
-	K                    int
-	BlockSize            int
-	BlockTimeout         time.Duration
-	BlockInterval        time.Duration
-	BlockDelay           time.Duration // BlockDelay > BlockInterval > BlockTimeout
-	ViewChange           time.Duration
-	ResendViewChange     time.Duration
-	ViewChangePeriod     time.Duration
-	NullRequest          time.Duration
-	BufferSize           int
-	MaxConcurrentNumFrom int
-	MaxConcurrentNumTo   int
+	Chain string
+	ID    string
+	N     int
+	Q     int
+	K     int
+
+	BatchSize    int
+	BatchTimeout time.Duration
+	BlockSize    int
+	BlockTimeout time.Duration
+	Request      time.Duration
+	BufferSize   int
+
+	ViewChange       time.Duration
+	ResendViewChange time.Duration
+	ViewChangePeriod time.Duration
 }
 
-func (this *Options) Hash() []byte {
+func (this *Options) Hash() string {
 	opt := &Options{}
+	opt.Chain = this.Chain
+	//opt.ID = this.ID
 	opt.N = this.N
 	opt.Q = this.Q
+	opt.K = this.K
+
+	opt.BatchSize = this.BatchSize
+	opt.BatchTimeout = this.BatchTimeout
 	opt.BlockSize = this.BlockSize
-	opt.BlockInterval = this.BlockInterval
 	opt.BlockTimeout = this.BlockTimeout
+	opt.Request = this.Request
+	opt.BufferSize = this.BufferSize
+
 	opt.ViewChange = this.ViewChange
 	opt.ResendViewChange = this.ResendViewChange
 	opt.ViewChangePeriod = this.ViewChangePeriod
-	opt.NullRequest = this.NullRequest
-	return utils.Serialize(opt)
+	h := sha256.Sum256(utils.Serialize(opt))
+	return hex.EncodeToString(h[:])
 }

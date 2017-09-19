@@ -46,8 +46,9 @@ var (
 )
 
 type ValidatorHandler interface {
-	UpdateAccount(tx *types.Transaction)
+	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
+	RemoveTxsInVerification(txs types.Transactions)
 }
 
 // Ledger represents the ledger in blockchain
@@ -134,8 +135,11 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		return nil
 	}
 	delay := time.Since(t)
+
+	ledger.Validator.RemoveTxsInVerification(block.Transactions)
+
 	ledger.contract.StopContract(bh)
-	log.Infoln("append block delay :", delay, " transactions : ", len(block.Transactions))
+	log.Infoln("append block delay :", delay, " remove txs in txpool delay ", time.Since(t), " transactions : ", len(block.Transactions))
 
 	for _, tx := range block.Transactions {
 		if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {

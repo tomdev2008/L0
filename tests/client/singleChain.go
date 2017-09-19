@@ -56,7 +56,7 @@ func sendTx() {
 	for {
 		select {
 		case tx := <-txChan:
-			fmt.Println("Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), " Type:", tx.GetType(), "txChan size:", len(txChan))
+			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 			Relay(NewMsg(0x14, tx.Serialize()))
 		}
 	}
@@ -108,7 +108,7 @@ func generateIssueTx() {
 	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
 	sender := accounts.PublicKeyToAddress(*issueKey.Public())
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 		privateKey, _ := crypto.GenerateKey()
 		list <- privateKey
 		addr := accounts.PublicKeyToAddress(*privateKey.Public())

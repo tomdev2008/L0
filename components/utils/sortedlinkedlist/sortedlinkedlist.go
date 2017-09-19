@@ -1,18 +1,18 @@
 // Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
-// 
+//
 // The L0 is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // The L0 is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// 
+//
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -192,8 +192,8 @@ func IterElement(function func(element IElement) bool) {
 
 //IterElement Iter, thread safe
 func (sll *SortedLinkedList) IterElement(function func(element IElement) bool) {
-	sll.Lock()
-	defer sll.Unlock()
+	sll.RLock()
+	defer sll.RUnlock()
 	for elem := sll.list.Front(); elem != nil; elem = elem.Next() {
 		if function(elem.Value.(IElement)) {
 			break
@@ -235,4 +235,40 @@ func (sll *SortedLinkedList) isSorted() bool {
 		}
 	}
 	return true
+}
+
+//IsExist elemeng if exist
+func IsExist(element IElement) bool { return sortedLinkedList.IsExist(element) }
+
+//IsExist elemeng if exist
+func (sll *SortedLinkedList) IsExist(element IElement) bool {
+	sll.RLock()
+	defer sll.RUnlock()
+	key := sll.key(element)
+	_, ok := sll.mapping[key]
+	return ok
+}
+
+//RemoveFront remove front
+func RemoveFront() { sortedLinkedList.RemoveFront() }
+
+//RemoveFront remove front
+func (sll *SortedLinkedList) RemoveFront() IElement {
+	sll.Lock()
+	defer sll.Unlock()
+	elem := sll.list.Front()
+	sll.list.Remove(elem)
+	key := sll.key(elem.Value.(IElement))
+	delete(sll.mapping, key)
+	return elem.Value.(IElement)
+}
+
+//GetIElementByKey get element
+func GetIElementByKey(key string) IElement { return sortedLinkedList.GetIElementByKey(key) }
+
+//GetIElementByKey get element
+func (sll *SortedLinkedList) GetIElementByKey(key string) IElement {
+	sll.RLock()
+	defer sll.RUnlock()
+	return sll.mapping[key].Value.(IElement)
 }
