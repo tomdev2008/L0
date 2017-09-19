@@ -18,7 +18,11 @@
 
 package consensus
 
-import "github.com/bocheninc/L0/core/types"
+import (
+	"time"
+
+	"github.com/bocheninc/L0/core/types"
+)
 
 //BroadcastConsensus Define consensus data for broadcast
 type BroadcastConsensus struct {
@@ -26,46 +30,44 @@ type BroadcastConsensus struct {
 	Payload []byte
 }
 
-//CommittedTxs Consensus output object
-type CommittedTxs struct {
-	Skip         bool
-	IsLocalChain bool
-	SeqNo        uint64
-	Time         uint32
-	Transactions []*types.Transaction
+//IOptions
+type IOptions interface {
 }
 
 // OutputTxs Consensus output object
 type OutputTxs struct {
-	Outputs []*CommittedTxs
-	Height  uint32
+	Txs    types.Transactions
+	SeqNos []uint32
+	Time   uint32
+	Height uint32
 }
 
 // Consenter Interface for plugin consenser
 type Consenter interface {
+	GetOptions() IOptions
+
 	Start()
 	Stop()
+
 	Quorum() int
+	BatchSize() int
+	PendingSize() int
+	BatchTimeout() time.Duration
+	ProcessBatch(request types.Transactions, function func(bool))
+
 	RecvConsensus([]byte)
 	BroadcastConsensusChannel() <-chan *BroadcastConsensus
-	CommittedTxsChannel() <-chan *OutputTxs
-	ChangeBlockSize(size int)
-}
-
-// ITxPool Interface for tx containter, input
-type ITxPool interface {
-	FetchGroupingTxsInTxPool(groupingNum, maxSizeInGrouping int) []types.Transactions
+	OutputTxsChannel() <-chan *OutputTxs
 }
 
 // BlockchainInfo information of block chain
 type BlockchainInfo struct {
-	LastSeqNo uint64
 	Height    uint32
+	LastSeqNo uint32
 }
 
 // IStack Interface for other function for plugin consenser
 type IStack interface {
-	VerifyTxsInConsensus(txs []*types.Transaction, primary bool) bool
+	VerifyTxs(request types.Transactions, primary bool) bool
 	GetBlockchainInfo() *BlockchainInfo
-	ITxPool
 }

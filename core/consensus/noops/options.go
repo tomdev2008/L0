@@ -25,21 +25,19 @@ import (
 // NewDefaultOptions Create noops options with default
 func NewDefaultOptions() *Options {
 	options := &Options{}
-	options.BlockSize = 100
-	options.BlockInterval = 10 * time.Second
-
-	options.CommitTxChanSize = 100
-	options.CommittedTxsChanSize = 100
-	options.BroadcastChanSize = 100
+	options.BatchSize = 2000
+	options.BatchTimeout = 10 * time.Second
+	options.BlockSize = 2000
+	options.BlockTimeout = 10 * time.Second
+	options.BufferSize = 100
 	return options
 }
 
 // Options Define noops options
 type Options struct {
-	BlockSize     int
-	BlockInterval time.Duration
-
-	CommitTxChanSize     int
-	CommittedTxsChanSize int
-	BroadcastChanSize    int
+	BatchSize    int
+	BatchTimeout time.Duration
+	BlockSize    int
+	BlockTimeout time.Duration
+	BufferSize   int
 }

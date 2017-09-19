@@ -37,12 +37,7 @@ func (stack *Stack) GetBlockchainInfo() *consensus.BlockchainInfo {
 	return &consensus.BlockchainInfo{}
 }
 
-// VerifyTxsInConsensus Implenment consensus.IStack
-func (stack *Stack) VerifyTxsInConsensus(txs []*types.Transaction, primary bool) bool {
+// VerifyTxs Implenment consensus.IStack
+func (stack *Stack) VerifyTxs(txs types.Transactions, primary bool) bool {
 	return true
-}
-
-// FetchGroupingTxsInTxPool  Implenment consensus.IStack
-func (stack *Stack) FetchGroupingTxsInTxPool(groupingNum, maxSizeInGrouping int) []types.Transactions {
-	return nil
 }

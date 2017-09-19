@@ -19,9 +19,9 @@
 package consenter
 
 import (
+	"fmt"
 	"strings"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/consensus/lbft"
 	"github.com/bocheninc/L0/core/consensus/noops"
@@ -32,14 +32,11 @@ func NewConsenter(option *Options, stack consensus.IStack) (consenter consensus.
 	plugin := strings.ToLower(option.Plugin)
 	if plugin == "lbft" {
 		consenter = lbft.NewLbft(option.Lbft, stack)
-	} else {
-		if plugin != "noops" {
-			log.Warnf("Unspport consenter of plugin %s, use default plugin noops", plugin)
-			plugin = "noops"
-		}
+	} else if plugin == "noops" {
 		consenter = noops.NewNoops(option.Noops, stack)
+	} else {
+		panic(fmt.Sprintf("Unspport consenter of plugin %s", plugin))
 	}
-	log.Infof("Consenter %s : %s", plugin, consenter)
 	go consenter.Start()
 	return consenter
 }

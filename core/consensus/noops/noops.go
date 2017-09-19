@@ -25,36 +25,44 @@ import (
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/consensus"
+	"github.com/bocheninc/L0/core/types"
 )
 
 // NewNoops Create Noops
 func NewNoops(options *Options, stack consensus.IStack) *Noops {
 	noops := &Noops{
-		options: options,
-		stack:   stack,
+		options:       options,
+		stack:         stack,
+		pendingChan:   make(chan *batchRequest, options.BufferSize),
+		outputTxsChan: make(chan *consensus.OutputTxs, options.BufferSize),
+		broadcastChan: make(chan *consensus.BroadcastConsensus, options.BufferSize),
 	}
-	if noops.options.CommitTxChanSize < options.BlockSize {
-		noops.options.CommitTxChanSize = options.BlockSize
-	}
-	noops.committedTxsChan = make(chan *consensus.OutputTxs, noops.options.CommittedTxsChanSize)
-	noops.broadcastChan = make(chan *consensus.BroadcastConsensus, noops.options.BroadcastChanSize)
-	noops.blockTimer = time.NewTimer(noops.options.BlockInterval)
-	noops.blockTimer.Stop()
 	noops.seqNo = noops.stack.GetBlockchainInfo().LastSeqNo
 	noops.height = noops.stack.GetBlockchainInfo().Height
+
+	noops.blockTimer = time.NewTimer(noops.options.BlockTimeout)
+	noops.blockTimer.Stop()
 	return noops
+}
+
+type batchRequest struct {
+	Txs      types.Transactions
+	Function func(bool)
 }
 
 // Noops Define Noops
 type Noops struct {
-	options          *Options
-	stack            consensus.IStack
-	committedTxsChan chan *consensus.OutputTxs
-	broadcastChan    chan *consensus.BroadcastConsensus
-	blockTimer       *time.Timer
-	seqNo            uint64
-	height           uint32
-	exit             chan struct{}
+	options *Options
+	stack   consensus.IStack
+	seqNo   uint32
+	height  uint32
+
+	pendingChan   chan *batchRequest
+	outputTxsChan chan *consensus.OutputTxs
+	broadcastChan chan *consensus.BroadcastConsensus
+
+	blockTimer *time.Timer
+	exit       chan struct{}
 }
 
 func (noops *Noops) String() string {
@@ -67,44 +75,60 @@ func (noops *Noops) IsRunning() bool {
 	return noops.exit != nil
 }
 
+//Options
+func (noops *Noops) Options() consensus.IOptions {
+	return noops.options
+}
+
 // Start Start consenter serverice of Noops
 func (noops *Noops) Start() {
 	if noops.IsRunning() {
 		return
 	}
+	log.Infof("noops : %s", noops)
 	noops.exit = make(chan struct{})
-	noops.blockTimer = time.NewTimer(noops.options.BlockInterval)
+	outputTxs := make(types.Transactions, 0)
+	seqNos := make([]uint32, 0)
+	noops.blockTimer.Reset(noops.options.BlockTimeout)
 	for {
 		select {
 		case <-noops.exit:
 			noops.exit = nil
+			noops.processBlock(outputTxs, seqNos)
+			outputTxs = make(types.Transactions, 0)
+			seqNos = make([]uint32, 0)
 			return
+		case batchReq := <-noops.pendingChan:
+			success := noops.stack.VerifyTxs(batchReq.Txs, true)
+			if success {
+				noops.seqNo++
+				seqNos = append(seqNos, noops.seqNo)
+				outputTxs = append(outputTxs, batchReq.Txs...)
+				cnt := len(batchReq.Txs)
+				if cnt == 0 {
+					noops.blockTimer.Reset(noops.options.BlockTimeout)
+				}
+				if cnt >= noops.options.BlockSize {
+					noops.processBlock(outputTxs, seqNos)
+					outputTxs = make(types.Transactions, 0)
+					seqNos = make([]uint32, 0)
+				}
+			}
 		case <-noops.blockTimer.C:
-			noops.processBlock()
+			noops.processBlock(outputTxs, seqNos)
+			outputTxs = make(types.Transactions, 0)
+			seqNos = make([]uint32, 0)
 		}
 	}
 }
 
-func (noops *Noops) processBlock() {
+func (noops *Noops) processBlock(txs types.Transactions, seqNos []uint32) {
 	noops.blockTimer.Stop()
-
-	txss := noops.stack.FetchGroupingTxsInTxPool(noops.options.BlockSize, 1)
-	if len(txss) != 2 {
-		return
+	if len(seqNos) != 0 {
+		noops.height++
+		log.Infof("Noops write block %d (%d transactions)  %v", noops.height, len(txs), seqNos)
+		noops.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: uint32(time.Now().Unix()), Height: noops.height}
 	}
-	txs := txss[1]
-	pass := noops.stack.VerifyTxsInConsensus(txs, true)
-	if !pass {
-		return
-	}
-	noops.seqNo++
-	log.Infof("Noops write block (%d transactions)  %d", len(txs), noops.seqNo)
-	outputs := []*consensus.CommittedTxs{}
-	outputs = append(outputs, &consensus.CommittedTxs{Skip: false, Time: uint32(time.Now().Unix()), Transactions: txs, SeqNo: noops.seqNo})
-	noops.height++
-	noops.committedTxsChan <- &consensus.OutputTxs{Outputs: outputs, Height: noops.height}
-
-	noops.blockTimer = time.NewTimer(noops.options.BlockInterval)
 }
 
 // Stop Stop consenter serverice of Noops
@@ -119,9 +143,29 @@ func (noops *Noops) Quorum() int {
 	return 1
 }
 
+// BatchSize size of batch
+func (noops *Noops) BatchSize() int {
+	return noops.options.BatchSize
+}
+
+// PendingSize size of batch pending
+func (noops *Noops) PendingSize() int {
+	return len(noops.pendingChan)
+}
+
+// BatchTimeout size of batch timeout
+func (noops *Noops) BatchTimeout() time.Duration {
+	return noops.options.BatchTimeout
+}
+
+//ProcessBatches
+func (noops *Noops) ProcessBatch(request types.Transactions, function func(bool)) {
+	noops.pendingChan <- &batchRequest{Txs: request, Function: function}
+}
+
 // RecvConsensus Receive consensus data
 func (noops *Noops) RecvConsensus(payload []byte) {
-	//noops.broadcastChan<-
+	panic("unspport in noops")
 }
 
 // BroadcastConsensusChannel Broadcast consensus data
@@ -129,11 +173,7 @@ func (noops *Noops) BroadcastConsensusChannel() <-chan *consensus.BroadcastConse
 	return noops.broadcastChan
 }
 
-// CommittedTxsChannel Commit block data
-func (noops *Noops) CommittedTxsChannel() <-chan *consensus.OutputTxs {
-	return noops.committedTxsChan
-}
-
-func (noops *Noops) ChangeBlockSize(size int) {
-	noops.options.BlockSize = size
+// OutputTxsChannel Commit block data
+func (noops *Noops) OutputTxsChannel() <-chan *consensus.OutputTxs {
+	return noops.outputTxsChan
 }
