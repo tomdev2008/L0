@@ -44,7 +44,7 @@ type OutputTxs struct {
 
 // Consenter Interface for plugin consenser
 type Consenter interface {
-	GetOptions() IOptions
+	Options() IOptions
 
 	Start()
 	Stop()
@@ -53,7 +53,7 @@ type Consenter interface {
 	BatchSize() int
 	PendingSize() int
 	BatchTimeout() time.Duration
-	ProcessBatch(request types.Transactions, function func(bool, types.Transactions))
+	ProcessBatch(request types.Transactions, function func(int, types.Transactions))
 
 	RecvConsensus([]byte)
 	BroadcastConsensusChannel() <-chan *BroadcastConsensus
