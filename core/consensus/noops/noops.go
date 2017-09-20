@@ -47,7 +47,7 @@ func NewNoops(options *Options, stack consensus.IStack) *Noops {
 
 type batchRequest struct {
 	Txs      types.Transactions
-	Function func(bool)
+	Function func(int, types.Transactions)
 }
 
 // Noops Define Noops
@@ -159,7 +159,7 @@ func (noops *Noops) BatchTimeout() time.Duration {
 }
 
 //ProcessBatches
-func (noops *Noops) ProcessBatch(request types.Transactions, function func(bool)) {
+func (noops *Noops) ProcessBatch(request types.Transactions, function func(int, types.Transactions)) {
 	noops.pendingChan <- &batchRequest{Txs: request, Function: function}
 }
 

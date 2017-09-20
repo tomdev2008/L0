@@ -53,7 +53,7 @@ type Consenter interface {
 	BatchSize() int
 	PendingSize() int
 	BatchTimeout() time.Duration
-	ProcessBatch(request types.Transactions, function func(bool))
+	ProcessBatch(request types.Transactions, function func(bool, types.Transactions))
 
 	RecvConsensus([]byte)
 	BroadcastConsensusChannel() <-chan *BroadcastConsensus
