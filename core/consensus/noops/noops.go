@@ -101,14 +101,13 @@ func (noops *Noops) Start() {
 		case batchReq := <-noops.pendingChan:
 			success := noops.stack.VerifyTxs(batchReq.Txs, true)
 			if success {
+				if len(outputTxs) == 0 {
+					noops.blockTimer.Reset(noops.options.BlockTimeout)
+				}
 				noops.seqNo++
 				seqNos = append(seqNos, noops.seqNo)
 				outputTxs = append(outputTxs, batchReq.Txs...)
-				cnt := len(batchReq.Txs)
-				if cnt == 0 {
-					noops.blockTimer.Reset(noops.options.BlockTimeout)
-				}
-				if cnt >= noops.options.BlockSize {
+				if len(outputTxs) >= noops.options.BlockSize {
 					noops.processBlock(outputTxs, seqNos)
 					outputTxs = make(types.Transactions, 0)
 					seqNos = make([]uint32, 0)
