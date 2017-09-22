@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/base/utils"
 )
 
 //Request Define struct
