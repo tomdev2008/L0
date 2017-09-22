@@ -26,9 +26,9 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/base/utils"
 )
 
 //MINQUORUM  Define min quorum
@@ -441,6 +441,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.primaryID = vc.PrimaryID
 	lbft.seqNo = vc.SeqNo
 	lbft.height = vc.Height
+	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 	lbft.coreStore = make(map[string]*lbftCore)
 	for seqNo := range lbft.committedRequests {
