@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"net/rpc"
 	"net/rpc/jsonrpc"
-	"strconv"
 	"strings"
 
 	"encoding/json"
@@ -543,8 +542,8 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
-		size, _ := strconv.Atoi(string(msg.Payload))
-		pm.consenter.ChangeBlockSize(size)
+		// size, _ := strconv.Atoi(string(msg.Payload))
+		//pm.consenter.ChangeBlockSize(size)
 		log.Debugf("change consensus config cmd : %v transaction msg from message net %v:%v ,src: %v, payload: %s", msg.Cmd, id[0], id[1], src, string(msg.Payload))
 	default:
 		log.Debug("not know msgnet.type...")
