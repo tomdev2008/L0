@@ -1,4 +1,3 @@
-// Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
 //
@@ -16,21 +15,24 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package blockchain
+package validator
 
-import (
-	"github.com/bocheninc/L0/core/consensus"
-	"github.com/bocheninc/L0/core/types"
-)
+import "time"
 
-//VerifyTxsInConsensus verify
-func (bc *Blockchain) VerifyTxs(txs []*types.Transaction, primary bool) bool {
-	return bc.txValidator.VerifyTransactions(txs)
+type Config struct {
+	IsValid        bool
+	TxPoolCapacity int
+	TxPoolTimeOut  time.Duration
+	BlacklistDur   time.Duration
 }
 
-func (bc *Blockchain) GetBlockchainInfo() *consensus.BlockchainInfo {
-	height, _ := bc.ledger.Height()
-	return &consensus.BlockchainInfo{
-		Height: height,
+var config *Config
+
+func DefaultConfig() *Config {
+	return &Config{
+		IsValid:        true,
+		TxPoolCapacity: 200000,
+		TxPoolTimeOut:  10 * time.Minute,
+		BlacklistDur:   1 * time.Minute,
 	}
 }

@@ -16,21 +16,33 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package blockchain
+package validator
 
 import (
-	"github.com/bocheninc/L0/core/consensus"
+	"math/big"
+
+	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/types"
 )
 
-//VerifyTxsInConsensus verify
-func (bc *Blockchain) VerifyTxs(txs []*types.Transaction, primary bool) bool {
-	return bc.txValidator.VerifyTransactions(txs)
+type account struct {
+	balance *big.Int
+	nonce   uint32
 }
 
-func (bc *Blockchain) GetBlockchainInfo() *consensus.BlockchainInfo {
-	height, _ := bc.ledger.Height()
-	return &consensus.BlockchainInfo{
-		Height: height,
+func newAccount(address accounts.Address, leger *ledger.Ledger) *account {
+	amount, nonce, _ := leger.GetBalance(address)
+	return &account{
+		balance: amount,
+		nonce:   nonce,
 	}
+}
+
+func (a *account) updateTransactionReceiverBalance(tx *types.Transaction) {
+	a.balance = a.balance.Add(a.balance, tx.Amount())
+}
+
+func (a *account) updateTransactionSenderBalance(tx *types.Transaction) {
+	a.balance = a.balance.Sub(a.balance, tx.Amount())
 }

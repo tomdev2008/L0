@@ -27,9 +27,9 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/ledger"
-	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -53,7 +53,7 @@ type Blockchain struct {
 	wg                 sync.WaitGroup
 	currentBlockHeader *types.BlockHeader
 	ledger             *ledger.Ledger
-	txValidator        *Validator
+	txValidator        *validator.Validator
 	// consensus
 	consenter consensus.Consenter
 	// network stack
@@ -147,9 +147,9 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) {
 	if bc.txValidator == nil {
 		amount, nonce, _ := bc.ledger.GetBalance(addr)
-		return amount, nonce + 1
+		return amount, nonce
 	}
-	return bc.txValidator.getBalanceNonce(addr)
+	return bc.txValidator.GetBalance(addr)
 }
 
 // GetTransaction returns transaction in ledger first then txBool
@@ -157,7 +157,7 @@ func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, er
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
 	if bc.txValidator != nil && err != nil {
 		var ok bool
-		if tx, ok = bc.txValidator.getTransactionByHash(txHash); ok {
+		if tx, ok = bc.txValidator.GetTransactionByHash(txHash); ok {
 			return tx, nil
 		}
 	}
@@ -185,16 +185,11 @@ func (bc *Blockchain) StartConsensusService() {
 	go func() {
 		for {
 			select {
-			case commitedTxs := <-bc.consenter.CommittedTxsChannel():
-/*				if len(commitedTxs.Outputs[0].Transactions) > 0 && commitedTxs.Outputs[0].Skip != true {
-					break
-				}
-*/
+			case commitedTxs := <-bc.consenter.OutputTxsChannel():
+
 				//add lo
-				log.Infof("Outputs StartConsensusService len=%d",len(commitedTxs.Outputs))
-				for  x  :=range  commitedTxs.Outputs{
-					log.Infof("Outputs StartConsensusService %d",len(commitedTxs.Outputs[x].Transactions))
-				}
+				log.Infof("Outputs StartConsensusService len=%d", len(commitedTxs.Txs))
+
 				height, _ := bc.ledger.Height()
 				height++
 				if commitedTxs.Height == height {
@@ -229,25 +224,16 @@ func (bc *Blockchain) StartConsensusService() {
 }
 
 func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
-	txs, time := bc.txValidator.GetCommittedTxs(output.Outputs)
-	//if txs != nil && len(txs) > 0 {
-	blk := bc.GenerateBlock(txs, time)
+	blk := bc.GenerateBlock(output.Txs, output.Time)
 	if blk.Height() == output.Height {
 		bc.pm.Relay(blk)
-		//bc.ProcessBlock(blk)
 	}
-	//}
 }
 
 // StartTxPool starts txpool service
 func (bc *Blockchain) StartTxPool() {
-	bc.txValidator = NewValidator(bc.ledger)
+	bc.txValidator = validator.NewValidator(bc.ledger, validator.DefaultConfig(), bc.consenter)
 	bc.ledger.Validator = bc.txValidator
-	if params.Validator {
-		bc.txValidator.startValidator()
-	} else {
-		bc.txValidator.stopValidator()
-	}
 }
 
 // ProcessTransaction processes new transaction from the network
@@ -259,14 +245,10 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	if bc.txValidator == nil {
 		return true
 	}
-	if bc.txValidator.getValidatorSize() < validTxPoolSize {
-		if ok := bc.txValidator.PushTxInTxPool(tx); ok {
-			return true
-		}
-	} else {
-		log.Warnf("over max txs in txpool, %d", bc.txValidator.getValidatorSize())
+	if ok := bc.txValidator.PushTxInTxPool(tx); ok {
 		return true
 	}
+
 	return false
 }
 
@@ -317,14 +299,4 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 		txs,
 	)
 	return blk
-}
-
-// StartReceiveTx starts validator tx services
-func (bc *Blockchain) StartReceiveTx() {
-	bc.txValidator.startValidator()
-}
-
-// StopReceiveTx stops validator tx services
-func (bc *Blockchain) StopReceiveTx() {
-	bc.txValidator.stopValidator()
 }
