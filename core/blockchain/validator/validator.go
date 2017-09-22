@@ -53,26 +53,28 @@ func NewValidator(ledger *ledger.Ledger, config *Config, consenter consensus.Con
 }
 
 func (vr *Validator) Start() {
+	log.Info("validator start ...")
 	for {
 		requestBatch := vr.txpool.getTxs(vr.consenter.BatchSize(), vr.consenter.BatchTimeout())
+		log.Debugln("validator get request batch len: ", len(requestBatch))
 		if len(requestBatch) != 0 {
 			vr.consenter.ProcessBatch(requestBatch, vr.consensusFailed)
 		} else {
-			time.Sleep(1 * time.Second)
+			log.Debugln("txPool have no transaction ...")
+			time.Sleep(5 * time.Second)
 		}
 	}
 }
 
 func (vr *Validator) consensusFailed(flag int, txs types.Transactions) {
 	switch flag {
-	// verify succeed
+	// not use verify
 	case 0:
-	//nothing todo
-
-	// verify failed
+		vr.txpool.backCursor(len(txs))
+		log.Debug("[validator] not use verify")
+	// use verify
 	case 1:
-		vr.txpool.resetCursor()
-
+		log.Debug("[validator] use verify")
 	// consensus succeed
 	case 2:
 	//nothing todo
@@ -82,6 +84,7 @@ func (vr *Validator) consensusFailed(flag int, txs types.Transactions) {
 		for _, tx := range txs {
 			vr.RollBackAccount(tx)
 		}
+		vr.txpool.backCursor(len(txs))
 	default:
 		log.Error("[validator] not support this flag ...")
 	}

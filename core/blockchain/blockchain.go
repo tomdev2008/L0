@@ -234,6 +234,7 @@ func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 func (bc *Blockchain) StartTxPool() {
 	bc.txValidator = validator.NewValidator(bc.ledger, validator.DefaultConfig(), bc.consenter)
 	bc.ledger.Validator = bc.txValidator
+	bc.txValidator.Start()
 }
 
 // ProcessTransaction processes new transaction from the network
@@ -288,9 +289,6 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 		// default value is empty hash
 		merkleRootHash crypto.Hash
 	)
-
-	// log.Debug("Generateblock ", atomicTxs, acrossChainTxs)
-	//merkleRootHash = bc.merkleRootHash(txs)
 
 	blk := types.NewBlock(bc.currentBlockHeader.Hash(),
 		createTime, bc.currentBlockHeader.Height+1,

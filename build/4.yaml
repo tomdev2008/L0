@@ -7,7 +7,7 @@ net:
     routeAddress: ["127.0.0.1:9999"]
 
 log:
-  level: "debug"
+  level: "noops"
 
 jrpc:
   enabled: true
