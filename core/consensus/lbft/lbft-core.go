@@ -19,497 +19,458 @@
 package lbft
 
 import (
+	"encoding/hex"
+	"sort"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/components/utils/vote"
+	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/core/consensus"
+	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
-func newLbftCore(name string, lbft *Lbft) *lbftCore {
-	lbftCore := &lbftCore{
-		name:            name,
-		lbft:            lbft,
-		msgChan:         make(chan *Message, lbft.options.BufferSize),
-		exit:            make(chan struct{}),
-		prepareVote:     vote.NewVote(),
-		commitVote:      vote.NewVote(),
-		prePrepareAsync: lbft.prePrepareAsync,
-		commitAsync:     lbft.commitAsync,
-		firstTime:       time.Now(),
-	}
-	lbftCore.clsTimeoutTimer = time.NewTimer(2 * lbft.options.BlockTimeout)
-	go func() {
-		select {
-		case <-lbftCore.clsTimeoutTimer.C:
-			lbft.removeInstance(name)
-			close(lbftCore.msgChan)
-		case <-lbftCore.exit:
-		}
-	}()
-	return lbftCore
-}
-
 type lbftCore struct {
-	name            string
-	lbft            *Lbft
-	msgChan         chan *Message
-	prepareVote     *vote.Vote
-	commitVote      *vote.Vote
-	clsTimeoutTimer *time.Timer
-
-	prePrepareAsync *asyncSeqNo
-	commitAsync     *asyncSeqNo
-
-	isPassPrePrepare bool
-	isPassPrepare    bool
-	isPassCommit     bool
-	requestBatch     *RequestBatch
-	fromChain        string
-	toChain          string
-	seqNo            uint64
-	digest           string
-
-	exit      chan struct{}
-	isRunnig  bool
-	firstTime time.Time
+	digest       string
+	fromChain    string
+	toChain      string
+	prePrepare   *PrePrepare
+	prepare      []*Prepare
+	passPrepare  bool
+	commit       []*Commit
+	passCommit   bool
+	newViewTimer *time.Timer
 }
 
-func (instance *lbftCore) recvMessage(msg *Message) {
-	if msg != nil {
-		if pprep := msg.GetPrePrepare(); pprep != nil {
-			log.Debugf("Replica %s core consenter %s received preprepare message from %s --- instance", instance.lbft.options.ID, pprep.Name, pprep.ReplicaID)
-			instance.start()
-		} else if prep := msg.GetPrepare(); prep != nil {
-			log.Debugf("Replica %s core consenter %s received prepare message from %s --- instance", instance.lbft.options.ID, prep.Name, prep.ReplicaID)
-		} else if cmt := msg.GetCommit(); cmt != nil {
-			log.Debugf("Replica %s core consenter %s received commit message from %s --- instance", instance.lbft.options.ID, cmt.Name, cmt.ReplicaID)
-		}
-		instance.msgChan <- msg
+func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
+	core, ok := lbft.coreStore[digest]
+	if ok {
+		return core
 	}
+
+	core = &lbftCore{
+		digest: digest,
+	}
+	lbft.coreStore[digest] = core
+	return core
 }
 
-func (instance *lbftCore) start() {
-	if instance.isRunnig {
-		log.Warnf("Replica %s core consenter %s alreay started", instance.lbft.options.ID, instance.name)
-		return
-	}
-	if time.Since(instance.firstTime) > instance.lbft.options.BlockTimeout {
-		log.Warnf("Replica %s core consenter %s delay too long", instance.lbft.options.ID, instance.name)
-		return
-	}
-	instance.isRunnig = true
-	instance.clsTimeoutTimer.Stop()
-	timeoutTimer := time.NewTimer(instance.lbft.options.BlockTimeout - time.Since(instance.firstTime))
-	go func() {
-		for {
-			select {
-			case <-timeoutTimer.C:
-				if !instance.isPassCommit {
-					if instance.seqNo > instance.lbft.lastSeqNum() {
-						log.Debugf("Replica %s send view change for consensus %s : timeout (%d > %d)", instance.lbft.options.ID, instance.name, instance.seqNo, instance.lbft.lastSeqNum())
-						//if instance.lbft.options.AutoVote {
-						instance.lbft.sendViewChange(nil)
-						//}
-					}
-				}
-			case <-instance.exit:
-				close(instance.msgChan)
-				if !instance.isPassCommit {
-					if instance.seqNo > instance.lbft.verifySeqNum() {
-						log.Errorf("Replica %s failed to verify for consensus %s :  wrong verifySeqNo (%d <= %d),  previous verify failed ", instance.lbft.options.ID, instance.name, instance.seqNo, instance.lbft.verifySeqNum())
-					}
-					if instance.seqNo > instance.lbft.lastSeqNum() {
-						log.Warnf("Replica %s is failed for consensus %s (%d<=%d)", instance.lbft.options.ID, instance.name, instance.seqNo, instance.lbft.lastSeqNum())
-					}
-				}
-				instance.prePrepareAsync.notify(instance.seqNo)
-				instance.commitAsync.notify(instance.seqNo)
-				//instance.deltaTime[4] = time.Since(instance.startTime)
-				//log.Infof("lbft_core_cost_time(%s)  deltatime(%s,%s,%s,%s) txs(%d)", instance.name, instance.deltaTime[1], instance.deltaTime[2], instance.deltaTime[3], instance.deltaTime[4], len(instance.requestBatch.Requests))
-				log.Debugf("Replica %s core consenter %s stopped", instance.lbft.options.ID, instance.name)
-				return
-			case msg := <-instance.msgChan:
-				switch tp := msg.Type; tp {
-				case MESSAGEPREPREPARE:
-					go instance.handlePrePrepare(msg.GetPrePrepare())
-				case MESSAGEPREPARE:
-					instance.handlePrepare(msg.GetPrepare())
-				case MESSAGECOMMIT:
-					instance.handleCommit(msg.GetCommit())
-				default:
-					log.Warnf("unsupport core consensus message type %v ", tp)
-				}
+func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
+	lbft.stopNewViewTimer()
+	if core.newViewTimer == nil {
+		core.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
+			vc := &ViewChange{
+				ID:        core.digest,
+				Priority:  lbft.priority,
+				PrimaryID: lbft.options.ID,
+				SeqNo:     lbft.lastExec,
+				Height:    lbft.height,
+				Hash:      hex.EncodeToString(lbft.options.Hash()),
+				ReplicaID: lbft.options.ID,
+				Chain:     lbft.options.Chain,
 			}
-		}
-	}()
-	log.Debugf("Replica %s core consenter %s started", instance.lbft.options.ID, instance.name)
-}
-
-func (instance *lbftCore) stop() {
-	if !instance.isRunnig {
-		log.Warnf("Replica %s core consenter %s alreay stopped", instance.lbft.options.ID, instance.name)
-		return
-	}
-	instance.isRunnig = false
-	close(instance.exit)
-}
-
-func (instance *lbftCore) isCross() bool {
-	return instance.fromChain != instance.toChain
-}
-
-func (instance *lbftCore) handleRequestBatch(seqNo uint64, requestBatch *RequestBatch) {
-	instance.seqNo = seqNo
-	instance.start()
-	if requestBatch.ID == EMPTYBLOCK {
-		instance.fromChain = instance.lbft.options.Chain
-		instance.toChain = instance.lbft.options.Chain
-	} else {
-		instance.fromChain = requestBatch.fromChain()
-		instance.toChain = requestBatch.toChain()
-	}
-	var verfiy bool
-	instance.prePrepareAsync.wait(instance.seqNo, func() {
-		log.Debugf("Replica %s handle requestBatch for consensus %s : seqNo %d (async preprepare)", instance.lbft.options.ID, instance.name, instance.seqNo)
-		instance.waitForVerify()
-		if requestBatch.ID != EMPTYBLOCK && requestBatch.Index == 0 && instance.fromChain == instance.lbft.options.Chain {
-			t := time.Now()
-			pass := instance.lbft.stack.VerifyTxsInConsensus(instance.lbft.toTxs(requestBatch), true)
-			log.Debugf("Replica %s VerifyTxsInConsensus elapsed %s for consensus %s(%d)", instance.lbft.options.ID, time.Now().Sub(t), instance.name, instance.seqNo)
-			_ = pass
-
-		}
-		if instance.fromChain != instance.toChain && instance.fromChain == instance.lbft.options.Chain {
-			log.Infof("Replica %s broadcast requestBatch message to %s  for consensus %s (%d transactions)", instance.lbft.options.ID, instance.toChain, instance.name, len(requestBatch.Requests))
-			instance.lbft.broadcast(instance.toChain, &Message{Type: MESSAGEREQUESTBATCH, Payload: serialize(requestBatch)})
-		}
-
-		instance.lbft.incrVerifySeqNum()
-		verfiy = true
-	})
-
-	if !verfiy {
-		log.Errorf("Replica %s for consensus %s failed to verify %d", instance.lbft.options.ID, instance.name, instance.seqNo)
-	}
-
-	log.Infof("Replica %s received requestBatch message for consensus %s (%d transactions) (seqNo %d)", instance.lbft.options.ID, instance.name, len(requestBatch.Requests), instance.seqNo)
-
-	prePrepare := &PrePrepare{
-		Name:      instance.name,
-		PrimaryID: instance.lbft.options.ID,
-		Chain:     instance.lbft.options.Chain,
-		ReplicaID: instance.lbft.options.ID,
-		SeqNo:     instance.seqNo,
-		// Digest:    hash(requestBatch),
-		// Quorum:    uint64(instance.lbft.intersectionQuorum()),
-		Requests: requestBatch,
-	}
-	log.Infof("Replica %s send prePrepare message for consensus %s (%d transactions)", instance.lbft.options.ID, instance.name, len(requestBatch.Requests))
-	instance.handlePrePrepare(prePrepare)
-	instance.lbft.broadcast(instance.lbft.options.Chain, &Message{Type: MESSAGEPREPREPARE, Payload: serialize(prePrepare)})
-
-}
-
-func (instance *lbftCore) handlePrePrepare(preprep *PrePrepare) {
-	if preprep == nil {
-		return
-	}
-	if instance.isPassPrePrepare {
-		log.Errorf("Replica %s received prePrepare message from %s for consensus %s : alreay exist ", instance.lbft.options.ID, preprep.ReplicaID, instance.name)
-		return
-	}
-
-	requestBatch := preprep.Requests
-	var fromChain, toChain string
-	if requestBatch.ID == EMPTYBLOCK {
-		fromChain = instance.lbft.options.Chain
-		toChain = instance.lbft.options.Chain
-	} else {
-		fromChain = requestBatch.fromChain()
-		toChain = requestBatch.toChain()
-	}
-
-	instance.fromChain = fromChain
-	instance.toChain = toChain
-	instance.seqNo = preprep.SeqNo
-
-	if !instance.lbft.isPrimary() {
-		if !instance.lbft.isValid(requestBatch, fromChain == instance.lbft.options.Chain) {
-			log.Errorf("Replica %s received requestBatch message  for consensus %s (%d transactions): illegal requestBatch", instance.lbft.options.ID, instance.name, len(requestBatch.Requests))
-			return
-		}
-		var verify bool
-		instance.prePrepareAsync.wait(instance.seqNo, func() {
-			log.Debugf("Replica %s handle preprepare for consensus %s : seqNo %d (async preprepare)", instance.lbft.options.ID, instance.name, instance.seqNo)
-			instance.waitForVerify()
-			if requestBatch.ID != EMPTYBLOCK && requestBatch.Index == 0 && instance.lbft.options.Chain == fromChain && instance.seqNo > instance.lbft.seqNum() {
-				//instance.lbft.stack.Removes(instance.lbft.toTxs(requestBatch))
-				t := time.Now()
-				pass := instance.lbft.stack.VerifyTxsInConsensus(instance.lbft.toTxs(requestBatch), false)
-				log.Debugf("Replica %s VerifyTxsInConsensus elapsed %s for consensus %s(%d)", instance.lbft.options.ID, time.Now().Sub(t), instance.name, instance.seqNo)
-				if !pass {
-					log.Errorf("Replica %s received prePrepare message from %s for consensus %s : different digest", instance.lbft.options.ID, preprep.ReplicaID, instance.name)
-					return
-				}
-			}
-			instance.lbft.incrVerifySeqNum()
-			verify = true
+			lbft.sendViewChange(vc)
 		})
-		if !verify {
-			log.Errorf("Replica %s for consensus %s failed to verify %d", instance.lbft.options.ID, instance.name, instance.seqNo)
-			return
+	}
+}
+
+func (lbft *Lbft) stopNewViewTimerForCore(core *lbftCore) {
+	if core.newViewTimer != nil {
+		core.newViewTimer.Stop()
+		core.newViewTimer = nil
+	}
+}
+
+func (lbft *Lbft) maybePassPrepare(core *lbftCore) bool {
+	nfq := 0
+	ntq := 0
+	fq := 0
+	tq := 0
+	self := false
+	hasPrimary := false
+	for _, prepare := range core.prepare {
+		if prepare.Chain != core.fromChain && prepare.Chain != core.toChain {
+			continue
+		} else if lbft.options.Chain == prepare.Chain {
+			if core.prePrepare.SeqNo != prepare.SeqNo || core.prePrepare.PrimaryID != prepare.PrimaryID || core.prePrepare.Quorum == prepare.Quorum {
+				continue
+			}
+			if prepare.ReplicaID == lbft.options.ID {
+				self = true
+			}
+			if prepare.ReplicaID == prepare.PrimaryID {
+				hasPrimary = true
+			}
 		}
-	} else if requestBatch.ID != EMPTYBLOCK {
-		if instance.toChain == instance.fromChain {
-			instance.lbft.resetEmptyBlockTimer()
-		} else {
-			log.Debugf("Replica %s start cross chain empty block", instance.lbft.options.ID)
-			instance.lbft.softResetEmptyBlockTimer()
+		if prepare.Chain == core.fromChain {
+			nfq++
+			fq = prepare.Quorum
+		} else if prepare.Chain == core.toChain {
+			ntq++
+			tq = prepare.Quorum
+		}
+	}
+	log.Debugf("Replica %s received Prepare for consensus %s, voted: %d(%d/%d,%d/%d,%v)", lbft.options.ID, core.digest, len(core.prepare), fq, nfq, tq, ntq, self)
+	return hasPrimary && self && nfq >= fq && ntq >= tq
+}
+
+func (lbft *Lbft) maybePassCommit(core *lbftCore) bool {
+	nfq := 0
+	ntq := 0
+	fq := 0
+	tq := 0
+	self := false
+	hasPrimary := false
+	for _, commit := range core.commit {
+		if commit.Chain != core.fromChain && commit.Chain != core.toChain {
+			continue
+		} else if lbft.options.Chain == commit.Chain {
+			if core.prePrepare.SeqNo != commit.SeqNo || core.prePrepare.PrimaryID != commit.PrimaryID || core.prePrepare.Quorum != commit.Quorum {
+				continue
+			}
+			if commit.ReplicaID == lbft.options.ID {
+				self = true
+			}
+			if commit.ReplicaID == commit.PrimaryID {
+				hasPrimary = true
+			}
+		}
+		if commit.Chain == core.fromChain {
+			nfq++
+			fq = commit.Quorum
+		} else if commit.Chain == core.toChain {
+			ntq++
+			tq = commit.Quorum
+		}
+	}
+	log.Debugf("Replica %s received Commit for consensus %s, voted: %d(%d/%d,%d/%d,%v)", lbft.options.ID, core.digest, len(core.commit), fq, nfq, tq, ntq, self)
+	return hasPrimary && self && nfq >= fq && ntq >= tq
+}
+
+func (lbft *Lbft) recvRequest(request *Request) *Message {
+	digest := request.Name()
+	if lbft.isPrimary() {
+		fromChain := request.fromChain()
+		toChain := request.toChain()
+		if request.ID == EMPTYREQUEST {
+			fromChain = lbft.options.Chain
+			toChain = lbft.options.Chain
+		}
+		if !request.isValid() || (fromChain != lbft.options.Chain && toChain != lbft.options.Chain) {
+			log.Errorf("Replica %s received Request for consensus %s: illegal request", lbft.options.ID, digest)
+			return nil
+		}
+
+		if lbft.options.Chain != toChain {
+			lbft.broadcast(toChain, &Message{
+				Type:    MESSAGEREQUEST,
+				Payload: utils.Serialize(request),
+			})
+		} else if fromChain != toChain {
+			if !lbft.stack.VerifyTxs(request.Txs, true) {
+				log.Errorf("Replica %s received Request for consensus %s: failed to verify", lbft.options.ID, digest)
+				return nil
+			}
+		}
+
+		seqNo := lbft.seqNo + 1
+		log.Debugf("Replica %d received Request for consensus %s", lbft.options.ID, digest)
+
+		preprepare := &PrePrepare{
+			PrimaryID: lbft.primaryID,
+			SeqNo:     seqNo,
+			//Digest:    digest,
+			Chain:     lbft.options.Chain,
+			ReplicaID: lbft.options.ID,
+			Quorum:    lbft.Quorum(),
+			Request:   request,
+		}
+
+		log.Debugf("Replica %s send PrePrepare for consensus %s", lbft.options.ID, digest)
+		lbft.recvPrePrepare(preprepare)
+		lbft.broadcast(lbft.options.Chain, &Message{
+			Type:    MESSAGEPREPREPARE,
+			Payload: utils.Serialize(preprepare),
+		})
+	} else {
+		log.Debugf("Replica %d received Request for consensus %s: backup, ignore ", lbft.options.ID, digest)
+	}
+	return nil
+}
+
+func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
+	if preprepare.Request == nil {
+		return nil
+	}
+	digest := preprepare.Request.Name()
+	core := lbft.getlbftCore(digest)
+	if preprepare.ReplicaID != lbft.primaryID {
+		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, diff primayID (%s==%s)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.PrimaryID, lbft.primaryID)
+		return nil
+	}
+	if preprepare.SeqNo != lbft.seqNo+1 {
+		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong seqNo (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo, lbft.seqNo+1)
+		return nil
+	}
+	if core.prePrepare != nil {
+		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: alreay exist ", lbft.options.ID, preprepare.ReplicaID, digest)
+		return nil
+	}
+
+	fromChain := preprepare.Request.fromChain()
+	toChain := preprepare.Request.toChain()
+	if preprepare.Request.ID == EMPTYREQUEST {
+		fromChain = lbft.options.Chain
+		toChain = lbft.options.Chain
+	}
+	if !lbft.isPrimary() {
+		if !preprepare.Request.isValid() || (fromChain != lbft.options.Chain && toChain != lbft.options.Chain) {
+			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: illegal request", lbft.options.ID, preprepare.ReplicaID, digest)
+			return nil
+		}
+
+		if !lbft.stack.VerifyTxs(preprepare.Request.Txs, false) {
+			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: failed to verify", lbft.options.ID, preprepare.ReplicaID, digest)
+			return nil
 		}
 	}
 
-	log.Infof("Replica %s received prePrepare message from %s for consensus %s (%d transactions)", instance.lbft.options.ID, preprep.ReplicaID, instance.name, len(requestBatch.Requests))
+	log.Debugf("Replica %s received PrePrepare from %s for consensus %s", lbft.options.ID, preprepare.ReplicaID, digest)
 
-	instance.requestBatch = requestBatch
-	// instance.fromChain = fromChain
-	// instance.toChain = toChain
-	//instance.seqNo = preprep.SeqNo
-	instance.digest = hash(instance.requestBatch)
-	instance.isPassPrePrepare = true
+	lbft.newViewTimer.Stop()
+	lbft.startNewViewTimerForCore(core)
+	core.fromChain = fromChain
+	core.toChain = toChain
+	core.prePrepare = preprepare
+	lbft.seqNo = preprepare.SeqNo
 	prepare := &Prepare{
-		Name:      instance.name,
-		PrimaryID: instance.lbft.primaryID,
-		Chain:     instance.lbft.options.Chain,
-		ReplicaID: instance.lbft.options.ID,
-		SeqNo:     instance.seqNo,
-		Digest:    instance.digest,
-		Quorum:    uint64(instance.lbft.intersectionQuorum()),
+		PrimaryID: lbft.primaryID,
+		SeqNo:     preprepare.SeqNo,
+		Digest:    digest,
+		Quorum:    lbft.Quorum(),
+		Chain:     lbft.options.Chain,
+		ReplicaID: lbft.options.ID,
 	}
-	log.Infof("Replica %s send prepare message for consensus %s (%d transactions)", instance.lbft.options.ID, instance.name, len(instance.requestBatch.Requests))
-	instance.handlePrepare(prepare)
-	instance.broadcast(&Message{Type: MESSAGEPREPARE, Payload: serialize(prepare)})
+
+	log.Debugf("Replica %s send Prepare for consensus %s", lbft.options.ID, prepare.Digest)
+	lbft.recvPrepare(prepare)
+	lbft.broadcast(core.fromChain, &Message{Type: MESSAGEPREPARE, Payload: utils.Serialize(prepare)})
+	if core.fromChain != core.toChain {
+		lbft.broadcast(core.toChain, &Message{Type: MESSAGEPREPARE, Payload: utils.Serialize(prepare)})
+	}
+	return nil
 }
 
-func (instance *lbftCore) handlePrepare(prepare *Prepare) {
-	if prepare == nil {
-		return
-	}
-	if instance.isPassPrePrepare {
-		if prepare.Chain != instance.fromChain && prepare.Chain != instance.toChain {
-			log.Errorf("Replica %s received prepare message from %s for consensus %s: illegal prepare", instance.lbft.options.ID, prepare.ReplicaID, instance.name)
-			return
+func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
+	if prepare.Chain == lbft.options.Chain {
+		if prepare.PrimaryID != lbft.primaryID {
+			log.Errorf("Replica %s received Prepare from %s for consensus %s :  ignore, diff primayID (%s==%s)", lbft.options.ID, prepare.ReplicaID, prepare.Digest, prepare.PrimaryID, lbft.primaryID)
+			return nil
 		}
-
-		if prepare.Chain == instance.lbft.options.Chain && prepare.SeqNo != instance.seqNo {
-			log.Errorf("Replica %s received prepare message from %s for consensus %s : different seqNo (%d == %d) ", instance.lbft.options.ID, prepare.ReplicaID, instance.name, instance.seqNo, prepare.SeqNo)
-			return
-		}
-
-		if prepare.Digest != instance.digest {
-			log.Errorf("Replica %s received prepare message from %s for consensus %s : different digest (%s == %s)", instance.lbft.options.ID, prepare.ReplicaID, instance.name, instance.digest, prepare.Digest)
-			return
+		if _, ok := lbft.coreStore[prepare.Digest]; !ok && prepare.SeqNo <= lbft.lastExec {
+			log.Errorf("Replica %s received Prepare from %s for consensus %s :  ignore, delay(%d>%d)", lbft.options.ID, prepare.ReplicaID, prepare.Digest, prepare.SeqNo, lbft.lastExec)
+			return nil
 		}
 	}
 
-	instance.prepareVote.Add(prepare.ReplicaID, prepare)
-	log.Infof("Replica %s received prepare message from %s for consensus %s, voted %d", instance.lbft.options.ID, prepare.ReplicaID, prepare.Name, instance.prepareVote.Size())
-	if instance.isPassPrepare == false && instance.maybePreparePass() {
-		commit := &Commit{
-			Name:      instance.name,
-			PrimaryID: instance.lbft.primaryID,
-			Chain:     instance.lbft.options.Chain,
-			ReplicaID: instance.lbft.options.ID,
-			SeqNo:     instance.seqNo,
-			Digest:    instance.digest,
-			Quorum:    uint64(instance.lbft.intersectionQuorum()),
+	core := lbft.getlbftCore(prepare.Digest)
+	for _, p := range core.prepare {
+		if p.Chain == prepare.Chain && p.ReplicaID == prepare.ReplicaID {
+			log.Errorf("Replica %s received Prepare from %s for consensus %s :  ignore, duplicate", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
+			return nil
 		}
-		log.Infof("Replica %s send commit message for consensus %s (%d transactions)", instance.lbft.options.ID, instance.name, len(instance.requestBatch.Requests))
-		instance.handleCommit(commit)
-		instance.broadcast(&Message{Type: MESSAGECOMMIT, Payload: serialize(commit)})
 	}
+
+	log.Debugf("Replica %s received Prepare from %s for consensus %s", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
+
+	lbft.startNewViewTimerForCore(core)
+	core.prepare = append(core.prepare, prepare)
+	if core.passPrepare || !lbft.maybePassPrepare(core) {
+		return nil
+	}
+	core.passPrepare = true
+	commit := &Commit{
+		PrimaryID: lbft.primaryID,
+		SeqNo:     core.prePrepare.SeqNo,
+		Digest:    prepare.Digest,
+		Quorum:    lbft.Quorum(),
+		Chain:     lbft.options.Chain,
+		ReplicaID: lbft.options.ID,
+	}
+
+	log.Debugf("Replica %s send Commit for consensus %s", lbft.options.ID, commit.Digest)
+	lbft.recvCommit(commit)
+	lbft.broadcast(core.fromChain, &Message{Type: MESSAGECOMMIT, Payload: utils.Serialize(commit)})
+	if core.fromChain != core.toChain {
+		lbft.broadcast(core.toChain, &Message{Type: MESSAGECOMMIT, Payload: utils.Serialize(commit)})
+	}
+	return nil
 }
 
-func (instance *lbftCore) handleCommit(commit *Commit) {
-	if commit == nil {
-		return
-	}
-	if instance.isPassPrePrepare {
-		if commit.Chain != instance.fromChain && commit.Chain != instance.toChain {
-			log.Errorf("Replica %s received commit message from %s for consensus %s: illegal commit", instance.lbft.options.ID, commit.ReplicaID, instance.name)
-			return
-		}
-
-		if commit.Chain == instance.lbft.options.Chain && commit.SeqNo != instance.seqNo {
-			log.Errorf("Replica %s received prepare message from %s for consensus %s : different seqNo (%d == %d) ", instance.lbft.options.ID, commit.ReplicaID, instance.name, instance.seqNo, commit.SeqNo)
-			return
-		}
-
-		if commit.Digest != instance.digest {
-			log.Errorf("Replica %s received prepare message from %s for consensus %s : different digest ", instance.lbft.options.ID, commit.ReplicaID, instance.name)
-			return
+func (lbft *Lbft) recvCommit(commit *Commit) *Message {
+	if commit.Chain == lbft.options.Chain {
+		if _, ok := lbft.coreStore[commit.Digest]; !ok && commit.SeqNo <= lbft.lastExec {
+			log.Errorf("Replica %s received Prepare from %s for consensus %s :  ignore, delay(%d>%d)", lbft.options.ID, commit.ReplicaID, commit.Digest, commit.SeqNo, lbft.lastExec)
+			return nil
 		}
 	}
 
-	instance.commitVote.Add(commit.ReplicaID, commit)
-	log.Infof("Replica %s received commit message from %s for consensus %s, voted %d", instance.lbft.options.ID, commit.ReplicaID, commit.Name, instance.commitVote.Size())
-
-	if instance.isPassCommit == false && instance.maybeCommitPass() {
-		go func(instance *lbftCore) {
-			if instance.isRunnig {
-				instance.commitAsync.wait(instance.seqNo, func() {
-					log.Infof("Replica %s succeed to commit for consensus %s (%d transactions)", instance.lbft.options.ID, instance.name, len(instance.requestBatch.Requests))
-					ctt := &Committed{
-						Name:         instance.name,
-						Chain:        instance.lbft.options.Chain,
-						ReplicaID:    instance.lbft.options.ID,
-						SeqNo:        instance.seqNo,
-						RequestBatch: instance.requestBatch,
-					}
-					//instance.lbft.lbftCoreCommittedChan <- ctt
-					instance.lbft.recvConsensusMsgChan <- &Message{Type: MESSAGECOMMITTED, Payload: serialize(ctt)}
-					instance.lbft.broadcast(instance.lbft.options.Chain, &Message{Type: MESSAGECOMMITTED, Payload: serialize(ctt)})
-				})
-			}
-		}(instance)
+	core := lbft.getlbftCore(commit.Digest)
+	for _, p := range core.commit {
+		if p.Chain == commit.Chain && p.ReplicaID == commit.ReplicaID {
+			log.Errorf("Replica %s received Commit from %s for consensus %s :  ignore, duplicate", lbft.options.ID, commit.ReplicaID, commit.Digest)
+			return nil
+		}
 	}
+	log.Debugf("Replica %s received Commit from %s for consensus %s", lbft.options.ID, commit.ReplicaID, commit.Digest)
+
+	lbft.stopNewViewTimerForCore(core)
+	core.commit = append(core.commit, commit)
+	if core.passCommit || !lbft.maybePassCommit(core) {
+		return nil
+	}
+	core.passCommit = true
+	committed := &Committed{
+		SeqNo:     core.prePrepare.SeqNo,
+		Chain:     lbft.options.Chain,
+		ReplicaID: lbft.options.ID,
+	}
+
+	log.Debugf("Replica %s send Committed for consensus %s", lbft.options.ID, commit.Digest)
+	lbft.recvCommitted(committed)
+	lbft.broadcast(lbft.options.Chain, &Message{Type: MESSAGECOMMITTED, Payload: utils.Serialize(committed)})
+	return nil
 }
 
-func (instance *lbftCore) maybePreparePass() bool {
-	if !instance.isPassPrePrepare {
-		return false
+func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
+	if committed.Chain != lbft.options.Chain {
+		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore diff chain", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
+		return nil
+	}
+	if committed.SeqNo <= lbft.lastExec {
+		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore delay", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
+		return nil
+	}
+	if _, ok := lbft.committedRequests[committed.SeqNo]; ok {
+		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore alreay exist", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
+		return nil
 	}
 
-	//from chain
-	max := 0
-	var quorum uint64
-	if instance.fromChain == instance.lbft.options.Chain {
-		instance.prepareVote.IterTicket(func(ticket vote.ITicket, num int) {
-			prepare := ticket.(*Prepare)
-			if prepare.Chain == instance.fromChain && prepare.Digest == instance.digest && prepare.SeqNo == instance.seqNo && num > max {
-				max = num
-				quorum = prepare.Quorum
-			}
-		})
+	log.Debugf("Replica %s received Committed from %s for consensus %s", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
+
+	if committed.ReplicaID == lbft.options.ID {
+		//lbft.committedRequests[committed.SeqNo] = committed.Request
 	} else {
-		instance.prepareVote.IterTicket(func(ticket vote.ITicket, num int) {
-			prepare := ticket.(*Prepare)
-			if prepare.Chain == instance.fromChain && num > max {
-				max = num
-				quorum = prepare.Quorum
+		fetched := []*Committed{}
+		for _, c := range lbft.fetched {
+			if c.SeqNo > lbft.lastExec {
+				fetched = append(fetched, c)
 			}
-		})
-	}
+		}
+		lbft.fetched = fetched
 
-	if max == 0 || quorum < MINQUORUM || uint64(max) < quorum {
-		return false
-	}
-
-	if instance.fromChain != instance.toChain {
-		max := 0
-		var quorum uint64
-		if instance.toChain == instance.lbft.options.Chain {
-			instance.prepareVote.IterTicket(func(ticket vote.ITicket, num int) {
-				prepare := ticket.(*Prepare)
-				if prepare.Chain == instance.toChain && prepare.Digest == instance.digest && prepare.SeqNo == instance.seqNo && num > max {
-					max = num
-					quorum = prepare.Quorum
-				}
-			})
+		q := 0
+		for _, c := range lbft.fetched {
+			if c.Chain == committed.Chain && c.ReplicaID == committed.ReplicaID {
+				return nil
+			}
+			if c.SeqNo == committed.SeqNo {
+				q++
+			}
+			lbft.fetched = append(lbft.fetched, committed)
+		}
+		if q >= lbft.Quorum() {
+			//lbft.committedRequests[committed.SeqNo] = committed.Request
 		} else {
-			instance.prepareVote.IterTicket(func(ticket vote.ITicket, num int) {
-				prepare := ticket.(*Prepare)
-				if prepare.Chain == instance.toChain && num > max {
-					max = num
-					quorum = prepare.Quorum
-				}
-			})
-		}
-		if max == 0 || quorum < MINQUORUM || uint64(max) < quorum {
-			return false
+			return nil
 		}
 	}
-
-	instance.isPassPrepare = true
-	return true
-}
-
-func (instance *lbftCore) maybeCommitPass() bool {
-	if !instance.isPassPrepare {
-		return false
-	}
-	//from chain
-	max := 0
-	var quorum uint64
-	if instance.fromChain == instance.lbft.options.Chain {
-		instance.commitVote.IterTicket(func(ticket vote.ITicket, num int) {
-			commit := ticket.(*Commit)
-			if commit.Chain == instance.fromChain && commit.Digest == instance.digest && commit.SeqNo == instance.seqNo && num > max {
-				max = num
-				quorum = commit.Quorum
+	lbft.committedRequests[committed.SeqNo] = committed.Request
+	lbft.execute()
+	for _, core := range lbft.coreStore {
+		if core.prePrepare != nil {
+			preprepare := core.prePrepare
+			if preprepare.SeqNo <= committed.SeqNo {
+				delete(lbft.coreStore, core.digest)
 			}
-		})
-	} else {
-		instance.commitVote.IterTicket(func(ticket vote.ITicket, num int) {
-			commit := ticket.(*Commit)
-			if commit.Chain == instance.fromChain && num > max {
-				max = num
-				quorum = commit.Quorum
+		} else if len(core.prepare) > 0 {
+			prepare := core.prepare[0]
+			if prepare.SeqNo <= committed.SeqNo {
+				delete(lbft.coreStore, core.digest)
 			}
-		})
-	}
-	if max == 0 || quorum < MINQUORUM || uint64(max) < quorum {
-		return false
-	}
-
-	if instance.fromChain != instance.toChain {
-		max := 0
-		var quorum uint64
-		if instance.toChain == instance.lbft.options.Chain {
-			instance.commitVote.IterTicket(func(ticket vote.ITicket, num int) {
-				commit := ticket.(*Commit)
-				if commit.Chain == instance.toChain && commit.Digest == instance.digest && commit.SeqNo == instance.seqNo && num > max {
-					max = num
-					quorum = commit.Quorum
-				}
-			})
-		} else {
-			instance.commitVote.IterTicket(func(ticket vote.ITicket, num int) {
-				commit := ticket.(*Commit)
-				if commit.Chain == instance.toChain && num > max {
-					max = num
-					quorum = commit.Quorum
-				}
-			})
-		}
-
-		if max == 0 || quorum < MINQUORUM || uint64(max) < quorum {
-			return false
-		}
-	}
-	instance.isPassCommit = true
-	return true
-}
-
-func (instance *lbftCore) broadcast(msg *Message) {
-	instance.lbft.broadcast(instance.fromChain, msg)
-	if instance.fromChain != instance.toChain {
-		instance.lbft.broadcast(instance.toChain, msg)
-	}
-}
-
-func (instance *lbftCore) waitForVerify() {
-	if instance.seqNo <= instance.lbft.verifySeqNum()+1 {
-		return
-	}
-	ticker := time.NewTicker(time.Second)
-	for {
-		select {
-		case <-instance.exit:
-			return
-		case <-ticker.C:
-			if instance.seqNo <= instance.lbft.verifySeqNum()+1 {
-				return
+		} else if len(core.commit) > 0 {
+			commit := core.commit[0]
+			if commit.SeqNo <= committed.SeqNo {
+				delete(lbft.coreStore, core.digest)
 			}
 		}
+	}
+	return nil
+}
+
+type Uint32Slice []uint32
+
+func (us Uint32Slice) Len() int {
+	return len(us)
+}
+func (us Uint32Slice) Less(i, j int) bool {
+	return us[i] < us[j]
+}
+func (us Uint32Slice) Swap(i, j int) {
+	us[i], us[j] = us[j], us[i]
+}
+
+func (lbft *Lbft) execute() {
+	keys := Uint32Slice{}
+	for seqNo := range lbft.committedRequests {
+		keys = append(keys, seqNo)
+	}
+	sort.Sort(keys)
+
+	nextExec := lbft.lastExec + 1
+	for seqNo, request := range lbft.committedRequests {
+		if seqNo < nextExec-uint32(lbft.options.K*3) {
+			delete(lbft.committedRequests, seqNo)
+		} else if seqNo == nextExec {
+			lbft.lastExec = nextExec
+			if lbft.outputTxs.Len() == 0 {
+				lbft.blockTimer.Reset(lbft.options.BlockTimeout)
+			}
+			lbft.outputTxs = append(lbft.outputTxs, request.Txs...)
+			lbft.seqNos = append(lbft.seqNos, seqNo)
+			if request.Func != nil {
+				request.Func(3, request.Txs)
+			}
+			if request.ID == EMPTYREQUEST || len(lbft.outputTxs) >= lbft.options.BlockSize {
+				lbft.processBlock(lbft.outputTxs, lbft.seqNos)
+				lbft.outputTxs = nil
+				lbft.seqNos = nil
+			}
+			nextExec = seqNo + 1
+		} else if seqNo > nextExec {
+			if seqNo-nextExec > uint32(lbft.options.K) {
+				log.Debugf("Replica %s need seqNo %d ", lbft.options.ID, nextExec)
+				for n, r := range lbft.committedRequests {
+					log.Debugf("Replica %s seqNo %d : %s", lbft.options.ID, n, r.Name)
+				}
+				log.Panicf("Replica %s fallen behind over %d", lbft.options.ID, lbft.options.K)
+			}
+			log.Warnf("Replica %s fetch committed %d ", lbft.options.ID, nextExec)
+			fc := &FetchCommitted{
+				ReplicaID: lbft.options.ID,
+				Chain:     lbft.options.Chain,
+				SeqNo:     nextExec,
+			}
+			lbft.broadcast(lbft.options.Chain, &Message{Type: MESSAGEFETCHCOMMITTED, Payload: utils.Serialize(fc)})
+			break
+		}
+	}
+}
+
+func (lbft *Lbft) processBlock(txs types.Transactions, seqNos []uint32) {
+	lbft.blockTimer.Stop()
+	if len(seqNos) != 0 {
+		lbft.height++
+		log.Infof("lbft write block %d (%d transactions)  %v", lbft.height, len(txs), seqNos)
+		lbft.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: txs[len(txs)-1].CreateTime(), Height: lbft.height}
 	}
 }

@@ -36,6 +36,7 @@ func NewDefaultOptions() *Options {
 	options.BlockTimeout = 10 * time.Second
 	options.BufferSize = 100
 
+	options.Request = 10 * time.Second
 	options.ViewChange = 5 * time.Second
 	options.ResendViewChange = 5 * time.Second
 	options.ViewChangePeriod = 300 * time.Second
@@ -57,6 +58,7 @@ type Options struct {
 	BlockTimeout time.Duration
 	BufferSize   int
 
+	Request          time.Duration
 	ViewChange       time.Duration
 	ResendViewChange time.Duration
 	ViewChangePeriod time.Duration
