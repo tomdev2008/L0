@@ -83,6 +83,8 @@ func (msg *Request) Name() string {
 type PrePrepare struct {
 	PrimaryID string
 	SeqNo     uint32
+	Height    uint32
+	OptHash   string
 	// Digest    string
 	Quorum    int
 	Request   *Request
@@ -94,6 +96,8 @@ type PrePrepare struct {
 type Prepare struct {
 	PrimaryID string
 	SeqNo     uint32
+	Height    uint32
+	OptHash   string
 	Digest    string
 	Quorum    int
 	Chain     string
@@ -104,6 +108,8 @@ type Prepare struct {
 type Commit struct {
 	PrimaryID string
 	SeqNo     uint32
+	Height    uint32
+	OptHash   string
 	Digest    string
 	Quorum    int
 	Chain     string
@@ -113,6 +119,7 @@ type Commit struct {
 //Committed Define struct
 type Committed struct {
 	SeqNo     uint32
+	Height    uint32
 	Request   *Request
 	Chain     string
 	ReplicaID string
@@ -132,7 +139,7 @@ type ViewChange struct {
 	PrimaryID string
 	SeqNo     uint32
 	Height    uint32
-	Hash      string
+	OptHash   string
 	ReplicaID string
 	Chain     string
 }

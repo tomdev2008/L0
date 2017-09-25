@@ -19,7 +19,6 @@
 package lbft
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -49,7 +48,8 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	}
 	lbft.height = lbft.stack.GetBlockchainInfo().Height
 	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
-	lbft.lastExec = lbft.seqNo
+	lbft.execHeight = lbft.height
+	lbft.execSeqNo = lbft.seqNo
 	lbft.priority = time.Now().UnixNano()
 	lbft.primaryHistory = make(map[string]int64)
 
@@ -59,6 +59,19 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 
 	lbft.blockTimer = time.NewTimer(lbft.options.BlockTimeout)
 	lbft.blockTimer.Stop()
+
+	if lbft.options.N < MINQUORUM {
+		lbft.options.N = MINQUORUM
+	}
+	if lbft.options.Request <= lbft.options.ViewChange {
+		lbft.options.Request = 3 * lbft.options.ViewChange / 2
+	}
+	if lbft.options.ResendViewChange <= lbft.options.ViewChange {
+		lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
+	}
+	if lbft.options.ViewChangePeriod > 0*time.Second && lbft.options.ViewChangePeriod <= lbft.options.ViewChange {
+		lbft.options.ViewChangePeriod = 60 * 3 * lbft.options.ViewChange / 2
+	}
 	return lbft
 }
 
@@ -74,7 +87,8 @@ type Lbft struct {
 
 	height                uint32
 	seqNo                 uint32
-	lastExec              uint32
+	execHeight            uint32
+	execSeqNo             uint32
 	priority              int64
 	primaryHistory        map[string]int64
 	primaryID             string
@@ -89,6 +103,7 @@ type Lbft struct {
 	fetched   []*Committed
 	outputTxs types.Transactions
 	seqNos    []uint32
+	cnt       int
 
 	blockTimer *time.Timer
 	exit       chan struct{}
@@ -107,17 +122,17 @@ func (lbft *Lbft) Options() consensus.IOptions {
 //Start Start consenter serverice
 func (lbft *Lbft) Start() {
 	if lbft.exit != nil {
-		log.Warnf("Replica %s consenter alreay started", lbft.options.ID)
+		log.Warnf("Replica %s-%s consenter alreay started", lbft.options.Chain, lbft.options.ID)
 		return
 	}
 	log.Infof("lbft : %s", lbft)
-	log.Infof("Replica %s consenter started", lbft.options.ID)
+	log.Infof("Replica %s-%s consenter started", lbft.options.Chain, lbft.options.ID)
 	lbft.exit = make(chan struct{})
 	for {
 		select {
 		case <-lbft.exit:
 			lbft.exit = nil
-			log.Infof("Replica %s consenter stopped", lbft.options.ID)
+			log.Infof("Replica %s-%s consenter stopped", lbft.options.Chain, lbft.options.ID)
 			return
 		case msg := <-lbft.recvConsensusMsgChan:
 			for msg != nil {
@@ -125,15 +140,17 @@ func (lbft *Lbft) Start() {
 			}
 		case <-lbft.blockTimer.C:
 			req := &Request{
-				ID:   EMPTYREQUEST,
-				Time: uint32(time.Now().Unix()),
-				Txs:  nil,
-				Func: nil,
+				ID:     EMPTYREQUEST,
+				Time:   uint32(time.Now().Unix()),
+				Height: lbft.height,
+				Txs:    nil,
+				Func:   nil,
 			}
 			lbft.recvConsensusMsgChan <- &Message{
 				Type:    MESSAGEREQUEST,
 				Payload: utils.Serialize(req),
 			}
+			lbft.cnt = 0
 		}
 	}
 }
@@ -141,7 +158,7 @@ func (lbft *Lbft) Start() {
 //Stop Stop consenter serverice
 func (lbft *Lbft) Stop() {
 	if lbft.exit == nil {
-		log.Warnf("Replica %s consenter alreay stopped", lbft.options.ID)
+		log.Warnf("Replica %s-%s consenter alreay stopped", lbft.options.Chain, lbft.options.ID)
 		return
 	}
 	close(lbft.exit)
@@ -197,7 +214,7 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 func (lbft *Lbft) RecvConsensus(payload []byte) {
 	msg := &Message{}
 	if err := utils.Deserialize(payload, msg); err != nil {
-		log.Errorf("Replica %s receive consensus message : unkown %v", lbft.options.ID, err)
+		log.Errorf("Replica %s-%s receive consensus message : unkown %v", lbft.options.Chain, lbft.options.ID, err)
 		return
 	}
 	lbft.recvConsensusMsgChan <- msg
@@ -269,9 +286,9 @@ func (lbft *Lbft) startNewViewTimer() {
 				ID:        "lbft",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
-				Hash:      hex.EncodeToString(lbft.options.Hash()),
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
+				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -296,9 +313,9 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				ID:        "lbft-period",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
-				Hash:      hex.EncodeToString(lbft.options.Hash()),
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
+				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -316,11 +333,11 @@ func (lbft *Lbft) stopViewChangePeriodTimer() {
 
 func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 	if fct.Chain != lbft.options.Chain {
-		log.Errorf("Replica %s received FetchCommitted(%d) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, fct.SeqNo, fct.ReplicaID, lbft.options.Chain, fct.Chain)
+		log.Errorf("Replica %s-%s received FetchCommitted(%d) from %s: ingnore, diff chain (%s-%s)", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID, lbft.options.Chain, fct.Chain)
 		return nil
 	}
 
-	log.Debugf("Replica %s received FetchCommitted(%d) from %s", lbft.options.ID, fct.SeqNo, fct.ReplicaID)
+	log.Debugf("Replica %s-%s received FetchCommitted(%d) from %s", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID)
 
 	if request, ok := lbft.committedRequests[fct.SeqNo]; ok {
 		ctt := &Committed{
@@ -334,13 +351,13 @@ func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 			Payload: utils.Serialize(ctt),
 		})
 	} else {
-		log.Warnf("Replica %s received FetchCommitted(%d) from %s : ignore missing ", lbft.options.ID, fct.SeqNo, fct.ReplicaID)
+		log.Warnf("Replica %s-%s received FetchCommitted(%d) from %s : ignore missing ", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID)
 	}
 	return nil
 }
 
 func (lbft *Lbft) sendViewChange(vc *ViewChange) {
-	log.Debugf("Replica %s send ViewChange(%s) for voter %s", lbft.options.ID, vc.ID, vc.PrimaryID)
+	log.Debugf("Replica %s-%s send ViewChange(%s) for voter %s", lbft.options.Chain, lbft.options.ID, vc.ID, vc.PrimaryID)
 	lbft.recvViewChange(vc)
 	lbft.broadcast(lbft.options.Chain, &Message{
 		Type:    MESSAGEVIEWCHANGE,
@@ -356,7 +373,7 @@ type viewChangeList struct {
 
 func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	if vc.Chain != lbft.options.Chain {
-		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
+		log.Errorf("Replica %s-%s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
 		return nil
 	}
 
@@ -370,25 +387,26 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	} else {
 		for _, v := range vcl.vcs {
 			if v.Chain == vc.Chain && v.ReplicaID == vc.ReplicaID {
-				log.Warningf("Replica %s received received ViewChange(%s) from %s: ingnore, duplicate", lbft.options.ID, vc.ID, vc.ReplicaID)
+				log.Warningf("Replica %s-%s received received ViewChange(%s) from %s: ingnore, duplicate", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID)
 				return nil
 			}
 		}
 	}
 
-	log.Debugf("Replica %s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.Hash)
+	log.Debugf("Replica %s-%s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
 
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
 		if len(vcl.vcs) == lbft.Quorum() {
 			vcl.timeoutTimer.Stop()
+			vcl.timeoutTimer = nil
 			vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
 				var tvc *ViewChange
 				for _, v := range vcl.vcs {
 					if v.PrimaryID == lbft.lastPrimaryID {
 						continue
 					}
-					if v.SeqNo != lbft.lastExec || v.Height != lbft.height || v.Hash != hex.EncodeToString(lbft.options.Hash()) {
+					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 						continue
 					}
 					if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
@@ -401,7 +419,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					}
 				}
 				delete(lbft.vcStore, vc.ID)
-				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.ID)
+				log.Debugf("Replica %s-%s resend ViewChange(%s)", lbft.options.Chain, lbft.options.ID, tvc.ID)
 				lbft.sendViewChange(tvc)
 			})
 			if lbft.primaryID != "" {
@@ -415,7 +433,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.lastExec || v.Height != lbft.height || v.Hash != hex.EncodeToString(lbft.options.Hash()) {
+			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
@@ -429,8 +447,8 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			q++
 		}
 		if q >= lbft.Quorum() {
-			lbft.vcStore = make(map[string]*viewChangeList)
 			vcl.resendTimer.Stop()
+			vcl.resendTimer = nil
 			lbft.newView(tvc)
 		}
 	}
@@ -441,12 +459,43 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.primaryID = vc.PrimaryID
 	lbft.seqNo = vc.SeqNo
 	lbft.height = vc.Height
+	lbft.execSeqNo = lbft.seqNo
+	lbft.execHeight = lbft.height
+	lbft.cnt = 0
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
+
+	for _, vcl := range lbft.vcStore {
+		if vcl.timeoutTimer != nil {
+			vcl.timeoutTimer.Stop()
+			vcl.timeoutTimer = nil
+		}
+		if vcl.resendTimer != nil {
+			vcl.resendTimer.Stop()
+			vcl.resendTimer = nil
+		}
+	}
+	lbft.vcStore = make(map[string]*viewChangeList)
+
+	for _, core := range lbft.coreStore {
+		lbft.stopNewViewTimerForCore(core)
+		if core.prePrepare != nil {
+			req := core.prePrepare.Request
+			f := req.Func
+			if f != nil {
+				f(2, core.prePrepare.Request.Txs)
+			}
+		}
+	}
 	lbft.coreStore = make(map[string]*lbftCore)
-	for seqNo := range lbft.committedRequests {
-		if seqNo <= lbft.seqNo {
+
+	for seqNo, req := range lbft.committedRequests {
+		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
+			f := req.Func
+			if f != nil {
+				f(2, req.Txs)
+			}
 		}
 	}
 }
