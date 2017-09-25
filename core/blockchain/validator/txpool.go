@@ -47,8 +47,10 @@ type txPool struct {
 
 func newTxPool(timeOut, blacklistDur time.Duration, capacity int) *txPool {
 	txslist := list.New()
+	txslist.PushFront(&types.Transaction{})
 	return &txPool{
 		txslist:      txslist,
+		cursor:       txslist.Front(),
 		mapping:      make(map[crypto.Hash]*list.Element),
 		blacklist:    make(map[string]*time.Ticker),
 		blacklistDur: blacklistDur,
@@ -62,7 +64,7 @@ func (tp *txPool) pushTxInTxPool(tx *types.Transaction) bool {
 	defer tp.Unlock()
 	//excess capacity
 	if tp.txslist.Len() > tp.capacity {
-		removedTx := tp.txslist.Remove(tp.txslist.Front()).(*types.Transaction)
+		removedTx := tp.txslist.Remove(tp.txslist.Front().Next()).(*types.Transaction)
 		hash := removedTx.Hash()
 		delete(tp.mapping, hash)
 		log.Warnf("[txPool]  excess capacity, remove front transaction, tx_hash: %s", hash.String())
@@ -74,28 +76,29 @@ func (tp *txPool) pushTxInTxPool(tx *types.Transaction) bool {
 		return false
 	}
 
-	if tp.txslist.Len() == 0 {
-		element := tp.txslist.PushFront(tx)
-		tp.cursor = tp.txslist.Front()
-		tp.mapping[tx.Hash()] = element
-		log.Debugf("[txPool] add first transaction success,tx_hash: %s", tx.Hash().String())
-		return true
+	// if tp.txslist.Len() == 1 {
+	// 	element := tp.txslist.PushFront(tx)
+	// 	tp.cursor = tp.txslist.Front()
+	// 	tp.mapping[tx.Hash()] = element
+	// 	log.Debugf("[txPool] add first transaction success,tx_hash: %s", tx.Hash().String())
+	// 	return true
+	// }
+
+	if _, ok := tp.mapping[tx.Hash()]; ok {
+		log.Errorf("[txPool] add tx fail,transaction already in txpool, tx_hash: %s", tx.Hash().String())
+		return false
 	}
 
 	for pre := tp.txslist.Back(); pre != nil; pre = pre.Prev() {
 		otx := pre.Value.(*types.Transaction)
 		if tx.CreateTime() >= otx.CreateTime() {
 			element := tp.txslist.InsertAfter(tx, pre)
-			if tp.txIsExist(tx.Hash()) {
-				log.Errorf("[txPool] add tx fail,transaction already in txpool, tx_hash: %s", tx.Hash().String())
-				return false
-			}
 			tp.mapping[tx.Hash()] = element
 			break
 		}
 	}
 
-	log.Debugf("[txPool] add transaction success, tx_hash: %s", tx.Hash().String())
+	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), tp.txslist.Len())
 	return true
 }
 
@@ -235,25 +238,29 @@ func (tp *txPool) releaseViolator(address string) {
 func (tp *txPool) getTxs(size int, timeout time.Duration) types.Transactions {
 	tp.Lock()
 	defer tp.Unlock()
-
 	var (
 		requestBatch types.Transactions
 		to           string
 		t            time.Time
 	)
 
-	if tp.txslist.Len() == 0 {
+	if tp.txslist.Len() == 1 {
 		return nil
 	}
 
-	if tp.cursor != nil {
-		to = tp.cursor.Value.(*types.Transaction).ToChain()
-		t = time.Now()
+	if _, ok := tp.mapping[tp.cursor.Value.(*types.Transaction).Hash()]; !ok {
+		tp.resetCursor()
 	}
 
-	for elem := tp.cursor; elem != nil; elem = elem.Next() {
+	if tp.cursor.Next() == nil {
+		return nil
+	}
+
+	to = tp.cursor.Next().Value.(*types.Transaction).ToChain()
+	t = time.Now()
+	for elem := tp.cursor.Next(); elem != nil; elem = elem.Next() {
 		tx := elem.Value.(*types.Transaction)
-		tp.cursor = tp.cursor.Next()
+		tp.cursor = elem
 		_, ok := tp.blacklist[tx.Sender().String()]
 		if time.Unix(int64(tx.CreateTime()), 0).Add(tp.timeOut).Before(time.Now()) || ok {
 			log.Errorf("[txPool] get tx fail,transaction already timeout or tx_sender in blacklist when in txpool, tx_hash: %s", tx.Hash().String())
@@ -273,17 +280,11 @@ func (tp *txPool) getTxs(size int, timeout time.Duration) types.Transactions {
 func (tp *txPool) backCursor(i int) {
 	tp.Lock()
 	defer tp.Unlock()
-	if tp.txslist.Len() == 0 {
+	if tp.txslist.Len() == 1 {
 		return
 	}
-
-	if tp.txslist.Len() != 0 && tp.cursor == nil {
-		tp.cursor = tp.txslist.Back()
-	}
-
-	var prev *list.Element
-	for elem := tp.cursor; elem != nil; elem = prev {
-		prev = elem.Prev()
+	for elem := tp.cursor; elem != nil; elem = elem.Prev() {
+		tp.cursor = elem
 		if i == 0 {
 			break
 		}
@@ -314,6 +315,7 @@ func (tp *txPool) removeTx(tx *types.Transaction) {
 	if element, ok := tp.mapping[tx.Hash()]; ok {
 		tp.txslist.Remove(element)
 		delete(tp.mapping, tx.Hash())
+		log.Debugf("remove tx in txpool,tx_hash: %s， txs_len: %d", tx.Hash(), tp.txslist.Len())
 	}
 }
 

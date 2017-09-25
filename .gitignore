@@ -18,3 +18,4 @@ tests/Transaction/*
 !/tests/transaction/crossLayer_3/
 *.swp
 debug.test
+tests/client/client

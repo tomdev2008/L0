@@ -38,7 +38,7 @@ type Validator struct {
 	txpool    *txPool
 	consenter consensus.Consenter
 	accounts  map[string]*account
-	sync.Mutex
+	sync.RWMutex
 }
 
 func NewValidator(ledger *ledger.Ledger, config *Config, consenter consensus.Consenter) *Validator {
@@ -71,10 +71,10 @@ func (vr *Validator) consensusFailed(flag int, txs types.Transactions) {
 	// not use verify
 	case 0:
 		vr.txpool.backCursor(len(txs))
-		log.Debug("[validator] not use verify")
+		log.Debug("[validator] not use verify...")
 	// use verify
 	case 1:
-		log.Debug("[validator] use verify")
+		log.Debug("[validator] use verify...")
 	// consensus succeed
 	case 2:
 	//nothing todo
@@ -91,8 +91,6 @@ func (vr *Validator) consensusFailed(flag int, txs types.Transactions) {
 }
 
 func (vr *Validator) VerifyTransactions(txs types.Transactions) bool {
-	vr.Lock()
-	defer vr.Unlock()
 	for k, tx := range txs {
 		if !vr.txpool.txIsExist(tx.Hash()) {
 			if err := vr.txpool.checkTransaction(tx); err != nil {
@@ -105,7 +103,7 @@ func (vr *Validator) VerifyTransactions(txs types.Transactions) bool {
 			}
 		}
 		// remove balance is negative tx
-		if !vr.UpdateAccount(tx) {
+		if !vr.UpdateAccount(tx) && tx.GetType() != types.TypeIssue {
 			log.Errorf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
 			vr.txpool.removeTx(tx)
 			for _, rollbackTx := range txs[:k] {
@@ -127,17 +125,17 @@ func (vr *Validator) VerifyTransactions(txs types.Transactions) bool {
 }
 
 func (vr *Validator) UpdateAccount(tx *types.Transaction) bool {
-	sender := vr.fetchAccount(tx.Sender())
-	if sender != nil {
-		sender.updateTransactionSenderBalance(tx)
-		if sender.balance.Sign() == -1 {
+	senderAccont := vr.fetchAccount(tx.Sender())
+	if senderAccont != nil {
+		senderAccont.updateTransactionSenderBalance(tx)
+		if senderAccont.balance.Sign() == -1 {
 			return false
 		}
 	}
-	receiver := vr.fetchAccount(tx.Recipient())
-	if receiver != nil {
-		receiver.updateTransactionReceiverBalance(tx)
-		if sender.balance.Sign() == -1 {
+	receiverAccount := vr.fetchAccount(tx.Recipient())
+	if receiverAccount != nil {
+		receiverAccount.updateTransactionReceiverBalance(tx)
+		if receiverAccount.balance.Sign() == -1 {
 			return false
 		}
 	}
