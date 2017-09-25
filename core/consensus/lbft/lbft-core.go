@@ -61,8 +61,8 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
@@ -92,7 +92,7 @@ func (lbft *Lbft) maybePassPrepare(core *lbftCore) bool {
 		// }
 		if lbft.options.Chain == prepare.Chain {
 			if core.prePrepare.SeqNo != prepare.SeqNo || core.prePrepare.PrimaryID != prepare.PrimaryID ||
-				/*core.prePrepare.Quorum != prepare.Quorum ||*/ core.prePrepare.OptHash != prepare.OptHash {
+				core.prePrepare.Height != prepare.Height || core.prePrepare.OptHash != prepare.OptHash {
 				continue
 			}
 			if prepare.ReplicaID == lbft.options.ID {
@@ -127,7 +127,7 @@ func (lbft *Lbft) maybePassCommit(core *lbftCore) bool {
 		// }
 		if lbft.options.Chain == commit.Chain {
 			if core.prePrepare.SeqNo != commit.SeqNo || core.prePrepare.PrimaryID != commit.PrimaryID ||
-				/*core.prePrepare.Quorum != commit.Quorum ||*/ core.prePrepare.OptHash != commit.OptHash {
+				core.prePrepare.Height != commit.Height || core.prePrepare.OptHash != commit.OptHash {
 				continue
 			}
 			if commit.ReplicaID == lbft.options.ID {
@@ -176,11 +176,19 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 		}
 
 		seqNo := lbft.seqNo + 1
+		height := lbft.height
+		if lbft.cnt == 0 || lbft.cnt >= lbft.options.BlockSize {
+			lbft.cnt = 0
+			height = lbft.height + 1
+			lbft.cnt += len(request.Txs)
+		}
+
 		log.Debugf("Replica %s-%s received Request for consensus %s", lbft.options.Chain, lbft.options.ID, digest)
 
 		preprepare := &PrePrepare{
 			PrimaryID: lbft.primaryID,
 			SeqNo:     seqNo,
+			Height:    height,
 			OptHash:   lbft.options.Hash(),
 			//Digest:    digest,
 			Quorum:    lbft.Quorum(),
@@ -222,8 +230,8 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ID:        core.digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.lastExec,
-			Height:    lbft.height,
+			SeqNo:     lbft.execSeqNo,
+			Height:    lbft.execHeight,
 			OptHash:   lbft.options.Hash(),
 			ReplicaID: lbft.options.ID,
 			Chain:     lbft.options.Chain,
@@ -231,14 +239,15 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		lbft.sendViewChange(vc)
 		return nil
 	}
+
 	if core.prePrepare != nil {
 		log.Errorf("Replica %s-%s received PrePrepare from %s for consensus %s: alreay exist ", lbft.options.Chain, lbft.options.ID, preprepare.ReplicaID, digest)
 		vc := &ViewChange{
 			ID:        core.digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.lastExec,
-			Height:    lbft.height,
+			SeqNo:     lbft.execSeqNo,
+			Height:    lbft.execHeight,
 			OptHash:   lbft.options.Hash(),
 			ReplicaID: lbft.options.ID,
 			Chain:     lbft.options.Chain,
@@ -260,8 +269,8 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
@@ -276,8 +285,8 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
@@ -295,9 +304,11 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 	core.toChain = toChain
 	core.prePrepare = preprepare
 	lbft.seqNo = preprepare.SeqNo
+	lbft.height = preprepare.Height
 	prepare := &Prepare{
 		PrimaryID: lbft.primaryID,
 		SeqNo:     preprepare.SeqNo,
+		Height:    preprepare.Height,
 		OptHash:   lbft.options.Hash(),
 		Digest:    digest,
 		Quorum:    lbft.Quorum(),
@@ -327,6 +338,11 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 		}
 	}
 
+	if prepare.SeqNo <= lbft.execSeqNo {
+		log.Debugf("Replica %s-%s received Prepare from %s for consensus %s: ignore delay(%d<=%d)", lbft.options.ID, prepare.ReplicaID, prepare.Digest, prepare.SeqNo, lbft.execSeqNo)
+		return nil
+	}
+
 	log.Debugf("Replica %s-%s received Prepare from %s for consensus %s", lbft.options.Chain, lbft.options.ID, prepare.ReplicaID, prepare.Digest)
 
 	lbft.startNewViewTimerForCore(core)
@@ -338,6 +354,7 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 	commit := &Commit{
 		PrimaryID: lbft.primaryID,
 		SeqNo:     core.prePrepare.SeqNo,
+		Height:    core.prePrepare.Height,
 		Digest:    prepare.Digest,
 		Quorum:    lbft.Quorum(),
 		Chain:     lbft.options.Chain,
@@ -366,6 +383,11 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 		}
 	}
 
+	if commit.SeqNo <= lbft.execSeqNo {
+		log.Debugf("Replica %s-%s received Commit from %s for consensus %s: ignore delay(%d<=%d)", lbft.options.ID, commit.ReplicaID, commit.Digest, commit.SeqNo, lbft.execSeqNo)
+		return nil
+	}
+
 	log.Debugf("Replica %s-%s received Commit from %s for consensus %s", lbft.options.ID, commit.ReplicaID, commit.Digest)
 
 	lbft.stopNewViewTimerForCore(core)
@@ -376,6 +398,7 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	core.passCommit = true
 	committed := &Committed{
 		SeqNo:     core.prePrepare.SeqNo,
+		Height:    core.prePrepare.Height,
 		Chain:     lbft.options.Chain,
 		ReplicaID: lbft.options.ID,
 	}
@@ -383,6 +406,9 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	log.Debugf("Replica %s-%s send Committed for consensus %s", lbft.options.Chain, lbft.options.ID, commit.Digest)
 	lbft.recvCommitted(committed)
 	lbft.broadcast(lbft.options.Chain, &Message{Type: MESSAGECOMMITTED, Payload: utils.Serialize(committed)})
+
+	lbft.stopNewViewTimerForCore(core)
+	delete(lbft.coreStore, core.digest)
 	return nil
 }
 
@@ -391,7 +417,7 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		log.Debugf("Replica %s-%s received Committed from %s for consensus %s: ignore diff chain", lbft.options.Chain, lbft.options.ID, committed.ReplicaID, committed.Request.Name())
 		return nil
 	}
-	if committed.SeqNo <= lbft.lastExec {
+	if committed.SeqNo <= lbft.execSeqNo {
 		log.Debugf("Replica %s-%s received Committed from %s for consensus %s: ignore delay", lbft.options.Chain, lbft.options.ID, committed.ReplicaID, committed.Request.Name())
 		return nil
 	}
@@ -402,57 +428,59 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 
 	log.Debugf("Replica %s-%s received Committed from %s for consensus %s", lbft.options.Chain, lbft.options.ID, committed.ReplicaID, committed.Request.Name())
 
-	if committed.ReplicaID == lbft.options.ID {
-		//lbft.committedRequests[committed.SeqNo] = committed.Request
-	} else {
-		fetched := []*Committed{}
-		for _, c := range lbft.fetched {
-			if c.SeqNo == committed.SeqNo && c.ReplicaID == committed.ReplicaID {
-				continue
-			}
-			if c.SeqNo > lbft.lastExec {
-				fetched = append(fetched, c)
-			}
+	// if committed.ReplicaID == lbft.options.ID {
+	// 	//lbft.committedRequests[committed.SeqNo] = committed.Request
+	// } else {
+	fetched := []*Committed{}
+	for _, c := range lbft.fetched {
+		if c.SeqNo == committed.SeqNo && c.ReplicaID == committed.ReplicaID {
+			continue
 		}
-		lbft.fetched = fetched
-		lbft.fetched = append(lbft.fetched, committed)
-
-		q := 0
-		for _, c := range lbft.fetched {
-			if c.SeqNo == committed.SeqNo {
-				q++
-			}
-		}
-		if q >= lbft.Quorum() {
-			//lbft.committedRequests[committed.SeqNo] = committed.Request
-		} else {
-			return nil
+		if c.SeqNo > lbft.execSeqNo {
+			fetched = append(fetched, c)
 		}
 	}
+	lbft.fetched = fetched
+	lbft.fetched = append(lbft.fetched, committed)
+
+	q := 0
+	for _, c := range lbft.fetched {
+		if c.SeqNo == committed.SeqNo {
+			q++
+		}
+	}
+	if q >= lbft.Quorum() {
+		//lbft.committedRequests[committed.SeqNo] = committed.Request
+	} else {
+		return nil
+	}
+	// }
+	committed.Request.Height = committed.Height
 	lbft.committedRequests[committed.SeqNo] = committed.Request
 
 	lbft.execute()
-	for _, core := range lbft.coreStore {
-		if core.prePrepare != nil {
-			preprepare := core.prePrepare
-			if preprepare.SeqNo <= lbft.lastExec {
-				lbft.stopNewViewTimerForCore(core)
-				delete(lbft.coreStore, core.digest)
-			}
-		} else if len(core.prepare) > 0 {
-			prepare := core.prepare[0]
-			if prepare.SeqNo <= lbft.lastExec {
-				lbft.stopNewViewTimerForCore(core)
-				delete(lbft.coreStore, core.digest)
-			}
-		} else if len(core.commit) > 0 {
-			commit := core.commit[0]
-			if commit.SeqNo <= lbft.lastExec {
-				lbft.stopNewViewTimerForCore(core)
-				delete(lbft.coreStore, core.digest)
-			}
-		}
-	}
+
+	// for _, core := range lbft.coreStore {
+	// 	if core.prePrepare != nil {
+	// 		preprepare := core.prePrepare
+	// 		if preprepare.SeqNo <= lbft.execSeqNo {
+	// 			lbft.stopNewViewTimerForCore(core)
+	// 			delete(lbft.coreStore, core.digest)
+	// 		}
+	// 	} else if len(core.prepare) > 0 {
+	// 		prepare := core.prepare[0]
+	// 		if prepare.SeqNo <= lbft.execSeqNo {
+	// 			lbft.stopNewViewTimerForCore(core)
+	// 			delete(lbft.coreStore, core.digest)
+	// 		}
+	// 	} else if len(core.commit) > 0 {
+	// 		commit := core.commit[0]
+	// 		if commit.SeqNo <= lbft.execSeqNo {
+	// 			lbft.stopNewViewTimerForCore(core)
+	// 			delete(lbft.coreStore, core.digest)
+	// 		}
+	// 	}
+	// }
 	return nil
 }
 
@@ -475,12 +503,17 @@ func (lbft *Lbft) execute() {
 	}
 	sort.Sort(keys)
 
-	nextExec := lbft.lastExec + 1
+	nextExec := lbft.execSeqNo + 1
 	for seqNo, request := range lbft.committedRequests {
 		if seqNo < nextExec-uint32(lbft.options.K*3) {
 			delete(lbft.committedRequests, seqNo)
 		} else if seqNo == nextExec {
-			lbft.lastExec = nextExec
+			if lbft.execHeight != request.Height {
+				lbft.processBlock(lbft.outputTxs, lbft.seqNos)
+				lbft.outputTxs = nil
+				lbft.seqNos = nil
+			}
+			lbft.execSeqNo = nextExec
 			if lbft.outputTxs.Len() == 0 {
 				lbft.blockTimer.Reset(lbft.options.BlockTimeout)
 			}
@@ -489,7 +522,7 @@ func (lbft *Lbft) execute() {
 			if request.Func != nil {
 				request.Func(3, request.Txs)
 			}
-			if request.ID == EMPTYREQUEST || len(lbft.outputTxs) >= lbft.options.BlockSize {
+			if request.ID == EMPTYREQUEST {
 				lbft.processBlock(lbft.outputTxs, lbft.seqNos)
 				lbft.outputTxs = nil
 				lbft.seqNos = nil
@@ -518,8 +551,7 @@ func (lbft *Lbft) execute() {
 func (lbft *Lbft) processBlock(txs types.Transactions, seqNos []uint32) {
 	lbft.blockTimer.Stop()
 	if len(seqNos) != 0 {
-		lbft.height++
-		log.Infof("lbft write block %d (%d transactions)  %v", lbft.height, len(txs), seqNos)
-		lbft.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: txs[len(txs)-1].CreateTime(), Height: lbft.height}
+		log.Infof("lbft write block %d (%d transactions)  %v", lbft.execHeight, len(txs), seqNos)
+		lbft.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: txs[len(txs)-1].CreateTime(), Height: lbft.execHeight}
 	}
 }

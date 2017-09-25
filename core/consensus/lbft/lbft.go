@@ -48,7 +48,8 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	}
 	lbft.height = lbft.stack.GetBlockchainInfo().Height
 	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
-	lbft.lastExec = lbft.seqNo
+	lbft.execHeight = lbft.height
+	lbft.execSeqNo = lbft.seqNo
 	lbft.priority = time.Now().UnixNano()
 	lbft.primaryHistory = make(map[string]int64)
 
@@ -63,10 +64,13 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 		lbft.options.N = MINQUORUM
 	}
 	if lbft.options.Request <= lbft.options.ViewChange {
-		lbft.options.Request = 3 * lbft.options.ViewChange * 2
+		lbft.options.Request = 3 * lbft.options.ViewChange / 2
+	}
+	if lbft.options.ResendViewChange <= lbft.options.ViewChange {
+		lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
 	}
 	if lbft.options.ViewChangePeriod > 0*time.Second && lbft.options.ViewChangePeriod <= lbft.options.ViewChange {
-		lbft.options.ViewChangePeriod = 60 * 3 * lbft.options.ViewChange * 2
+		lbft.options.ViewChangePeriod = 60 * 3 * lbft.options.ViewChange / 2
 	}
 	return lbft
 }
@@ -83,7 +87,8 @@ type Lbft struct {
 
 	height                uint32
 	seqNo                 uint32
-	lastExec              uint32
+	execHeight            uint32
+	execSeqNo             uint32
 	priority              int64
 	primaryHistory        map[string]int64
 	primaryID             string
@@ -98,6 +103,7 @@ type Lbft struct {
 	fetched   []*Committed
 	outputTxs types.Transactions
 	seqNos    []uint32
+	cnt       int
 
 	blockTimer *time.Timer
 	exit       chan struct{}
@@ -133,7 +139,6 @@ func (lbft *Lbft) Start() {
 				msg = lbft.processConsensusMsg(msg)
 			}
 		case <-lbft.blockTimer.C:
-			lbft.height++
 			req := &Request{
 				ID:     EMPTYREQUEST,
 				Time:   uint32(time.Now().Unix()),
@@ -145,6 +150,7 @@ func (lbft *Lbft) Start() {
 				Type:    MESSAGEREQUEST,
 				Payload: utils.Serialize(req),
 			}
+			lbft.cnt = 0
 		}
 	}
 }
@@ -186,14 +192,12 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 		return
 	}
 
-	lbft.height++
 	if success := lbft.stack.VerifyTxs(txs, true); success {
 		req := &Request{
-			ID:     time.Now().UnixNano(),
-			Time:   uint32(time.Now().Unix()),
-			Height: lbft.height,
-			Txs:    txs,
-			Func:   function,
+			ID:   time.Now().UnixNano(),
+			Time: uint32(time.Now().Unix()),
+			Txs:  txs,
+			Func: function,
 		}
 		if !req.isValid() {
 			panic("illegal request")
@@ -282,8 +286,8 @@ func (lbft *Lbft) startNewViewTimer() {
 				ID:        "lbft",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
@@ -309,8 +313,8 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				ID:        "lbft-period",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastExec,
-				Height:    lbft.height,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
@@ -402,7 +406,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					if v.PrimaryID == lbft.lastPrimaryID {
 						continue
 					}
-					if v.SeqNo != lbft.lastExec || v.Height != lbft.height || v.OptHash != lbft.options.Hash() {
+					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 						continue
 					}
 					if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
@@ -429,7 +433,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.lastExec || v.Height != lbft.height || v.OptHash != lbft.options.Hash() {
+			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
@@ -455,6 +459,9 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.primaryID = vc.PrimaryID
 	lbft.seqNo = vc.SeqNo
 	lbft.height = vc.Height
+	lbft.execSeqNo = lbft.seqNo
+	lbft.execHeight = lbft.height
+	lbft.cnt = 0
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
@@ -472,8 +479,9 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 
 	for _, core := range lbft.coreStore {
 		lbft.stopNewViewTimerForCore(core)
-		if !core.passCommit && core.prePrepare != nil {
-			f := core.prePrepare.Request.Func
+		if core.prePrepare != nil {
+			req := core.prePrepare.Request
+			f := req.Func
 			if f != nil {
 				f(2, core.prePrepare.Request.Txs)
 			}
@@ -482,7 +490,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.coreStore = make(map[string]*lbftCore)
 
 	for seqNo, req := range lbft.committedRequests {
-		if req.Height > lbft.height || seqNo > lbft.seqNo {
+		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
 			f := req.Func
 			if f != nil {
