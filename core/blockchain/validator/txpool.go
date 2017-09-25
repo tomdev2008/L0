@@ -49,7 +49,6 @@ func newTxPool(timeOut, blacklistDur time.Duration, capacity int) *txPool {
 	txslist := list.New()
 	return &txPool{
 		txslist:      txslist,
-		cursor:       txslist.Front(),
 		mapping:      make(map[crypto.Hash]*list.Element),
 		blacklist:    make(map[string]*time.Ticker),
 		blacklistDur: blacklistDur,
@@ -77,13 +76,15 @@ func (tp *txPool) pushTxInTxPool(tx *types.Transaction) bool {
 
 	if tp.txslist.Len() == 0 {
 		element := tp.txslist.PushFront(tx)
+		tp.cursor = tp.txslist.Front()
 		tp.mapping[tx.Hash()] = element
+		log.Debugf("[txPool] add first transaction success,tx_hash: %s", tx.Hash().String())
 		return true
 	}
 
 	for pre := tp.txslist.Back(); pre != nil; pre = pre.Prev() {
 		otx := pre.Value.(*types.Transaction)
-		if tx.CreateTime() > otx.CreateTime() {
+		if tx.CreateTime() >= otx.CreateTime() {
 			element := tp.txslist.InsertAfter(tx, pre)
 			if tp.txIsExist(tx.Hash()) {
 				log.Errorf("[txPool] add tx fail,transaction already in txpool, tx_hash: %s", tx.Hash().String())
@@ -93,6 +94,8 @@ func (tp *txPool) pushTxInTxPool(tx *types.Transaction) bool {
 			break
 		}
 	}
+
+	log.Debugf("[txPool] add transaction success, tx_hash: %s", tx.Hash().String())
 	return true
 }
 
@@ -112,7 +115,7 @@ func (tp *txPool) checkTransaction(tx *types.Transaction) error {
 
 	//refuse timeout transaction
 	txCreated := time.Unix(int64(tx.CreateTime()), 0)
-	if txCreated.Add(tp.timeOut).After(time.Now()) {
+	if txCreated.Add(tp.timeOut).Before(time.Now()) {
 		return fmt.Errorf(" refuse timeout transaction, tx_hash: %s, tx_create: %s",
 			tx.Hash().String(), txCreated.Format("2006-01-02 15:04:05"))
 	}
@@ -235,30 +238,57 @@ func (tp *txPool) getTxs(size int, timeout time.Duration) types.Transactions {
 
 	var (
 		requestBatch types.Transactions
-		next         *list.Element
 		to           string
 		t            time.Time
 	)
 
-	to = tp.cursor.Value.(*types.Transaction).ToChain()
-	t = time.Now()
-	for elem := tp.cursor; elem != nil; elem = next {
+	if tp.txslist.Len() == 0 {
+		return nil
+	}
+
+	if tp.cursor != nil {
+		to = tp.cursor.Value.(*types.Transaction).ToChain()
+		t = time.Now()
+	}
+
+	for elem := tp.cursor; elem != nil; elem = elem.Next() {
 		tx := elem.Value.(*types.Transaction)
-		next = elem.Next()
+		tp.cursor = tp.cursor.Next()
 		_, ok := tp.blacklist[tx.Sender().String()]
-		if time.Unix(int64(tx.CreateTime()), 0).Add(tp.timeOut).After(time.Now()) && ok {
+		if time.Unix(int64(tx.CreateTime()), 0).Add(tp.timeOut).Before(time.Now()) || ok {
+			log.Errorf("[txPool] get tx fail,transaction already timeout or tx_sender in blacklist when in txpool, tx_hash: %s", tx.Hash().String())
 			tp.txslist.Remove(elem)
 			delete(tp.mapping, tx.Hash())
+			continue
 		}
-
 		if tx.ToChain() == to && len(requestBatch) < size && timeout > time.Since(t) {
 			requestBatch = append(requestBatch, tx)
 		} else {
-			tp.cursor = elem
 			return requestBatch
 		}
 	}
 	return requestBatch
+}
+
+func (tp *txPool) backCursor(i int) {
+	tp.Lock()
+	defer tp.Unlock()
+	if tp.txslist.Len() == 0 {
+		return
+	}
+
+	if tp.txslist.Len() != 0 && tp.cursor == nil {
+		tp.cursor = tp.txslist.Back()
+	}
+
+	var prev *list.Element
+	for elem := tp.cursor; elem != nil; elem = prev {
+		prev = elem.Prev()
+		if i == 0 {
+			break
+		}
+		i--
+	}
 }
 
 func (tp *txPool) resetCursor() {

@@ -25,7 +25,7 @@ issueaddr:
 
 #consensus
 consensus:
-  plugin: "lbft"
+  plugin: "noops"
     
   noops:
     blockSize: 100
