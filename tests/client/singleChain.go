@@ -92,7 +92,6 @@ func generateAtomicTx() {
 					)
 					sig, _ := privateKey.Sign(tx.SignHash().Bytes())
 					tx.WithSignature(sig)
-					time.Sleep(1 * time.Second)
 					txChan <- tx
 				}
 			}(key)

@@ -7,7 +7,7 @@ net:
     routeAddress: ["127.0.0.1:9999"]
 
 log:
-  level: "noops"
+  level: "debug"
 
 jrpc:
   enabled: true
@@ -25,7 +25,7 @@ issueaddr:
 
 #consensus
 consensus:
-  plugin: "lbft"
+  plugin: "noops"
   
   noops:
     blockSize: 100
