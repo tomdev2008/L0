@@ -22,8 +22,11 @@ import "time"
 type Config struct {
 	IsValid        bool
 	TxPoolCapacity int
+	BatchSize      int
+	TxsListDelay   int
 	TxPoolTimeOut  time.Duration
 	BlacklistDur   time.Duration
+	BatchTimeOut   time.Duration
 }
 
 var config *Config
@@ -32,7 +35,10 @@ func DefaultConfig() *Config {
 	return &Config{
 		IsValid:        true,
 		TxPoolCapacity: 200000,
-		TxPoolTimeOut:  10 * time.Minute,
+		BatchSize:      2000,
+		TxsListDelay:   1 * 2000,
+		TxPoolTimeOut:  30 * time.Minute,
 		BlacklistDur:   1 * time.Minute,
+		BatchTimeOut:   10 * time.Second,
 	}
 }

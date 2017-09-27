@@ -234,7 +234,7 @@ func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 func (bc *Blockchain) StartTxPool() {
 	bc.txValidator = validator.NewValidator(bc.ledger, validator.DefaultConfig(), bc.consenter)
 	bc.ledger.Validator = bc.txValidator
-	bc.txValidator.Start()
+	go bc.txValidator.Start()
 }
 
 // ProcessTransaction processes new transaction from the network

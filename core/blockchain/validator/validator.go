@@ -21,7 +21,6 @@ package validator
 import (
 	"math/big"
 	"sync"
-	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
@@ -33,7 +32,6 @@ import (
 )
 
 type Validator struct {
-	config    *Config
 	ledger    *ledger.Ledger
 	txpool    *txPool
 	consenter consensus.Consenter
@@ -43,10 +41,9 @@ type Validator struct {
 
 func NewValidator(ledger *ledger.Ledger, config *Config, consenter consensus.Consenter) *Validator {
 	validator := &Validator{
-		config:    config,
 		ledger:    ledger,
 		consenter: consenter,
-		txpool:    newTxPool(config.TxPoolTimeOut, config.BlacklistDur, config.TxPoolCapacity),
+		txpool:    newTxPool(config),
 		accounts:  make(map[string]*account),
 	}
 	return validator
@@ -54,16 +51,17 @@ func NewValidator(ledger *ledger.Ledger, config *Config, consenter consensus.Con
 
 func (vr *Validator) Start() {
 	log.Info("validator start ...")
+	go vr.txpool.start()
 	for {
-		requestBatch := vr.txpool.getTxs(vr.consenter.BatchSize(), vr.consenter.BatchTimeout())
-		log.Debugln("validator get request batch len: ", len(requestBatch))
-		if len(requestBatch) != 0 {
-			vr.consenter.ProcessBatch(requestBatch, vr.consensusFailed)
-		} else {
-			log.Debugln("txPool have no transaction ...")
-			time.Sleep(5 * time.Second)
+		select {
+		case requestBatch := <-vr.txpool.requestBatchChan:
+			log.Debugln("validator get request batch len: ", len(requestBatch))
+			if len(requestBatch) != 0 {
+				vr.consenter.ProcessBatch(requestBatch, vr.consensusFailed)
+			}
 		}
 	}
+
 }
 
 func (vr *Validator) consensusFailed(flag int, txs types.Transactions) {
