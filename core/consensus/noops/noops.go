@@ -19,6 +19,7 @@
 package noops
 
 import (
+	"fmt"
 	"time"
 
 	"encoding/json"
@@ -94,7 +95,7 @@ func (noops *Noops) Start() {
 		select {
 		case <-noops.exit:
 			noops.exit = nil
-			noops.processBlock(outputTxs, seqNos)
+			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("exit"))
 			outputTxs = make(types.Transactions, 0)
 			seqNos = make([]uint32, 0)
 			return
@@ -108,24 +109,24 @@ func (noops *Noops) Start() {
 				seqNos = append(seqNos, noops.seqNo)
 				outputTxs = append(outputTxs, batchReq.Txs...)
 				if len(outputTxs) >= noops.options.BlockSize {
-					noops.processBlock(outputTxs, seqNos)
+					noops.processBlock(outputTxs, seqNos, fmt.Sprintf("size %d", noops.options.BlockSize))
 					outputTxs = make(types.Transactions, 0)
 					seqNos = make([]uint32, 0)
 				}
 			}
 		case <-noops.blockTimer.C:
-			noops.processBlock(outputTxs, seqNos)
+			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("timeout %s", noops.options.BlockTimeout))
 			outputTxs = make(types.Transactions, 0)
 			seqNos = make([]uint32, 0)
 		}
 	}
 }
 
-func (noops *Noops) processBlock(txs types.Transactions, seqNos []uint32) {
+func (noops *Noops) processBlock(txs types.Transactions, seqNos []uint32, reason string) {
 	noops.blockTimer.Stop()
 	if len(seqNos) != 0 {
 		noops.height++
-		log.Infof("Noops write block %d (%d transactions)  %v", noops.height, len(txs), seqNos)
+		log.Infof("Noops write block %d (%d transactions)  %v : %s", noops.height, len(txs), seqNos, reason)
 		noops.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: uint32(time.Now().Unix()), Height: noops.height}
 	}
 }
@@ -159,6 +160,7 @@ func (noops *Noops) BatchTimeout() time.Duration {
 
 //ProcessBatches
 func (noops *Noops) ProcessBatch(request types.Transactions, function func(int, types.Transactions)) {
+	log.Infof("Noops ProcessBatch %d transactions", len(request))
 	noops.pendingChan <- &batchRequest{Txs: request, Function: function}
 }
 

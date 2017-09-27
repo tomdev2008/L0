@@ -20,6 +20,7 @@ package lbft
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,9 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	}
 	if lbft.options.Request <= lbft.options.ViewChange {
 		lbft.options.Request = 3 * lbft.options.ViewChange / 2
+	}
+	if lbft.options.Request <= 2*lbft.options.BlockTimeout {
+		lbft.options.Request = 3 * 2 * lbft.options.BlockTimeout / 2
 	}
 	if lbft.options.ResendViewChange <= lbft.options.ViewChange {
 		lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
@@ -122,17 +126,17 @@ func (lbft *Lbft) Options() consensus.IOptions {
 //Start Start consenter serverice
 func (lbft *Lbft) Start() {
 	if lbft.exit != nil {
-		log.Warnf("Replica %s-%s consenter alreay started", lbft.options.Chain, lbft.options.ID)
+		log.Warnf("Replica %s consenter alreay started", lbft.options.ID)
 		return
 	}
 	log.Infof("lbft : %s", lbft)
-	log.Infof("Replica %s-%s consenter started", lbft.options.Chain, lbft.options.ID)
+	log.Infof("Replica %s consenter started", lbft.options.ID)
 	lbft.exit = make(chan struct{})
 	for {
 		select {
 		case <-lbft.exit:
 			lbft.exit = nil
-			log.Infof("Replica %s-%s consenter stopped", lbft.options.Chain, lbft.options.ID)
+			log.Infof("Replica %s consenter stopped", lbft.options.ID)
 			return
 		case msg := <-lbft.recvConsensusMsgChan:
 			for msg != nil {
@@ -150,7 +154,6 @@ func (lbft *Lbft) Start() {
 				Type:    MESSAGEREQUEST,
 				Payload: utils.Serialize(req),
 			}
-			lbft.cnt = 0
 		}
 	}
 }
@@ -158,7 +161,7 @@ func (lbft *Lbft) Start() {
 //Stop Stop consenter serverice
 func (lbft *Lbft) Stop() {
 	if lbft.exit == nil {
-		log.Warnf("Replica %s-%s consenter alreay stopped", lbft.options.Chain, lbft.options.ID)
+		log.Warnf("Replica %s consenter alreay stopped", lbft.options.ID)
 		return
 	}
 	close(lbft.exit)
@@ -214,7 +217,7 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 func (lbft *Lbft) RecvConsensus(payload []byte) {
 	msg := &Message{}
 	if err := utils.Deserialize(payload, msg); err != nil {
-		log.Errorf("Replica %s-%s receive consensus message : unkown %v", lbft.options.Chain, lbft.options.ID, err)
+		log.Errorf("Replica %s receive consensus message : unkown %v", lbft.options.ID, err)
 		return
 	}
 	lbft.recvConsensusMsgChan <- msg
@@ -239,6 +242,10 @@ func (lbft *Lbft) broadcast(to string, msg *Message) {
 
 func (lbft *Lbft) isPrimary() bool {
 	return strings.Compare(lbft.options.ID, lbft.primaryID) == 0
+}
+
+func (lbft *Lbft) hasPrimary() bool {
+	return strings.Compare("", lbft.primaryID) != 0
 }
 
 func (lbft *Lbft) processConsensusMsg(msg *Message) *Message {
@@ -292,7 +299,7 @@ func (lbft *Lbft) startNewViewTimer() {
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc)
+			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%v)", lbft.options.Request))
 		})
 	}
 }
@@ -319,7 +326,7 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc)
+			lbft.sendViewChange(vc, fmt.Sprintf("period timemout(%v)", lbft.options.ViewChangePeriod))
 		})
 	}
 }
@@ -333,31 +340,31 @@ func (lbft *Lbft) stopViewChangePeriodTimer() {
 
 func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 	if fct.Chain != lbft.options.Chain {
-		log.Errorf("Replica %s-%s received FetchCommitted(%d) from %s: ingnore, diff chain (%s-%s)", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID, lbft.options.Chain, fct.Chain)
+		log.Errorf("Replica %s received FetchCommitted(%d) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, fct.SeqNo, fct.ReplicaID, lbft.options.Chain, fct.Chain)
 		return nil
 	}
 
-	log.Debugf("Replica %s-%s received FetchCommitted(%d) from %s", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID)
+	log.Debugf("Replica %s received FetchCommitted(%d) from %s", lbft.options.ID, fct.SeqNo, fct.ReplicaID)
 
 	if request, ok := lbft.committedRequests[fct.SeqNo]; ok {
 		ctt := &Committed{
-			Chain:     lbft.options.Chain,
-			ReplicaID: lbft.options.ID,
 			SeqNo:     fct.SeqNo,
 			Request:   request,
+			Chain:     lbft.options.Chain,
+			ReplicaID: lbft.options.ID,
 		}
 		lbft.broadcast(lbft.options.Chain, &Message{
 			Type:    MESSAGECOMMITTED,
 			Payload: utils.Serialize(ctt),
 		})
 	} else {
-		log.Warnf("Replica %s-%s received FetchCommitted(%d) from %s : ignore missing ", lbft.options.Chain, lbft.options.ID, fct.SeqNo, fct.ReplicaID)
+		log.Warnf("Replica %s received FetchCommitted(%d) from %s : ignore missing ", lbft.options.ID, fct.SeqNo, fct.ReplicaID)
 	}
 	return nil
 }
 
-func (lbft *Lbft) sendViewChange(vc *ViewChange) {
-	log.Debugf("Replica %s-%s send ViewChange(%s) for voter %s", lbft.options.Chain, lbft.options.ID, vc.ID, vc.PrimaryID)
+func (lbft *Lbft) sendViewChange(vc *ViewChange, reason string) {
+	log.Debugf("Replica %s send ViewChange(%s) for voter %s: %s", lbft.options.ID, vc.ID, vc.PrimaryID, reason)
 	lbft.recvViewChange(vc)
 	lbft.broadcast(lbft.options.Chain, &Message{
 		Type:    MESSAGEVIEWCHANGE,
@@ -373,7 +380,7 @@ type viewChangeList struct {
 
 func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	if vc.Chain != lbft.options.Chain {
-		log.Errorf("Replica %s-%s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
+		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
 		return nil
 	}
 
@@ -387,13 +394,13 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	} else {
 		for _, v := range vcl.vcs {
 			if v.Chain == vc.Chain && v.ReplicaID == vc.ReplicaID {
-				log.Warningf("Replica %s-%s received received ViewChange(%s) from %s: ingnore, duplicate", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID)
+				log.Warningf("Replica %s received ViewChange(%s) from %s: ingnore, duplicate", lbft.options.ID, vc.ID, vc.ReplicaID)
 				return nil
 			}
 		}
 	}
 
-	log.Debugf("Replica %s-%s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.Chain, lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
+	log.Debugf("Replica %s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
 
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
@@ -409,7 +416,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 						continue
 					}
-					if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
+					if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
 						continue
 					}
 					if tvc == nil {
@@ -419,8 +426,8 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					}
 				}
 				delete(lbft.vcStore, vc.ID)
-				log.Debugf("Replica %s-%s resend ViewChange(%s)", lbft.options.Chain, lbft.options.ID, tvc.ID)
-				lbft.sendViewChange(tvc)
+				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.ID)
+				lbft.sendViewChange(tvc, fmt.Sprintf("resend timeout(%v)", lbft.options.ResendViewChange))
 			})
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
@@ -436,7 +443,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
-			if p, ok := lbft.primaryHistory[tvc.PrimaryID]; ok && p != tvc.Priority {
+			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
 				continue
 			}
 			if tvc == nil {
@@ -456,6 +463,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 }
 
 func (lbft *Lbft) newView(vc *ViewChange) {
+	log.Infof("Replica %s vote new PrimaryID %s (%d %d)", lbft.options.ID, vc.PrimaryID, vc.SeqNo, vc.Height)
 	lbft.primaryID = vc.PrimaryID
 	lbft.seqNo = vc.SeqNo
 	lbft.height = vc.Height

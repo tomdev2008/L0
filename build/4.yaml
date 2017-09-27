@@ -26,26 +26,25 @@ issueaddr:
 #consensus
 consensus:
   plugin: "lbft"
-  
+
   noops:
-    blockSize: 100
-    blockInterval: 10s
+    batchSize: 2000
+    bactchTimeout: 10s
+    blockSize: 20000
+    blockTimeout: 10s
 
   lbft:
     "N": 4
     Q: 3
     K: 10
-    blockSize: 2000
-    blockTimeout: 8s
-    blockInterval: 10s
-    blockDelay: 10s
+    batchSize: 2000
+    bactchTimeout: 10s
+    blockSize: 20000
+    blockTimeout: 10s
+    request: 30s
     viewChange: 5s
     resendViewChange: 5s
     viewChangePeriod: 0s
-    nullRequest: 5s    
-    bufferSize: 100    
-    maxConcurrentNumFrom: 10
-    maxConcurrentNumTo: 10
 
 # vm
 vm:

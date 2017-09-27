@@ -19,6 +19,7 @@
 package lbft
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"strconv"
 	"strings"
@@ -71,10 +72,11 @@ func (msg *Request) toChain() (to string) {
 
 //key name
 func (msg *Request) Name() string {
-	keys := make([]string, 3)
+	keys := make([]string, 4)
 	keys[0] = msg.fromChain()
 	keys[1] = msg.toChain()
-	keys[2] = hex.EncodeToString(utils.Serialize(msg))
+	hash := sha256.Sum256(utils.Serialize(msg))
+	keys[2] = hex.EncodeToString(hash[:])
 	keys[3] = strconv.Itoa(len(msg.Txs))
 	return strings.Join(keys, "-")
 }
@@ -119,7 +121,6 @@ type Commit struct {
 //Committed Define struct
 type Committed struct {
 	SeqNo     uint32
-	Height    uint32
 	Request   *Request
 	Chain     string
 	ReplicaID string

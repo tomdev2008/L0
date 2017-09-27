@@ -21,6 +21,7 @@ package lbft
 import "time"
 import "github.com/bocheninc/L0/components/utils"
 import "encoding/hex"
+import "crypto/sha256"
 
 //NewDefaultOptions Create nbft options with default value
 func NewDefaultOptions() *Options {
@@ -35,13 +36,12 @@ func NewDefaultOptions() *Options {
 	options.BatchTimeout = 10 * time.Second
 	options.BlockSize = 2000
 	options.BlockTimeout = 10 * time.Second
-	options.Request = 10 * time.Second
+	options.Request = 20 * time.Second
 	options.BufferSize = 100
 
-	options.ViewChange = 5 * time.Second
-	options.ResendViewChange = 5 * time.Second
+	options.ViewChange = 2 * time.Second
+	options.ResendViewChange = 2 * time.Second
 	options.ViewChangePeriod = 300 * time.Second
-	options.NullRequest = 4 * time.Second
 	return options
 }
 
@@ -63,7 +63,6 @@ type Options struct {
 	ViewChange       time.Duration
 	ResendViewChange time.Duration
 	ViewChangePeriod time.Duration
-	NullRequest      time.Duration
 }
 
 func (this *Options) Hash() string {
@@ -84,6 +83,6 @@ func (this *Options) Hash() string {
 	opt.ViewChange = this.ViewChange
 	opt.ResendViewChange = this.ResendViewChange
 	opt.ViewChangePeriod = this.ViewChangePeriod
-	opt.NullRequest = this.NullRequest
-	return hex.EncodeToString(utils.Serialize(opt))
+	h := sha256.Sum256(utils.Serialize(opt))
+	return hex.EncodeToString(h[:])
 }
