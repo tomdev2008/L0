@@ -399,7 +399,9 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			}
 		}
 	}
-
+	if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
+		lbft.primaryHistory[vc.PrimaryID] = vc.Priority
+	}
 	log.Debugf("Replica %s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
 
 	vcl.vcs = append(vcl.vcs, vc)
@@ -470,6 +472,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.execSeqNo = lbft.seqNo
 	lbft.execHeight = lbft.height
 	lbft.cnt = 0
+	delete(lbft.primaryHistory, lbft.primaryID)
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
