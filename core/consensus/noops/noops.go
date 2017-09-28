@@ -113,6 +113,9 @@ func (noops *Noops) Start() {
 					outputTxs = make(types.Transactions, 0)
 					seqNos = make([]uint32, 0)
 				}
+				batchReq.Function(3, batchReq.Txs)
+			} else {
+				batchReq.Function(2, batchReq.Txs)
 			}
 		case <-noops.blockTimer.C:
 			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("timeout %s", noops.options.BlockTimeout))
@@ -162,6 +165,7 @@ func (noops *Noops) BatchTimeout() time.Duration {
 func (noops *Noops) ProcessBatch(request types.Transactions, function func(int, types.Transactions)) {
 	log.Infof("Noops ProcessBatch %d transactions", len(request))
 	noops.pendingChan <- &batchRequest{Txs: request, Function: function}
+	function(1, request)
 }
 
 // RecvConsensus Receive consensus data
