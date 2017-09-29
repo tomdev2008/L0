@@ -176,10 +176,9 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 			}
 		}
 
-		seqNo := lbft.seqNo + 1
-		height := lbft.height
+		lbft.seqNo++
 		if request.ID != EMPTYREQUEST && lbft.cnt == 0 {
-			height = lbft.height + 1
+			lbft.height++
 		}
 		lbft.cnt += len(request.Txs)
 		if lbft.cnt >= lbft.options.BlockSize || request.ID == EMPTYREQUEST {
@@ -187,11 +186,11 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 		}
 
 		log.Debugf("Replica %s received Request for consensus %s", lbft.options.ID, digest)
-		request.Height = height
+		request.Height = lbft.height
 		preprepare := &PrePrepare{
 			PrimaryID: lbft.primaryID,
-			SeqNo:     seqNo,
-			Height:    height,
+			SeqNo:     lbft.seqNo,
+			Height:    lbft.height,
 			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 			//Digest:    digest,
 			Quorum:    lbft.Quorum(),
@@ -226,22 +225,6 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		return nil
 	}
 
-	if preprepare.SeqNo != lbft.seqNo+1 {
-		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong seqNo (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo, lbft.seqNo+1)
-		vc := &ViewChange{
-			ID:        digest,
-			Priority:  lbft.priority,
-			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.execSeqNo,
-			Height:    lbft.execHeight,
-			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-			ReplicaID: lbft.options.ID,
-			Chain:     lbft.options.Chain,
-		}
-		lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
-		return nil
-	}
-
 	core := lbft.getlbftCore(digest)
 	if core.prePrepare != nil {
 		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: alreay exist ", lbft.options.ID, preprepare.ReplicaID, digest)
@@ -266,6 +249,44 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		toChain = lbft.options.Chain
 	}
 	if !lbft.isPrimary() {
+		lbft.seqNo++
+		if preprepare.Request.ID != EMPTYREQUEST && lbft.cnt == 0 {
+			lbft.height++
+		}
+		lbft.cnt += len(preprepare.Request.Txs)
+		if lbft.cnt >= lbft.options.BlockSize || preprepare.Request.ID == EMPTYREQUEST {
+			lbft.cnt = 0
+		}
+		if preprepare.SeqNo != lbft.seqNo {
+			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong seqNo (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo, lbft.seqNo)
+			vc := &ViewChange{
+				ID:        digest,
+				Priority:  lbft.priority,
+				PrimaryID: lbft.options.ID,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
+				ReplicaID: lbft.options.ID,
+				Chain:     lbft.options.Chain,
+			}
+			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
+			return nil
+		}
+		if preprepare.Height != lbft.height {
+			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong height (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.Height, lbft.height)
+			vc := &ViewChange{
+				ID:        digest,
+				Priority:  lbft.priority,
+				PrimaryID: lbft.options.ID,
+				SeqNo:     lbft.execSeqNo,
+				Height:    lbft.execHeight,
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
+				ReplicaID: lbft.options.ID,
+				Chain:     lbft.options.Chain,
+			}
+			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
+			return nil
+		}
 		if !preprepare.Request.isValid() || (fromChain != lbft.options.Chain && toChain != lbft.options.Chain) {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: illegal request", lbft.options.ID, preprepare.ReplicaID, digest)
 			vc := &ViewChange{
@@ -305,8 +326,6 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 	core.fromChain = fromChain
 	core.toChain = toChain
 	core.prePrepare = preprepare
-	lbft.seqNo = preprepare.SeqNo
-	lbft.height = preprepare.Height
 	prepare := &Prepare{
 		PrimaryID: lbft.primaryID,
 		SeqNo:     preprepare.SeqNo,
@@ -505,7 +524,7 @@ func (lbft *Lbft) execute() {
 
 	nextExec := lbft.execSeqNo + 1
 	for seqNo, request := range lbft.committedRequests {
-		if nextExec-seqNo > uint32(lbft.options.K*3) {
+		if nextExec > seqNo && nextExec-seqNo > uint32(lbft.options.K*3) {
 			delete(lbft.committedRequests, seqNo)
 		} else if seqNo == nextExec {
 			lbft.execSeqNo = nextExec

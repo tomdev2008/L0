@@ -438,7 +438,9 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					}
 				}
 				delete(lbft.vcStore, vc.ID)
-				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.ID)
+				tvc.Chain = lbft.options.Chain
+				tvc.ReplicaID = lbft.options.ID
+				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.PrimaryID)
 				lbft.sendViewChange(tvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
 			})
 			if lbft.primaryID != "" {
@@ -486,6 +488,9 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 		lbft.height++
 	}
 	delete(lbft.primaryHistory, lbft.primaryID)
+	if lbft.primaryID == lbft.options.ID {
+		lbft.priority = time.Now().UnixNano()
+	}
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
