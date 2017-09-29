@@ -75,7 +75,14 @@ func (msg *Request) Name() string {
 	keys := make([]string, 4)
 	keys[0] = msg.fromChain()
 	keys[1] = msg.toChain()
-	hash := sha256.Sum256(utils.Serialize(msg))
+	r := &Request{
+		ID:   msg.ID,
+		Time: msg.Time,
+		//Height: msg.Height,
+		Func: msg.Func,
+		Txs:  msg.Txs,
+	}
+	hash := sha256.Sum256(utils.Serialize(r))
 	keys[2] = hex.EncodeToString(hash[:])
 	keys[3] = strconv.Itoa(len(msg.Txs))
 	return strings.Join(keys, "-")

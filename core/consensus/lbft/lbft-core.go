@@ -62,9 +62,9 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastSeqNo,
+				SeqNo:     lbft.execSeqNo,
 				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash(),
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -178,7 +178,7 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 
 		seqNo := lbft.seqNo + 1
 		height := lbft.height
-		if lbft.cnt == 0 {
+		if request.ID != EMPTYREQUEST && lbft.cnt == 0 {
 			height = lbft.height + 1
 		}
 		lbft.cnt += len(request.Txs)
@@ -187,12 +187,12 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 		}
 
 		log.Debugf("Replica %s received Request for consensus %s", lbft.options.ID, digest)
-
+		request.Height = height
 		preprepare := &PrePrepare{
 			PrimaryID: lbft.primaryID,
 			SeqNo:     seqNo,
 			Height:    height,
-			OptHash:   lbft.options.Hash(),
+			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 			//Digest:    digest,
 			Quorum:    lbft.Quorum(),
 			Request:   request,
@@ -232,9 +232,9 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ID:        digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.lastSeqNo,
+			SeqNo:     lbft.execSeqNo,
 			Height:    lbft.execHeight,
-			OptHash:   lbft.options.Hash(),
+			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 			ReplicaID: lbft.options.ID,
 			Chain:     lbft.options.Chain,
 		}
@@ -249,9 +249,9 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ID:        digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.lastSeqNo,
+			SeqNo:     lbft.execSeqNo,
 			Height:    lbft.execHeight,
-			OptHash:   lbft.options.Hash(),
+			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 			ReplicaID: lbft.options.ID,
 			Chain:     lbft.options.Chain,
 		}
@@ -272,9 +272,9 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastSeqNo,
+				SeqNo:     lbft.execSeqNo,
 				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash(),
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -288,9 +288,9 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastSeqNo,
+				SeqNo:     lbft.execSeqNo,
 				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash(),
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -311,7 +311,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		PrimaryID: lbft.primaryID,
 		SeqNo:     preprepare.SeqNo,
 		Height:    preprepare.Height,
-		OptHash:   lbft.options.Hash(),
+		OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 		Digest:    digest,
 		Quorum:    lbft.Quorum(),
 		Chain:     lbft.options.Chain,
@@ -357,7 +357,7 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 		PrimaryID: lbft.primaryID,
 		SeqNo:     core.prePrepare.SeqNo,
 		Height:    core.prePrepare.Height,
-		OptHash:   lbft.options.Hash(),
+		OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 		Digest:    prepare.Digest,
 		Quorum:    lbft.Quorum(),
 		Chain:     lbft.options.Chain,
@@ -399,7 +399,6 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 		return nil
 	}
 	core.passCommit = true
-	core.prePrepare.Request.Height = commit.Height
 	committed := &Committed{
 		SeqNo:     core.prePrepare.SeqNo,
 		Request:   core.prePrepare.Request,
@@ -423,37 +422,36 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		return nil
 	}
 
-	//log.Debugf("Replica %s received Committed from %s for consensus %s", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
-
-	// if committed.ReplicaID == lbft.options.ID {
-	// 	//lbft.committedRequests[committed.SeqNo] = committed.Request
-	// } else {
-	fetched := []*Committed{}
-	for _, c := range lbft.fetched {
-		if c.SeqNo == committed.SeqNo && c.ReplicaID == committed.ReplicaID {
-			continue
-		}
-		if c.SeqNo > lbft.execSeqNo {
-			fetched = append(fetched, c)
-		}
-	}
-	lbft.fetched = fetched
-	lbft.fetched = append(lbft.fetched, committed)
-
-	q := 0
-	for _, c := range lbft.fetched {
-		if c.SeqNo == committed.SeqNo {
-			q++
-		}
-	}
 	digest := committed.Request.Name()
-	log.Debugf("Replica %s received Committed from %s for consensus %s, vote: %d/%d", lbft.options.ID, committed.ReplicaID, digest, lbft.Quorum(), q)
-	if q >= lbft.Quorum() {
+	if committed.ReplicaID == lbft.options.ID {
+		log.Debugf("Replica %s received Committed from %s for consensus %s", lbft.options.ID, committed.ReplicaID, digest)
 		//lbft.committedRequests[committed.SeqNo] = committed.Request
 	} else {
-		return nil
+		fetched := []*Committed{}
+		for _, c := range lbft.fetched {
+			if c.SeqNo == committed.SeqNo && c.ReplicaID == committed.ReplicaID {
+				continue
+			}
+			if c.SeqNo > lbft.execSeqNo {
+				fetched = append(fetched, c)
+			}
+		}
+		lbft.fetched = fetched
+		lbft.fetched = append(lbft.fetched, committed)
+
+		q := 0
+		for _, c := range lbft.fetched {
+			if c.SeqNo == committed.SeqNo {
+				q++
+			}
+		}
+		log.Debugf("Replica %s received Committed from %s for consensus %s, vote: %d/%d", lbft.options.ID, committed.ReplicaID, digest, lbft.Quorum(), q)
+		if q >= lbft.Quorum() {
+			//lbft.committedRequests[committed.SeqNo] = committed.Request
+		} else {
+			return nil
+		}
 	}
-	// }
 	lbft.committedRequests[committed.SeqNo] = committed.Request
 	if core, ok := lbft.coreStore[digest]; ok {
 		lbft.stopNewViewTimerForCore(core)
@@ -513,9 +511,8 @@ func (lbft *Lbft) execute() {
 			lbft.execSeqNo = nextExec
 			if lbft.execHeight+1 != request.Height {
 				if lbft.execHeight+2 != request.Height {
-					panic(fmt.Sprintf("noreachable"))
+					panic(fmt.Sprintf("noreachable(%d +2 == %d)", lbft.execHeight, request.Height))
 				}
-				lbft.lastSeqNo = lbft.seqNos[0]
 				lbft.execHeight = request.Height - 1
 				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("size %d", lbft.options.BlockSize))
 				lbft.outputTxs = nil
@@ -530,7 +527,6 @@ func (lbft *Lbft) execute() {
 				request.Func(3, request.Txs)
 			}
 			if request.ID == EMPTYREQUEST && len(lbft.outputTxs) > 0 {
-				lbft.lastSeqNo = lbft.seqNos[0]
 				lbft.execHeight = request.Height
 				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s)", lbft.options.BlockTimeout))
 				lbft.outputTxs = nil

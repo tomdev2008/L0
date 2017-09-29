@@ -19,6 +19,8 @@
 package lbft
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -51,7 +53,6 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
 	lbft.execHeight = lbft.height
 	lbft.execSeqNo = lbft.seqNo
-	lbft.lastSeqNo = lbft.seqNo
 	lbft.priority = time.Now().UnixNano()
 	lbft.primaryHistory = make(map[string]int64)
 
@@ -94,7 +95,6 @@ type Lbft struct {
 	seqNo                 uint32
 	execHeight            uint32
 	execSeqNo             uint32
-	lastSeqNo             uint32
 	priority              int64
 	primaryHistory        map[string]int64
 	primaryID             string
@@ -288,6 +288,12 @@ func (lbft *Lbft) processConsensusMsg(msg *Message) *Message {
 	return nil
 }
 
+func (lbft *Lbft) hash() (ret string) {
+	h1 := sha256.Sum256(utils.Serialize(lbft.outputTxs))
+	h2 := sha256.Sum256(utils.Serialize(lbft.seqNos))
+	return hex.EncodeToString(h1[:]) + ":" + hex.EncodeToString(h2[:])
+}
+
 func (lbft *Lbft) startNewViewTimer() {
 	lbft.Lock()
 	defer lbft.Unlock()
@@ -297,9 +303,9 @@ func (lbft *Lbft) startNewViewTimer() {
 				ID:        "lbft",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastSeqNo,
+				SeqNo:     lbft.execSeqNo,
 				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash(),
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -324,9 +330,9 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				ID:        "lbft-period",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.lastSeqNo,
+				SeqNo:     lbft.execSeqNo,
 				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash(),
+				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
@@ -419,7 +425,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					if v.PrimaryID == lbft.lastPrimaryID {
 						continue
 					}
-					if v.SeqNo != lbft.lastSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
+					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 						continue
 					}
 					if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -446,7 +452,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.lastSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
+			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -475,8 +481,10 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.height = vc.Height
 	lbft.execSeqNo = lbft.seqNo
 	lbft.execHeight = lbft.height
-	lbft.lastSeqNo = lbft.seqNo
-	lbft.cnt = 0
+	lbft.cnt = len(lbft.outputTxs)
+	if lbft.cnt > 0 {
+		lbft.height++
+	}
 	delete(lbft.primaryHistory, lbft.primaryID)
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
@@ -506,7 +514,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.coreStore = make(map[string]*lbftCore)
 
 	for seqNo, req := range lbft.committedRequests {
-		if req.Height > lbft.execHeight || seqNo > lbft.lastSeqNo {
+		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
 			f := req.Func
 			if f != nil {
