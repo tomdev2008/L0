@@ -68,7 +68,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
+			lbft.sendViewChange(vc, fmt.Sprintf("%s request timeout(%s)", core.digest, lbft.options.Request))
 		})
 	}
 }
@@ -191,7 +191,7 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 			PrimaryID: lbft.primaryID,
 			SeqNo:     lbft.seqNo,
 			Height:    lbft.height,
-			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
+			OptHash:   lbft.options.Hash(),
 			//Digest:    digest,
 			Quorum:    lbft.Quorum(),
 			Request:   request,
@@ -320,7 +320,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		}
 	}
 
-	log.Debugf("Replica %s received PrePrepare from %s for consensus %s", lbft.options.ID, preprepare.ReplicaID, digest)
+	log.Debugf("Replica %s received PrePrepare from %s for consensus %s, seqNo %d", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo)
 
 	lbft.startNewViewTimerForCore(core)
 	core.fromChain = fromChain
@@ -330,7 +330,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		PrimaryID: lbft.primaryID,
 		SeqNo:     preprepare.SeqNo,
 		Height:    preprepare.Height,
-		OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
+		OptHash:   lbft.options.Hash(),
 		Digest:    digest,
 		Quorum:    lbft.Quorum(),
 		Chain:     lbft.options.Chain,
@@ -376,7 +376,7 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 		PrimaryID: lbft.primaryID,
 		SeqNo:     core.prePrepare.SeqNo,
 		Height:    core.prePrepare.Height,
-		OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
+		OptHash:   lbft.options.Hash(),
 		Digest:    prepare.Digest,
 		Quorum:    lbft.Quorum(),
 		Chain:     lbft.options.Chain,
