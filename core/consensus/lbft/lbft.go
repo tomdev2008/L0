@@ -51,6 +51,7 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
 	lbft.execHeight = lbft.height
 	lbft.execSeqNo = lbft.seqNo
+	lbft.lastSeqNo = lbft.seqNo
 	lbft.priority = time.Now().UnixNano()
 	lbft.primaryHistory = make(map[string]int64)
 
@@ -93,6 +94,7 @@ type Lbft struct {
 	seqNo                 uint32
 	execHeight            uint32
 	execSeqNo             uint32
+	lastSeqNo             uint32
 	priority              int64
 	primaryHistory        map[string]int64
 	primaryID             string
@@ -143,16 +145,18 @@ func (lbft *Lbft) Start() {
 				msg = lbft.processConsensusMsg(msg)
 			}
 		case <-lbft.blockTimer.C:
-			req := &Request{
-				ID:     EMPTYREQUEST,
-				Time:   uint32(time.Now().Unix()),
-				Height: lbft.height,
-				Txs:    nil,
-				Func:   nil,
-			}
-			lbft.recvConsensusMsgChan <- &Message{
-				Type:    MESSAGEREQUEST,
-				Payload: utils.Serialize(req),
+			if lbft.isPrimary() {
+				req := &Request{
+					ID:     EMPTYREQUEST,
+					Time:   uint32(time.Now().Unix()),
+					Height: lbft.height,
+					Txs:    nil,
+					Func:   nil,
+				}
+				lbft.recvConsensusMsgChan <- &Message{
+					Type:    MESSAGEREQUEST,
+					Payload: utils.Serialize(req),
+				}
 			}
 		}
 	}
@@ -293,13 +297,13 @@ func (lbft *Lbft) startNewViewTimer() {
 				ID:        "lbft",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
+				SeqNo:     lbft.lastSeqNo,
 				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%v)", lbft.options.Request))
+			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
 		})
 	}
 }
@@ -320,7 +324,7 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				ID:        "lbft-period",
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
+				SeqNo:     lbft.lastSeqNo,
 				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
@@ -415,7 +419,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 					if v.PrimaryID == lbft.lastPrimaryID {
 						continue
 					}
-					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
+					if v.SeqNo != lbft.lastSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 						continue
 					}
 					if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -429,7 +433,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 				}
 				delete(lbft.vcStore, vc.ID)
 				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.ID)
-				lbft.sendViewChange(tvc, fmt.Sprintf("resend timeout(%v)", lbft.options.ResendViewChange))
+				lbft.sendViewChange(tvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
 			})
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
@@ -442,7 +446,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
+			if v.SeqNo != lbft.lastSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -471,6 +475,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.height = vc.Height
 	lbft.execSeqNo = lbft.seqNo
 	lbft.execHeight = lbft.height
+	lbft.lastSeqNo = lbft.seqNo
 	lbft.cnt = 0
 	delete(lbft.primaryHistory, lbft.primaryID)
 	lbft.stopViewChangePeriodTimer()
@@ -501,7 +506,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.coreStore = make(map[string]*lbftCore)
 
 	for seqNo, req := range lbft.committedRequests {
-		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
+		if req.Height > lbft.execHeight || seqNo > lbft.lastSeqNo {
 			delete(lbft.committedRequests, seqNo)
 			f := req.Func
 			if f != nil {

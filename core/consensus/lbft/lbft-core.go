@@ -62,13 +62,13 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
+				SeqNo:     lbft.lastSeqNo,
 				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc, "timeout")
+			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
 		})
 	}
 }
@@ -232,7 +232,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ID:        digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.execSeqNo,
+			SeqNo:     lbft.lastSeqNo,
 			Height:    lbft.execHeight,
 			OptHash:   lbft.options.Hash(),
 			ReplicaID: lbft.options.ID,
@@ -249,7 +249,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ID:        digest,
 			Priority:  lbft.priority,
 			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.execSeqNo,
+			SeqNo:     lbft.lastSeqNo,
 			Height:    lbft.execHeight,
 			OptHash:   lbft.options.Hash(),
 			ReplicaID: lbft.options.ID,
@@ -272,7 +272,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
+				SeqNo:     lbft.lastSeqNo,
 				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
@@ -288,7 +288,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				ID:        digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
+				SeqNo:     lbft.lastSeqNo,
 				Height:    lbft.execHeight,
 				OptHash:   lbft.options.Hash(),
 				ReplicaID: lbft.options.ID,
@@ -510,14 +510,18 @@ func (lbft *Lbft) execute() {
 		if nextExec-seqNo > uint32(lbft.options.K*3) {
 			delete(lbft.committedRequests, seqNo)
 		} else if seqNo == nextExec {
+			lbft.execSeqNo = nextExec
 			if lbft.execHeight+1 != request.Height {
-				lbft.execHeight = request.Height
+				if lbft.execHeight+2 != request.Height {
+					panic(fmt.Sprintf("noreachable"))
+				}
+				lbft.lastSeqNo = lbft.seqNos[0]
+				lbft.execHeight = request.Height - 1
 				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("size %d", lbft.options.BlockSize))
 				lbft.outputTxs = nil
 				lbft.seqNos = nil
 			}
-			lbft.execSeqNo = nextExec
-			if lbft.outputTxs.Len() == 0 {
+			if lbft.outputTxs.Len() == 0 && lbft.isPrimary() {
 				lbft.blockTimer.Reset(lbft.options.BlockTimeout)
 			}
 			lbft.outputTxs = append(lbft.outputTxs, request.Txs...)
@@ -525,9 +529,10 @@ func (lbft *Lbft) execute() {
 			if request.Func != nil {
 				request.Func(3, request.Txs)
 			}
-			if request.ID == EMPTYREQUEST {
+			if request.ID == EMPTYREQUEST && len(lbft.outputTxs) > 0 {
+				lbft.lastSeqNo = lbft.seqNos[0]
 				lbft.execHeight = request.Height
-				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("timeout %d", lbft.options.BlockTimeout))
+				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s)", lbft.options.BlockTimeout))
 				lbft.outputTxs = nil
 				lbft.seqNos = nil
 			}
