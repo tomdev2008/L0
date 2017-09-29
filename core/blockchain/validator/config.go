@@ -1,3 +1,4 @@
+// Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
 //
 // This file is part of L0
 //
@@ -36,7 +37,7 @@ func DefaultConfig() *Config {
 		IsValid:        true,
 		TxPoolCapacity: 200000,
 		BatchSize:      2000,
-		TxsListDelay:   1 * 2000,
+		TxsListDelay:   10000,
 		TxPoolTimeOut:  30 * time.Minute,
 		BlacklistDur:   1 * time.Minute,
 		BatchTimeOut:   10 * time.Second,

@@ -26,9 +26,11 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
+
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -53,7 +55,7 @@ type Blockchain struct {
 	wg                 sync.WaitGroup
 	currentBlockHeader *types.BlockHeader
 	ledger             *ledger.Ledger
-	txValidator        *validator.Validator
+	txValidator        validator.Validator
 	// consensus
 	consenter consensus.Consenter
 	// network stack
@@ -232,9 +234,10 @@ func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 
 // StartTxPool starts txpool service
 func (bc *Blockchain) StartTxPool() {
-	bc.txValidator = validator.NewValidator(bc.ledger, validator.DefaultConfig(), bc.consenter)
-	bc.ledger.Validator = bc.txValidator
-	go bc.txValidator.Start()
+	verification := validator.NewVerification(bc.ledger, validator.DefaultConfig(), bc.consenter, sortedlinkedlist.NewSortedLinkedList())
+	bc.txValidator = verification
+	bc.ledger.Validator = verification
+	bc.txValidator.Start()
 }
 
 // ProcessTransaction processes new transaction from the network
@@ -246,7 +249,7 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	if bc.txValidator == nil {
 		return true
 	}
-	if ok := bc.txValidator.PushTxInTxPool(tx); ok {
+	if ok := bc.txValidator.ProcessTransaction(tx); ok {
 		return true
 	}
 

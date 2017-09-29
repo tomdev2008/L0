@@ -27,22 +27,30 @@ import (
 )
 
 type account struct {
-	balance *big.Int
-	nonce   uint32
+	amount *big.Int
+	nonce  uint32
 }
 
 func newAccount(address accounts.Address, leger *ledger.Ledger) *account {
 	amount, nonce, _ := leger.GetBalance(address)
 	return &account{
-		balance: amount,
-		nonce:   nonce,
+		amount: amount,
+		nonce:  nonce,
 	}
 }
 
-func (a *account) updateTransactionReceiverBalance(tx *types.Transaction) {
-	a.balance = a.balance.Add(a.balance, tx.Amount())
+func (a *account) updateTransactionSenderBalance(tx *types.Transaction) {
+	a.amount = a.amount.Sub(a.amount, tx.Amount())
 }
 
-func (a *account) updateTransactionSenderBalance(tx *types.Transaction) {
-	a.balance = a.balance.Sub(a.balance, tx.Amount())
+func (a *account) rollBackTransactionSenderBalance(tx *types.Transaction) {
+	a.amount = a.amount.Add(a.amount, tx.Amount())
+}
+
+func (a *account) updateTransactionReceiverBalance(tx *types.Transaction) {
+	a.amount = a.amount.Add(a.amount, tx.Amount())
+}
+
+func (a *account) rollBackTransactionReceiverBalance(tx *types.Transaction) {
+	a.amount = a.amount.Sub(a.amount, tx.Amount())
 }

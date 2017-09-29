@@ -228,6 +228,9 @@ func (tx *Transaction) CreateTime() uint32 {
 
 // Compare implements interface consensus need
 func (tx *Transaction) Compare(v interface{}) int {
+	if tx.CreateTime() >= v.(*Transaction).CreateTime() {
+		return 1
+	}
 	return 0
 }
 

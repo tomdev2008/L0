@@ -46,9 +46,9 @@ var (
 )
 
 type ValidatorHandler interface {
-	UpdateAccount(tx *types.Transaction)bool
+	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
-	RemoveTxsInTxPool(txs types.Transactions)
+	RemoveTxsInVerification(txs types.Transactions)
 }
 
 // Ledger represents the ledger in blockchain
@@ -136,7 +136,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	}
 	delay := time.Since(t)
 
-	ledger.Validator.RemoveTxsInTxPool(block.Transactions)
+	ledger.Validator.RemoveTxsInVerification(block.Transactions)
 
 	ledger.contract.StopContract(bh)
 	log.Infoln("append block delay :", delay, " remove txs in txpool delay ", time.Since(t), " transactions : ", len(block.Transactions))
