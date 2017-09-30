@@ -212,6 +212,7 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 		if !req.isValid() {
 			panic("illegal request")
 		}
+		log.Debugf("Replica %s send Request for consensus %s", lbft.options.ID, req.Name())
 		lbft.recvConsensusMsgChan <- &Message{
 			Type:    MESSAGEREQUEST,
 			Payload: utils.Serialize(req),

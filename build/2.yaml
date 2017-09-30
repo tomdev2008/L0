@@ -37,7 +37,7 @@ consensus:
 
   noops:
     batchSize: 10000
-    bactchTimeout: 1s
+    batchTimeout: 1s
     blockSize: 10000
     blockTimeout: 1s
 
@@ -46,7 +46,7 @@ consensus:
     Q: 3
     K: 10
     batchSize: 10000
-    bactchTimeout: 1s
+    batchTimeout: 1s
     blockSize: 10000
     blockTimeout: 1s
     request: 3s
