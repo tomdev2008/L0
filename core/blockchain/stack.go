@@ -24,7 +24,7 @@ import (
 )
 
 //VerifyTxsInConsensus verify
-func (bc *Blockchain) VerifyTxs(txs types.Transactions, primary bool) bool {
+func (bc *Blockchain) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
 	return bc.txValidator.VerifyTxs(txs)
 }
 

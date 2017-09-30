@@ -170,7 +170,7 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 				Payload: utils.Serialize(request),
 			})
 		} else if fromChain != toChain {
-			if !lbft.stack.VerifyTxs(request.Txs, true) {
+			if success, _ := lbft.stack.VerifyTxs(request.Txs, true); !success {
 				log.Errorf("Replica %s received Request for consensus %s: ignore, failed to verify", lbft.options.ID, digest)
 				return nil
 			}
@@ -303,7 +303,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			return nil
 		}
 
-		if !lbft.stack.VerifyTxs(preprepare.Request.Txs, false) {
+		if success, _ := lbft.stack.VerifyTxs(preprepare.Request.Txs, false); !success {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: failed to verify", lbft.options.ID, preprepare.ReplicaID, digest)
 			vc := &ViewChange{
 				ID:        digest,

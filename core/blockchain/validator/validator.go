@@ -35,7 +35,7 @@ import (
 type Validator interface {
 	Start()
 	ProcessTransaction(tx *types.Transaction) bool
-	VerifyTxs(txs types.Transactions) bool
+	VerifyTxs(txs types.Transactions) (bool, types.Transactions)
 	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
@@ -134,16 +134,16 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 	}
 }
 
-func (v *Verification) VerifyTxs(txs types.Transactions) bool {
+func (v *Verification) VerifyTxs(txs types.Transactions) (bool, types.Transactions) {
 	if !v.config.IsValid {
-		return true
+		return true, txs
 	}
 
 	for _, tx := range txs {
 		if !v.checkTransactionIsExist(tx) {
 			if err := v.checkTransactionIsIllegal(tx); err != nil {
 				log.Errorf("[validator] verify transaction tx fail, %v", err)
-				return false
+				return false, nil
 			}
 		}
 		// remove balance is negative tx
@@ -152,10 +152,10 @@ func (v *Verification) VerifyTxs(txs types.Transactions) bool {
 			// for _, rollbackTx := range txs[:k] {
 			// 	v.RollBackAccount(rollbackTx)
 			// }
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, txs
 }
 
 func (v *Verification) UpdateAccount(tx *types.Transaction) bool {

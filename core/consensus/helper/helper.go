@@ -38,6 +38,6 @@ func (stack *Stack) GetBlockchainInfo() *consensus.BlockchainInfo {
 }
 
 // VerifyTxs Implenment consensus.IStack
-func (stack *Stack) VerifyTxs(txs types.Transactions, primary bool) bool {
-	return true
+func (stack *Stack) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
+	return true, txs
 }

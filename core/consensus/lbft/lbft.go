@@ -202,7 +202,7 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 		return
 	}
 
-	if success := lbft.stack.VerifyTxs(txs, true); success {
+	if _, txs := lbft.stack.VerifyTxs(txs, true); len(txs) > 0 {
 		req := &Request{
 			ID:   time.Now().UnixNano(),
 			Time: uint32(time.Now().Unix()),
