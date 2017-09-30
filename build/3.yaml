@@ -36,22 +36,22 @@ consensus:
   plugin: "lbft"
 
   noops:
-    batchSize: 2000
-    bactchTimeout: 10s
-    blockSize: 20000
-    blockTimeout: 10s
+    batchSize: 10000
+    bactchTimeout: 1s
+    blockSize: 10000
+    blockTimeout: 1s
 
   lbft:
     "N": 4
     Q: 3
     K: 10
-    batchSize: 2000
-    bactchTimeout: 10s
-    blockSize: 20000
-    blockTimeout: 10s
-    request: 30s
-    viewChange: 5s
-    resendViewChange: 5s
+    batchSize: 10000
+    bactchTimeout: 1s
+    blockSize: 10000
+    blockTimeout: 1s
+    request: 3s
+    viewChange: 2s
+    resendViewChange: 3s
     viewChangePeriod: 0s
 
 # vm

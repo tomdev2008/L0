@@ -69,8 +69,8 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	if lbft.options.Request <= lbft.options.ViewChange {
 		lbft.options.Request = 3 * lbft.options.ViewChange / 2
 	}
-	if lbft.options.Request <= 2*lbft.options.BlockTimeout {
-		lbft.options.Request = 3 * 2 * lbft.options.BlockTimeout / 2
+	if lbft.options.BlockTimeout <= lbft.options.BatchTimeout {
+		lbft.options.BlockTimeout = 3 * lbft.options.BatchTimeout / 2
 	}
 	if lbft.options.ResendViewChange <= lbft.options.ViewChange {
 		lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
@@ -102,6 +102,7 @@ type Lbft struct {
 	newViewTimer          *time.Timer
 	viewChangePeriodTimer *time.Timer
 
+	rvc               *ViewChange
 	vcStore           map[string]*viewChangeList
 	coreStore         map[string]*lbftCore
 	committedRequests map[uint32]*Request
@@ -193,7 +194,9 @@ func (lbft *Lbft) BatchTimeout() time.Duration {
 
 //ProcessBatches
 func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.Transactions)) {
-	lbft.startNewViewTimer()
+	if !lbft.hasPrimary() {
+		lbft.startNewViewTimer()
+	}
 	if !lbft.isPrimary() {
 		function(0, txs)
 		return
@@ -399,6 +402,24 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		vcl = &viewChangeList{}
 		lbft.vcStore[vc.ID] = vcl
 		vcl.timeoutTimer = time.AfterFunc(lbft.options.ViewChange, func() {
+			var tvc *ViewChange
+			for _, v := range vcl.vcs {
+				if v.PrimaryID == lbft.lastPrimaryID {
+					continue
+				}
+				if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+					continue
+				}
+				if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
+					continue
+				}
+				if tvc == nil {
+					tvc = v
+				} else if tvc.Priority > v.Priority {
+					tvc = v
+				}
+			}
+			lbft.rvc = tvc
 			delete(lbft.vcStore, vc.ID)
 		})
 	} else {
@@ -417,31 +438,12 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
 		if len(vcl.vcs) == lbft.Quorum() {
-			vcl.timeoutTimer.Stop()
-			vcl.timeoutTimer = nil
+			// vcl.timeoutTimer.Stop()
+			// vcl.timeoutTimer = nil
 			vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
-				var tvc *ViewChange
-				for _, v := range vcl.vcs {
-					if v.PrimaryID == lbft.lastPrimaryID {
-						continue
-					}
-					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
-						continue
-					}
-					if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
-						continue
-					}
-					if tvc == nil {
-						tvc = v
-					} else if tvc.Priority > v.Priority {
-						tvc = v
-					}
-				}
-				delete(lbft.vcStore, vc.ID)
-				tvc.Chain = lbft.options.Chain
-				tvc.ReplicaID = lbft.options.ID
-				log.Debugf("Replica %s resend ViewChange(%s)", lbft.options.ID, tvc.PrimaryID)
-				lbft.sendViewChange(tvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
+				lbft.rvc.Chain = lbft.options.Chain
+				lbft.rvc.ReplicaID = lbft.options.ID
+				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
 			})
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
