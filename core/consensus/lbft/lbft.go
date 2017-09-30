@@ -465,6 +465,20 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			} else if tvc.Priority > v.Priority {
 				tvc = v
 			}
+		}
+		for _, v := range vcl.vcs {
+			if v.PrimaryID == lbft.lastPrimaryID {
+				continue
+			}
+			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+				continue
+			}
+			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
+				continue
+			}
+			if v.PrimaryID != tvc.PrimaryID {
+				continue
+			}
 			q++
 		}
 		if q >= lbft.Quorum() {
