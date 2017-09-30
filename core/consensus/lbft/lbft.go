@@ -527,8 +527,8 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 		if core.prePrepare != nil {
 			req := core.prePrepare.Request
 			f := req.Func
-			if f != nil {
-				f(2, core.prePrepare.Request.Txs)
+			if f != nil && req.fromChain() == lbft.options.Chain {
+				f(2, req.Txs)
 			}
 		}
 	}
@@ -538,7 +538,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
 			f := req.Func
-			if f != nil {
+			if f != nil && req.fromChain() == lbft.options.Chain {
 				f(2, req.Txs)
 			}
 		}

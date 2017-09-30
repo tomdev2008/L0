@@ -542,7 +542,7 @@ func (lbft *Lbft) execute() {
 			}
 			lbft.outputTxs = append(lbft.outputTxs, request.Txs...)
 			lbft.seqNos = append(lbft.seqNos, seqNo)
-			if request.Func != nil {
+			if request.Func != nil && request.fromChain() == lbft.options.Chain {
 				request.Func(3, request.Txs)
 			}
 			if request.ID == EMPTYREQUEST && len(lbft.outputTxs) > 0 {
