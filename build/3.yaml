@@ -20,6 +20,14 @@ blockchain:
   cpuprofile: "profile/prof_node3"
   profPort: "6063"
 
+validator:
+  status: true
+  blacklisttimeout: 60s
+  txpool:
+    capacity: 1000000
+    timeout: 30m
+    txdelay:  10000
+
 issueaddr:
   addr: ["6ce1bb0858e71b50d603ebe4bec95b11d8833e6d"]
 

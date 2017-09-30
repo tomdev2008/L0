@@ -65,7 +65,7 @@ func NewVerification(ledger *ledger.Ledger,
 		consenter:          consenter,
 		txpool:             linkedList,
 		requestBatchSignal: make(chan int),
-		requestBatchTimer:  time.NewTimer(config.BatchTimeOut),
+		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),
 		accounts:           make(map[string]*account),
 		inConsensusTxs:     make(map[crypto.Hash]*types.Transaction),
@@ -81,7 +81,7 @@ func (v *Verification) Start() {
 func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
 	if v.pushTxInTxPool(tx) {
 		v.requestBatchSignal <- 1
-		v.requestBatchTimer.Reset(v.config.BatchTimeOut)
+		v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
 		return true
 	}
 	return false
@@ -135,6 +135,10 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 }
 
 func (v *Verification) VerifyTxs(txs types.Transactions) bool {
+	if !v.config.IsValid {
+		return true
+	}
+
 	for _, tx := range txs {
 		if !v.checkTransactionIsExist(tx) {
 			if err := v.checkTransactionIsIllegal(tx); err != nil {
@@ -249,7 +253,7 @@ func (v *Verification) makeRequestBatch() types.Transactions {
 		if to == "" {
 			to = tx.ToChain()
 		}
-		if tx.ToChain() == to && len(requestBatch) < v.config.BatchSize {
+		if tx.ToChain() == to && len(requestBatch) < v.consenter.BatchSize() {
 			requestBatch = append(requestBatch, tx)
 		} else {
 			return true
@@ -265,14 +269,14 @@ func (v *Verification) ProcessBatchLoop() {
 	for {
 		select {
 		case <-v.requestBatchSignal:
-			if v.txpool.Len() > (v.config.TxsListDelay + v.config.BatchSize) {
+			if v.txpool.Len() > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
 				v.consenter.ProcessBatch(v.makeRequestBatch(), v.consensusFailed)
 			}
 		case <-v.requestBatchTimer.C:
 			if requestBatch := v.makeRequestBatch(); len(requestBatch) != 0 {
 				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
 			}
-			v.requestBatchTimer.Reset(v.config.BatchTimeOut)
+			v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
 		}
 	}
 }

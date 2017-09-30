@@ -51,6 +51,7 @@ type Status struct {
 type Blockchain struct {
 	// global chain config
 	// config
+	validatorCfg       *validator.Config
 	mu                 sync.Mutex
 	wg                 sync.WaitGroup
 	currentBlockHeader *types.BlockHeader
@@ -95,8 +96,9 @@ func (bc *Blockchain) load() {
 }
 
 // NewBlockchain returns a fully initialised blockchain service using input data
-func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
+func NewBlockchain(ledger *ledger.Ledger, validatorCfg *validator.Config) *Blockchain {
 	bc := &Blockchain{
+		validatorCfg:       validatorCfg,
 		mu:                 sync.Mutex{},
 		wg:                 sync.WaitGroup{},
 		ledger:             ledger,
@@ -234,7 +236,7 @@ func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 
 // StartTxPool starts txpool service
 func (bc *Blockchain) StartTxPool() {
-	verification := validator.NewVerification(bc.ledger, validator.DefaultConfig(), bc.consenter, sortedlinkedlist.NewSortedLinkedList())
+	verification := validator.NewVerification(bc.ledger, bc.validatorCfg, bc.consenter, sortedlinkedlist.NewSortedLinkedList())
 	bc.txValidator = verification
 	bc.ledger.Validator = verification
 	bc.txValidator.Start()

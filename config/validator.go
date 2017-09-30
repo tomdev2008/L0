@@ -16,24 +16,19 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package validator
+package config
 
-import "time"
+import (
+	"github.com/bocheninc/L0/core/blockchain/validator"
+)
 
-type Config struct {
-	IsValid        bool
-	TxPoolCapacity int
-	TxPoolDelay    int
-	TxPoolTimeOut  time.Duration
-	BlacklistDur   time.Duration
-}
+func ValidatorConfig() *validator.Config {
+	var config = validator.DefaultConfig()
 
-func DefaultConfig() *Config {
-	return &Config{
-		IsValid:        true,
-		TxPoolCapacity: 200000,
-		TxPoolDelay:    5000,
-		TxPoolTimeOut:  30 * time.Minute,
-		BlacklistDur:   1 * time.Minute,
-	}
+	config.IsValid = getbool("validator.status", config.IsValid)
+	config.BlacklistDur = getDuration("validator.blacklisttimeout", config.BlacklistDur)
+	config.TxPoolCapacity = getInt("validator.txpool.capacity", config.TxPoolCapacity)
+	config.TxPoolTimeOut = getDuration("validator.txpool.timeout", config.TxPoolTimeOut)
+	config.TxPoolDelay = getInt("validator.txpool.txdelay", config.TxPoolDelay)
+	return config
 }
