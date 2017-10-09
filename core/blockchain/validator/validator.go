@@ -81,7 +81,9 @@ func (v *Verification) Start() {
 func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
 	if v.pushTxInTxPool(tx) {
 		v.requestBatchSignal <- 1
-		v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
+		if v.txpool.Len() == 1 {
+			v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
+		}
 		return true
 	}
 	return false
@@ -205,7 +207,7 @@ func (v *Verification) fetchAccount(address accounts.Address) *account {
 func (v *Verification) RemoveTxInVerification(tx *types.Transaction) {
 	v.Lock()
 	defer v.Unlock()
-	log.Debugln("[validator] remove transaction in verification ,tx_hash: ", tx.Hash())
+	log.Debugf("[validator] remove transaction in verification ,tx_hash: %s ,txpool_len: %d", tx.Hash(), v.txpool.Len())
 	delete(v.inConsensusTxs, tx.Hash())
 	v.txpool.Remove(tx)
 }
@@ -248,6 +250,9 @@ func (v *Verification) processBlacklistLoop() {
 func (v *Verification) makeRequestBatch() types.Transactions {
 	var requestBatch types.Transactions
 	var to string
+
+	v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
+
 	v.txpool.IterElement(func(element sortedlinkedlist.IElement) bool {
 		tx := element.(*types.Transaction)
 		if to == "" {
@@ -270,13 +275,15 @@ func (v *Verification) ProcessBatchLoop() {
 		select {
 		case <-v.requestBatchSignal:
 			if v.txpool.Len() > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
-				v.consenter.ProcessBatch(v.makeRequestBatch(), v.consensusFailed)
+				requestBatch := v.makeRequestBatch()
+				log.Debugf("request Batch: %d ", len(requestBatch))
+				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
 			}
 		case <-v.requestBatchTimer.C:
 			if requestBatch := v.makeRequestBatch(); len(requestBatch) != 0 {
+				log.Debugf("request Batch Timeout: %d ", len(requestBatch))
 				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
 			}
-			v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
 		}
 	}
 }
