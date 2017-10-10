@@ -51,7 +51,7 @@ consensus:
     blockTimeout: 1s
     request: 3s
     viewChange: 2s
-    resendViewChange: 3s
+    resendViewChange: 2s
     viewChangePeriod: 0s
 
 # vm

@@ -72,9 +72,9 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	if lbft.options.BlockTimeout <= lbft.options.BatchTimeout {
 		lbft.options.BlockTimeout = 3 * lbft.options.BatchTimeout / 2
 	}
-	if lbft.options.ResendViewChange <= lbft.options.ViewChange {
-		lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
-	}
+	// if lbft.options.ResendViewChange <= lbft.options.ViewChange {
+	// 	lbft.options.ResendViewChange = 3 * lbft.options.ViewChange / 2
+	// }
 	if lbft.options.ViewChangePeriod > 0*time.Second && lbft.options.ViewChangePeriod <= lbft.options.ViewChange {
 		lbft.options.ViewChangePeriod = 60 * 3 * lbft.options.ViewChange / 2
 	}
@@ -448,7 +448,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
-	log.Debugf("Replica %s received received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
+	log.Debugf("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
 
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
