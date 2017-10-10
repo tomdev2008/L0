@@ -403,24 +403,26 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		vcl = &viewChangeList{}
 		lbft.vcStore[vc.ID] = vcl
 		vcl.timeoutTimer = time.AfterFunc(lbft.options.ViewChange, func() {
-			var tvc *ViewChange
-			for _, v := range vcl.vcs {
-				if v.PrimaryID == lbft.lastPrimaryID {
-					continue
+			if len(vcl.vcs) >= lbft.Quorum() {
+				var tvc *ViewChange
+				for _, v := range vcl.vcs {
+					if v.PrimaryID == lbft.lastPrimaryID {
+						continue
+					}
+					if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+						continue
+					}
+					if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
+						continue
+					}
+					if tvc == nil {
+						tvc = v
+					} else if tvc.Priority > v.Priority {
+						tvc = v
+					}
 				}
-				if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
-					continue
-				}
-				if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
-					continue
-				}
-				if tvc == nil {
-					tvc = v
-				} else if tvc.Priority > v.Priority {
-					tvc = v
-				}
+				lbft.rvc = tvc
 			}
-			lbft.rvc = tvc
 			delete(lbft.vcStore, vc.ID)
 		})
 	} else {
