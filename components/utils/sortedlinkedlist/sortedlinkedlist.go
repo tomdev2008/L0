@@ -192,8 +192,8 @@ func IterElement(function func(element IElement) bool) {
 
 //IterElement Iter, thread safe
 func (sll *SortedLinkedList) IterElement(function func(element IElement) bool) {
-	sll.Lock()
-	defer sll.Unlock()
+	sll.RLock()
+	defer sll.RUnlock()
 	for elem := sll.list.Front(); elem != nil; elem = elem.Next() {
 		if function(elem.Value.(IElement)) {
 			break
@@ -242,8 +242,8 @@ func IsExist(element IElement) bool { return sortedLinkedList.IsExist(element) }
 
 //IsExist elemeng if exist
 func (sll *SortedLinkedList) IsExist(element IElement) bool {
-	sll.Lock()
-	defer sll.Unlock()
+	sll.RLock()
+	defer sll.RUnlock()
 	key := sll.key(element)
 	_, ok := sll.mapping[key]
 	return ok
@@ -267,7 +267,7 @@ func GetIElementByKey(key string) IElement { return sortedLinkedList.GetIElement
 
 //GetIElementByKey get element
 func (sll *SortedLinkedList) GetIElementByKey(key string) IElement {
-	sll.Lock()
-	defer sll.Unlock()
+	sll.RLock()
+	defer sll.RUnlock()
 	return sll.mapping[key].Value.(IElement)
 }
