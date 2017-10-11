@@ -39,6 +39,9 @@ type lbftCore struct {
 	commit       []*Commit
 	passCommit   bool
 	newViewTimer *time.Timer
+
+	startTime time.Time
+	endTime   time.Time
 }
 
 func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
@@ -50,6 +53,7 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 	core = &lbftCore{
 		digest: digest,
 	}
+	core.startTime = time.Now()
 	lbft.coreStore[digest] = core
 	return core
 }
@@ -418,6 +422,7 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 		return nil
 	}
 	core.passCommit = true
+	core.endTime = time.Now()
 	committed := &Committed{
 		SeqNo:     core.prePrepare.SeqNo,
 		Request:   core.prePrepare.Request,
@@ -472,11 +477,13 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		}
 	}
 	lbft.committedRequests[committed.SeqNo] = committed.Request
+	d, _ := time.ParseDuration("0s")
 	if core, ok := lbft.coreStore[digest]; ok {
 		lbft.stopNewViewTimerForCore(core)
 		delete(lbft.coreStore, digest)
+		d = core.endTime.Sub(core.startTime)
 	}
-	log.Debugf("Replica %s execute for consensus %s: seqNo:%d height:%d", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height)
+	log.Debugf("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
 	lbft.execute()
 
 	// for _, core := range lbft.coreStore {
