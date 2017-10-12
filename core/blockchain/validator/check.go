@@ -147,14 +147,6 @@ func (v *Verification) checkTransactionIsIllegal(tx *types.Transaction) error {
 		return fmt.Errorf(" not support this transaction of type: %v", tx.GetType())
 	}
 
-	//refuse verfiy failed transaction
-	address, err := tx.Verfiy()
-	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		v.blacklist[address.String()] = time.Now()
-		return fmt.Errorf(" varify fail, tx_hash: %s, tx_address: %s, tx_sender: %s",
-			tx.Hash().String(), address.String(), tx.Sender().String())
-	}
-
 	return nil
 }
 

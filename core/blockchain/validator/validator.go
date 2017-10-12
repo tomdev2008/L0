@@ -19,6 +19,7 @@
 package validator
 
 import (
+	"bytes"
 	"math/big"
 	"sync"
 	"time"
@@ -48,6 +49,7 @@ type Verification struct {
 	ledger             *ledger.Ledger
 	consenter          consensus.Consenter
 	txpool             *sortedlinkedlist.SortedLinkedList
+	dispatcher         *Dispatcher
 	requestBatchSignal chan int
 	requestBatchTimer  *time.Timer
 	blacklist          map[string]time.Time
@@ -62,6 +64,7 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		ledger:             ledger,
 		consenter:          consenter,
 		txpool:             sortedlinkedlist.NewSortedLinkedList(),
+		dispatcher:         NewDispatcher(config.MaxWorker, config.MaxQueue),
 		requestBatchSignal: make(chan int),
 		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),
@@ -74,6 +77,20 @@ func (v *Verification) Start() {
 	log.Info("validator start ...")
 	go v.ProcessBatchLoop()
 	go v.processBlacklistLoop()
+
+	v.dispatcher.Run(func(job Job) bool {
+		//refuse verfiy failed transaction
+		tx := job.Payload.(*types.Transaction)
+		address, err := tx.Verfiy()
+		if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
+			v.blacklist[address.String()] = time.Now()
+			log.Errorf(" varify fail, tx_hash: %s, tx_address: %s, tx_sender: %s",
+				tx.Hash().String(), address.String(), tx.Sender().String())
+			return false
+		}
+		v.txpool.Add(tx)
+		return true
+	})
 }
 
 func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
@@ -92,7 +109,9 @@ func (v *Verification) pushTxInTxPool(tx *types.Transaction) bool {
 		return false
 	}
 
-	v.txpool.Add(tx)
+	JobQueue <- Job{
+		Payload: tx,
+	}
 
 	if v.checkTxPoolCapacity() {
 		v.txpool.RemoveFront()

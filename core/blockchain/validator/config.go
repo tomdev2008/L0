@@ -24,6 +24,8 @@ type Config struct {
 	IsValid        bool
 	TxPoolCapacity int
 	TxPoolDelay    int
+	MaxWorker      int
+	MaxQueue       int
 	TxPoolTimeOut  time.Duration
 	BlacklistDur   time.Duration
 }
@@ -33,6 +35,8 @@ func DefaultConfig() *Config {
 		IsValid:        true,
 		TxPoolCapacity: 200000,
 		TxPoolDelay:    5000,
+		MaxWorker:      10,
+		MaxQueue:       2000,
 		TxPoolTimeOut:  30 * time.Minute,
 		BlacklistDur:   1 * time.Minute,
 	}
