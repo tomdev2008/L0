@@ -34,6 +34,7 @@ import (
 	"github.com/bocheninc/L0/config"
 	"github.com/bocheninc/L0/core/accounts/keystore"
 	"github.com/bocheninc/L0/core/blockchain"
+	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/consensus/consenter"
 	"github.com/bocheninc/L0/core/ledger"
@@ -83,11 +84,13 @@ func NewLcnd(cfgFile string) *Lcnd {
 	chainDb = db.NewDB(cfg.DbConfig)
 
 	newLedger = ledger.NewLedger(chainDb)
-	bc = blockchain.NewBlockchain(newLedger, cfg.ValidatorConfig)
+	bc = blockchain.NewBlockchain(newLedger)
 	consenter := consenter.NewConsenter(config.ConsenterOptions(), bc)
+	validator := validator.NewVerification(config.ValidatorConfig(), newLedger, consenter)
 	ks = keystore.NewKeyStore(chainDb, cfg.KeyStoreDir, keystore.ScryptN, keystore.ScryptP)
 	lcnd.protocolManager = node.NewProtocolManager(chainDb, netConfig, bc, consenter, newLedger, ks, mergeConfig, cfg.LogDir)
 
+	bc.SetBlockchainValidator(validator)
 	bc.SetBlockchainConsenter(consenter)
 	bc.SetNetworkStack(lcnd.protocolManager)
 

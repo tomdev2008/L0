@@ -253,13 +253,14 @@ func (sll *SortedLinkedList) IsExist(element IElement) bool {
 func RemoveFront() { sortedLinkedList.RemoveFront() }
 
 //RemoveFront remove front
-func (sll *SortedLinkedList) RemoveFront() {
+func (sll *SortedLinkedList) RemoveFront() IElement {
 	sll.Lock()
 	defer sll.Unlock()
 	elem := sll.list.Front()
 	sll.list.Remove(elem)
 	key := sll.key(elem.Value.(IElement))
 	delete(sll.mapping, key)
+	return elem.Value.(IElement)
 }
 
 //GetIElementByKey get element

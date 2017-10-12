@@ -56,14 +56,12 @@ type Verification struct {
 	sync.RWMutex
 }
 
-func NewVerification(ledger *ledger.Ledger,
-	config *Config, consenter consensus.Consenter,
-	linkedList *sortedlinkedlist.SortedLinkedList) *Verification {
+func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.Consenter) *Verification {
 	return &Verification{
 		config:             config,
 		ledger:             ledger,
 		consenter:          consenter,
-		txpool:             linkedList,
+		txpool:             sortedlinkedlist.NewSortedLinkedList(),
 		requestBatchSignal: make(chan int),
 		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),

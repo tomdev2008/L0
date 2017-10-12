@@ -26,7 +26,6 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
@@ -40,8 +39,6 @@ type NetworkStack interface {
 	Relay(inv types.IInventory)
 }
 
-var validTxPoolSize = 1000000
-
 type Status struct {
 	Height uint32
 	Tps    int
@@ -49,14 +46,12 @@ type Status struct {
 
 // Blockchain is blockchain instance
 type Blockchain struct {
-	// global chain config
-	// config
-	validatorCfg       *validator.Config
 	mu                 sync.Mutex
 	wg                 sync.WaitGroup
 	currentBlockHeader *types.BlockHeader
 	ledger             *ledger.Ledger
-	txValidator        validator.Validator
+	// validator
+	validator validator.Validator
 	// consensus
 	consenter consensus.Consenter
 	// network stack
@@ -96,9 +91,8 @@ func (bc *Blockchain) load() {
 }
 
 // NewBlockchain returns a fully initialised blockchain service using input data
-func NewBlockchain(ledger *ledger.Ledger, validatorCfg *validator.Config) *Blockchain {
+func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 	bc := &Blockchain{
-		validatorCfg:       validatorCfg,
 		mu:                 sync.Mutex{},
 		wg:                 sync.WaitGroup{},
 		ledger:             ledger,
@@ -111,6 +105,12 @@ func NewBlockchain(ledger *ledger.Ledger, validatorCfg *validator.Config) *Block
 	}
 	bc.load()
 	return bc
+}
+
+// SetBlockchainValidator sets the validator of the blockchain
+func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
+	bc.validator = validator
+	bc.ledger.Validator = bc.validator
 }
 
 // SetBlockchainConsenter sets the consenter of the blockchain
@@ -149,19 +149,19 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 
 // GetBalanceNonce returns balance and nonce
 func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) {
-	if bc.txValidator == nil {
+	if bc.validator == nil {
 		amount, nonce, _ := bc.ledger.GetBalance(addr)
 		return amount, nonce
 	}
-	return bc.txValidator.GetBalance(addr)
+	return bc.validator.GetBalance(addr)
 }
 
 // GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
-	if bc.txValidator != nil && err != nil {
+	if bc.validator != nil && err != nil {
 		var ok bool
-		if tx, ok = bc.txValidator.GetTransactionByHash(txHash); ok {
+		if tx, ok = bc.validator.GetTransactionByHash(txHash); ok {
 			return tx, nil
 		}
 	}
@@ -175,7 +175,7 @@ func (bc *Blockchain) Start() {
 	// start consesnus
 	bc.StartConsensusService()
 	// start txpool
-	bc.StartTxPool()
+	bc.StartTxPoolService()
 	log.Debug("BlockChain Service start")
 	// bc.wg.Wait()
 }
@@ -235,11 +235,8 @@ func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 }
 
 // StartTxPool starts txpool service
-func (bc *Blockchain) StartTxPool() {
-	verification := validator.NewVerification(bc.ledger, bc.validatorCfg, bc.consenter, sortedlinkedlist.NewSortedLinkedList())
-	bc.txValidator = verification
-	bc.ledger.Validator = verification
-	bc.txValidator.Start()
+func (bc *Blockchain) StartTxPoolService() {
+	bc.validator.Start()
 }
 
 // ProcessTransaction processes new transaction from the network
@@ -248,10 +245,10 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	// step 2: add transaction to txPool
 	// if atomic.LoadUint32(&bc.synced) == 0 {
 	log.Debugf("[Blockchain] new tx, tx_hash: %v, tx_sender: %v, tx_nonce: %v", tx.Hash().String(), tx.Sender().String(), tx.Nonce())
-	if bc.txValidator == nil {
+	if bc.validator == nil {
 		return true
 	}
-	if ok := bc.txValidator.ProcessTransaction(tx); ok {
+	if ok := bc.validator.ProcessTransaction(tx); ok {
 		return true
 	}
 

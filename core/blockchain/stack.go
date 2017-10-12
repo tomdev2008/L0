@@ -25,7 +25,7 @@ import (
 
 //VerifyTxsInConsensus verify
 func (bc *Blockchain) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
-	return bc.txValidator.VerifyTxs(txs)
+	return bc.validator.VerifyTxs(txs)
 }
 
 func (bc *Blockchain) GetBlockchainInfo() *consensus.BlockchainInfo {

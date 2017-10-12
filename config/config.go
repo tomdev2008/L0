@@ -25,7 +25,6 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/merge"
 	"github.com/bocheninc/L0/core/p2p"
 	"github.com/bocheninc/L0/core/params"
@@ -87,9 +86,6 @@ type Config struct {
 	// profile
 	CPUFile  string
 	ProfPort string
-
-	//validator
-	ValidatorConfig *validator.Config
 }
 
 // New returns a config according the config file
@@ -149,7 +145,6 @@ func loadConfig(cfgFile string) (conf *Config, err error) {
 	cfg.MergeConfig = MergeConfig(cfg.NodeDir)
 	cfg.readLogConfig()
 	vm.VMConf = VMConfig(cfg.LogFile, cfg.LogLevel)
-	cfg.ValidatorConfig = ValidatorConfig()
 	return cfg, nil
 }
 
