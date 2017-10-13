@@ -36,7 +36,7 @@ import (
 type Validator interface {
 	Start()
 	ProcessTransaction(tx *types.Transaction) bool
-	VerifyTxs(txs types.Transactions) (bool, types.Transactions)
+	VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions)
 	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
@@ -49,12 +49,11 @@ type Verification struct {
 	ledger             *ledger.Ledger
 	consenter          consensus.Consenter
 	txpool             *sortedlinkedlist.SortedLinkedList
-	dispatcher         *Dispatcher
 	requestBatchSignal chan int
 	requestBatchTimer  *time.Timer
 	blacklist          map[string]time.Time
 	accounts           map[string]*account
-	inConsensusTxs     map[crypto.Hash]*types.Transaction
+	inTxs              map[crypto.Hash]*types.Transaction
 	sync.RWMutex
 }
 
@@ -64,61 +63,100 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		ledger:             ledger,
 		consenter:          consenter,
 		txpool:             sortedlinkedlist.NewSortedLinkedList(),
-		dispatcher:         NewDispatcher(config.MaxWorker, config.MaxQueue),
 		requestBatchSignal: make(chan int),
 		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),
 		accounts:           make(map[string]*account),
-		inConsensusTxs:     make(map[crypto.Hash]*types.Transaction),
+		inTxs:              make(map[crypto.Hash]*types.Transaction),
 	}
 }
 
 func (v *Verification) Start() {
 	log.Info("validator start ...")
-	go v.ProcessBatchLoop()
-	go v.processBlacklistLoop()
+	go v.processLoop()
+}
 
-	v.dispatcher.Run(func(job Job) bool {
-		//refuse verfiy failed transaction
-		tx := job.Payload.(*types.Transaction)
-		address, err := tx.Verfiy()
-		if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-			v.blacklist[address.String()] = time.Now()
-			log.Errorf(" varify fail, tx_hash: %s, tx_address: %s, tx_sender: %s",
-				tx.Hash().String(), address.String(), tx.Sender().String())
-			return false
+func (v *Verification) makeRequestBatch() types.Transactions {
+	v.Lock()
+	defer v.Unlock()
+	var requestBatch types.Transactions
+	var to string
+	v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
+	v.txpool.IterElement(func(element sortedlinkedlist.IElement) bool {
+		tx := element.(*types.Transaction)
+		if to == "" {
+			to = tx.ToChain()
 		}
-		v.txpool.Add(tx)
-		return true
+		if tx.ToChain() == to && len(requestBatch) < v.consenter.BatchSize() {
+			requestBatch = append(requestBatch, tx)
+		} else {
+			return true
+		}
+		return false
 	})
+
+	return requestBatch
+}
+
+func (v *Verification) processLoop() {
+	ticker := time.NewTicker(v.config.BlacklistDur)
+	for {
+		select {
+		case <-ticker.C:
+			// v.Lock()
+			// for address, created := range v.blacklist {
+			// 	if created.Add(v.config.BlacklistDur).Before(time.Now()) {
+			// 		delete(v.blacklist, address)
+			// 	}
+			// }
+			// v.Unlock()
+		case cnt := <-v.requestBatchSignal:
+			if cnt > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
+				requestBatch := v.makeRequestBatch()
+				log.Debugf("request Batch: %d ", len(requestBatch))
+				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
+			}
+		case <-v.requestBatchTimer.C:
+			if requestBatch := v.makeRequestBatch(); len(requestBatch) != 0 {
+				log.Debugf("request Batch Timeout: %d ", len(requestBatch))
+				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
+			}
+		}
+	}
 }
 
 func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
-	if v.pushTxInTxPool(tx) {
-		v.requestBatchSignal <- 1
-		if v.txpool.Len() == 1 {
-			v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
-		}
-		return true
-	}
-	return false
-}
-
-func (v *Verification) pushTxInTxPool(tx *types.Transaction) bool {
-	if !v.checkTransactionBeforeAddTxPool(tx) {
+	if !v.isLegalTransaction(tx) {
 		return false
 	}
 
-	JobQueue <- Job{
-		Payload: tx,
+	address, err := tx.Verfiy()
+	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
+		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+		return false
 	}
 
-	if v.checkTxPoolCapacity() {
-		v.txpool.RemoveFront()
-		log.Warnf("[txPool]  excess capacity, remove front transaction")
+	v.Lock()
+	if v.isExist(tx) {
+		v.Unlock()
+		return false
 	}
 
-	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), v.txpool.Len())
+	if v.isOverCapacity() {
+		elem := v.txpool.RemoveFront()
+		delete(v.inTxs, elem.(*types.Transaction).Hash())
+		log.Warnf("[validator]  excess capacity, remove front transaction")
+	}
+
+	v.txpool.Add(tx)
+	v.inTxs[tx.Hash()] = tx
+	cnt := v.txpool.Len()
+	v.Unlock()
+	if cnt == 1 {
+		v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
+	}
+	v.requestBatchSignal <- cnt
+	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), cnt)
 	return true
 }
 
@@ -126,58 +164,96 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 	switch flag {
 	// not use verify
 	case 0:
-		log.Debug("[validator] not use verify...")
+		log.Debug("[validator] not use ...")
 
 	// use verify
 	case 1:
+		log.Debug("[validator] use ...")
 		v.Lock()
-		log.Debug("[validator] use verify...")
+		defer v.Unlock()
+		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
-			v.inConsensusTxs[tx.Hash()] = tx
-			v.txpool.Remove(tx)
+			elems = append(elems, tx)
 		}
-		v.Unlock()
+		v.txpool.Removes(elems)
 	// consensus failed
 	case 2:
-		log.Debug("[validator] consensus failed...")
-		v.RemoveTxsInVerification(txs)
+		log.Debug("[validator] consensus failed & verified...")
+		v.Lock()
+		defer v.Unlock()
 		for _, tx := range txs {
-			//v.RollBackAccount(tx)
-			v.pushTxInTxPool(tx)
+			v.rollBackAccount(tx)
+			v.txpool.Add(tx)
 		}
 	// consensus succeed
 	case 3:
-
+		log.Debug("[validator] consensus succeed...")
 	default:
 		log.Error("[validator] not support this flag ...")
 	}
 }
 
-func (v *Verification) VerifyTxs(txs types.Transactions) (bool, types.Transactions) {
+func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
 	if !v.config.IsValid {
 		return true, txs
 	}
-
+	v.Lock()
+	defer v.Unlock()
+	var ttxs types.Transactions
 	for _, tx := range txs {
-		if !v.checkTransactionIsExist(tx) {
-			if err := v.checkTransactionIsIllegal(tx); err != nil {
-				log.Errorf("[validator] verify transaction tx fail, %v", err)
-				return false, nil
+		if !v.isExist(tx) {
+			if !v.isLegalTransaction(tx) {
+				if primary {
+					log.Warnf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
+					continue
+				} else {
+					log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
+					for _, rollbackTx := range ttxs {
+						v.rollBackAccount(rollbackTx)
+					}
+					return false, nil
+				}
 			}
 		}
 		// remove balance is negative tx
-		if !v.UpdateAccount(tx) {
-			log.Errorf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
-			// for _, rollbackTx := range txs[:k] {
-			// 	v.RollBackAccount(rollbackTx)
-			// }
-			return false, nil
+		if !v.updateAccount(tx) {
+			if primary {
+				log.Warnf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				continue
+			} else {
+				log.Errorf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				for _, rollbackTx := range ttxs {
+					v.rollBackAccount(rollbackTx)
+				}
+				return false, nil
+			}
 		}
+		ttxs = append(ttxs, tx)
 	}
-	return true, txs
+
+	return true, ttxs
 }
 
-func (v *Verification) UpdateAccount(tx *types.Transaction) bool {
+func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {
+	v.Lock()
+	defer v.Unlock()
+	for _, tx := range txs {
+		log.Debugf("[validator] remove transaction in verification ,tx_hash: %s ,txpool_len: %d", tx.Hash(), v.txpool.Len())
+		delete(v.inTxs, tx.Hash())
+		v.txpool.Remove(tx)
+	}
+}
+
+func (v *Verification) fetchAccount(address accounts.Address) *account {
+	account, ok := v.accounts[address.String()]
+	if !ok {
+		v.accounts[address.String()] = newAccount(address, v.ledger)
+		account = v.accounts[address.String()]
+	}
+	return account
+}
+
+func (v *Verification) updateAccount(tx *types.Transaction) bool {
 	senderAccont := v.fetchAccount(tx.Sender())
 	if senderAccont != nil {
 		senderAccont.updateTransactionSenderBalance(tx)
@@ -198,8 +274,7 @@ func (v *Verification) UpdateAccount(tx *types.Transaction) bool {
 	return true
 }
 
-//RollBackAccount roll back account balance
-func (v *Verification) RollBackAccount(tx *types.Transaction) {
+func (v *Verification) rollBackAccount(tx *types.Transaction) {
 	senderAccont := v.fetchAccount(tx.Sender())
 	if senderAccont != nil {
 		senderAccont.rollBackTransactionSenderBalance(tx)
@@ -210,33 +285,22 @@ func (v *Verification) RollBackAccount(tx *types.Transaction) {
 	}
 }
 
-func (v *Verification) fetchAccount(address accounts.Address) *account {
+func (v *Verification) UpdateAccount(tx *types.Transaction) bool {
 	v.Lock()
 	defer v.Unlock()
-	account, ok := v.accounts[address.String()]
-	if !ok {
-		v.accounts[address.String()] = newAccount(address, v.ledger)
-		account = v.accounts[address.String()]
-	}
-	return account
+	return v.updateAccount(tx)
 }
 
-func (v *Verification) RemoveTxInVerification(tx *types.Transaction) {
+//RollBackAccount roll back account balance
+func (v *Verification) RollBackAccount(tx *types.Transaction) {
 	v.Lock()
 	defer v.Unlock()
-	log.Debugf("[validator] remove transaction in verification ,tx_hash: %s ,txpool_len: %d", tx.Hash(), v.txpool.Len())
-	delete(v.inConsensusTxs, tx.Hash())
-	v.txpool.Remove(tx)
-}
-
-func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {
-	for _, tx := range txs {
-		v.RemoveTxInVerification(tx)
-	}
-
+	v.rollBackAccount(tx)
 }
 
 func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool) {
+	v.Lock()
+	defer v.Unlock()
 	if elem := v.txpool.GetIElementByKey(txHash.String()); elem != nil {
 		return elem.(*types.Transaction), true
 	}
@@ -244,63 +308,8 @@ func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transact
 }
 
 func (v *Verification) GetBalance(addr accounts.Address) (*big.Int, uint32) {
+	v.Lock()
+	defer v.Unlock()
 	acconut := v.fetchAccount(addr)
 	return acconut.amount, acconut.nonce
-}
-
-func (v *Verification) processBlacklistLoop() {
-	ticker := time.NewTicker(v.config.BlacklistDur)
-	for {
-		select {
-		case <-ticker.C:
-			v.Lock()
-			for address, created := range v.blacklist {
-				if created.Add(v.config.BlacklistDur).Before(time.Now()) {
-					delete(v.blacklist, address)
-				}
-			}
-			v.Unlock()
-		}
-	}
-}
-
-func (v *Verification) makeRequestBatch() types.Transactions {
-	var requestBatch types.Transactions
-	var to string
-
-	v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
-
-	v.txpool.IterElement(func(element sortedlinkedlist.IElement) bool {
-		tx := element.(*types.Transaction)
-		if to == "" {
-			to = tx.ToChain()
-		}
-		if tx.ToChain() == to && len(requestBatch) < v.consenter.BatchSize() {
-			requestBatch = append(requestBatch, tx)
-		} else {
-			return true
-		}
-		return false
-	})
-
-	return requestBatch
-
-}
-
-func (v *Verification) ProcessBatchLoop() {
-	for {
-		select {
-		case <-v.requestBatchSignal:
-			if v.txpool.Len() > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
-				requestBatch := v.makeRequestBatch()
-				log.Debugf("request Batch: %d ", len(requestBatch))
-				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
-			}
-		case <-v.requestBatchTimer.C:
-			if requestBatch := v.makeRequestBatch(); len(requestBatch) != 0 {
-				log.Debugf("request Batch Timeout: %d ", len(requestBatch))
-				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
-			}
-		}
-	}
 }
