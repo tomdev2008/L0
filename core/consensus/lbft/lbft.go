@@ -456,6 +456,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
 				lbft.primaryID = ""
+				log.Infof("Replica %s clear PrimaryID %s", lbft.options.ID, lbft.lastPrimaryID)
 			}
 		}
 		q := 0
