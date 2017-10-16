@@ -35,4 +35,5 @@ var (
 	ConnNums      int
 	LocalIp       string
 	Validator     bool
+	MaxOccurs     int
 )

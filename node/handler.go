@@ -100,7 +100,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
 	manager.jrpcServer = jrpc.NewServer(manager)
 	manager.jobs = make(chan *job, 1000)
-	startJobs(10, manager.jobs)
+	startJobs(params.MaxOccurs, manager.jobs)
 	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
@@ -305,13 +305,10 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 	pm.jobs <- &job{
 		In: tx,
 		Exec: func(in interface{}) {
-			t := time.Now()
-			log.Debugf("chaogaofeng %s", tx.Hash())
 			tx := in.(*types.Transaction)
 			if pm.Blockchain.ProcessTransaction(tx) {
 				pm.msgCh <- &m
 			}
-			log.Debugf("chaogaofeng %s %ss", tx.Hash(), time.Now().Sub(t))
 		},
 	}
 }
