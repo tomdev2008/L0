@@ -1,7 +1,7 @@
 net:
   maxPeers: 8
   bootstrapNodes: []
-  listenAddr: "127.0.0.1:20166"
+  listenAddr: "0.0.0.0:20166"
 
   msgnet:
     routeAddress: ["127.0.0.1:9999"]
@@ -17,7 +17,7 @@ blockchain:
   chainId: "00"
   nodeId: "0001_abc"  
   datadir: "datadir/1"
-  maxOccurs: 10
+  maxOccurs: 1
   cpuprofile: "profile/prof_node1"
   profPort: "6061"
 
@@ -34,7 +34,7 @@ issueaddr:
 
 #consensus
 consensus:
-  plugin: "lbft"
+  plugin: "noops"
 
   noops:
     batchSize: 10000
