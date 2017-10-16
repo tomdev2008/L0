@@ -17,6 +17,7 @@ blockchain:
   chainId: "00"
   nodeId: "0001_abc"  
   datadir: "datadir/1"
+  maxOccurs: 10
   cpuprofile: "profile/prof_node1"
   profPort: "6061"
 
