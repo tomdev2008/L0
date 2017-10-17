@@ -52,8 +52,11 @@ type Verification struct {
 	requestBatchSignal chan int
 	requestBatchTimer  *time.Timer
 	blacklist          map[string]time.Time
+	rwBlacklist        sync.RWMutex
 	accounts           map[string]*account
+	rwAccount          sync.RWMutex
 	inTxs              map[crypto.Hash]*types.Transaction
+	rwInTxs            sync.RWMutex
 	sync.RWMutex
 }
 
@@ -77,8 +80,6 @@ func (v *Verification) Start() {
 }
 
 func (v *Verification) makeRequestBatch() types.Transactions {
-	v.Lock()
-	defer v.Unlock()
 	var requestBatch types.Transactions
 	var to string
 	v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
@@ -103,13 +104,13 @@ func (v *Verification) processLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			// v.Lock()
-			// for address, created := range v.blacklist {
-			// 	if created.Add(v.config.BlacklistDur).Before(time.Now()) {
-			// 		delete(v.blacklist, address)
-			// 	}
-			// }
-			// v.Unlock()
+			v.rwBlacklist.Lock()
+			for address, created := range v.blacklist {
+				if created.Add(v.config.BlacklistDur).Before(time.Now()) {
+					delete(v.blacklist, address)
+				}
+			}
+			v.rwBlacklist.Unlock()
 		case cnt := <-v.requestBatchSignal:
 			if cnt > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
 				requestBatch := v.makeRequestBatch()
@@ -136,9 +137,9 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
 		return false
 	}
 
-	v.Lock()
+	v.rwInTxs.Lock()
 	if v.isExist(tx) {
-		v.Unlock()
+		v.rwInTxs.Unlock()
 		return false
 	}
 
@@ -151,7 +152,7 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
 	v.txpool.Add(tx)
 	v.inTxs[tx.Hash()] = tx
 	cnt := v.txpool.Len()
-	v.Unlock()
+	v.rwInTxs.Unlock()
 	if cnt == 1 {
 		v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
 	}
@@ -169,8 +170,6 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 	// use verify
 	case 1:
 		log.Debug("[validator] use ...")
-		v.Lock()
-		defer v.Unlock()
 		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
 			elems = append(elems, tx)
@@ -179,10 +178,10 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 	// consensus failed
 	case 2:
 		log.Debug("[validator] consensus failed & verified...")
-		v.Lock()
-		defer v.Unlock()
+		v.rwInTxs.Lock()
+		defer v.rwInTxs.Unlock()
 		for _, tx := range txs {
-			v.rollBackAccount(tx)
+			v.RollBackAccount(tx)
 			v.txpool.Add(tx)
 		}
 	// consensus succeed
@@ -197,8 +196,10 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	if !v.config.IsValid {
 		return true, txs
 	}
-	v.Lock()
-	defer v.Unlock()
+	v.rwInTxs.Lock()
+	v.rwAccount.Lock()
+	defer v.rwInTxs.Unlock()
+	defer v.rwAccount.Unlock()
 	var ttxs types.Transactions
 	for _, tx := range txs {
 		if !v.isExist(tx) {
@@ -235,8 +236,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 }
 
 func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {
-	v.Lock()
-	defer v.Unlock()
+	v.rwInTxs.Lock()
+	defer v.rwInTxs.Unlock()
 	for _, tx := range txs {
 		log.Debugf("[validator] remove transaction in verification ,tx_hash: %s ,txpool_len: %d", tx.Hash(), v.txpool.Len())
 		delete(v.inTxs, tx.Hash())
@@ -286,21 +287,19 @@ func (v *Verification) rollBackAccount(tx *types.Transaction) {
 }
 
 func (v *Verification) UpdateAccount(tx *types.Transaction) bool {
-	v.Lock()
-	defer v.Unlock()
+	v.rwAccount.Lock()
+	defer v.rwAccount.Unlock()
 	return v.updateAccount(tx)
 }
 
 //RollBackAccount roll back account balance
 func (v *Verification) RollBackAccount(tx *types.Transaction) {
-	v.Lock()
-	defer v.Unlock()
+	v.rwAccount.Lock()
+	defer v.rwAccount.Unlock()
 	v.rollBackAccount(tx)
 }
 
 func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool) {
-	v.Lock()
-	defer v.Unlock()
 	if elem := v.txpool.GetIElementByKey(txHash.String()); elem != nil {
 		return elem.(*types.Transaction), true
 	}
@@ -308,8 +307,8 @@ func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transact
 }
 
 func (v *Verification) GetBalance(addr accounts.Address) (*big.Int, uint32) {
-	v.Lock()
-	defer v.Unlock()
+	v.rwAccount.Lock()
+	defer v.rwAccount.Unlock()
 	acconut := v.fetchAccount(addr)
 	return acconut.amount, acconut.nonce
 }
