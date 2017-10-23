@@ -119,7 +119,7 @@ func (noops *Noops) Start() {
 				}
 				batchReq.Function(3, txs)
 			} else {
-				batchReq.Function(2, txs)
+				//batchReq.Function(2, txs)
 			}
 		case <-noops.blockTimer.C:
 			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("timeout %s", noops.options.BlockTimeout))
