@@ -18,8 +18,9 @@
 package contract
 
 import (
-	"errors"
 	"math/big"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -70,7 +71,7 @@ func TestSmartConstract_ExecTransaction(t *testing.T) {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate([]byte("0")),
 		coordinate.NewChainCoordinate([]byte("0")),
-		types.TypeSmartContract,
+		types.TypeLuaContractInit,
 		uint32(1),
 		testSender,
 		accounts.HexToAddress("00000000000000000000"),
@@ -122,9 +123,14 @@ func TestSmartConstract_FinishContractTransaction(t *testing.T) {
 }
 
 func TestSmartConstract_AddChangesForPersistence(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		smartContract.AddState("Tom_"+strconv.Itoa(i), []byte("hello"+strconv.Itoa(i)))
+		smartContract.AddState("Tom_1"+strconv.Itoa(i), []byte("hello_1"+strconv.Itoa(i)))
+
+	}
+
 	var writeBatchs []*db.WriteBatch
 	writeBatchs, _ = smartContract.AddChangesForPersistence(writeBatchs)
-	t.Log(len(writeBatchs))
 	if err := testDb.AtomicWrite(writeBatchs); err != nil {
 		t.Error(err)
 	}
@@ -141,8 +147,32 @@ func TestSmartConstract_StartConstract2(t *testing.T) {
 }
 
 func TestSmartConstract_GetState2(t *testing.T) {
-	_, err := smartContract.GetState("hello")
-	utils.AssertEquals(t, err, errors.New("can't get date from db"))
-	value, err := smartContract.GetState("Lucy")
+	value, _ := smartContract.GetState("Lucy")
 	utils.AssertEquals(t, string(value), "sweet")
+}
+
+func TestGetByPrefix(t *testing.T) {
+
+	for i := 0; i < 10; i++ {
+		smartContract.AddState("Tom_1"+strconv.Itoa(i), []byte("hello_11"+strconv.Itoa(i)))
+	}
+
+	values := smartContract.GetByPrefix("Tom_1")
+
+	value, _ := smartContract.GetState("Tom_1")
+	t.Log(string(value))
+	for _, v := range values {
+		t.Log("key: ", string(v.Key), "value: ", string(v.Value))
+	}
+
+}
+
+func TestGetByRange(t *testing.T) {
+
+	values := smartContract.GetByRange("Tom_1", "Tom_8")
+	for _, v := range values {
+		t.Log("key: ", string(v.Key), "value: ", string(v.Value))
+	}
+	os.RemoveAll("/tmp/rocksdb-test/")
+
 }

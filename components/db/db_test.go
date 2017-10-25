@@ -21,25 +21,14 @@ package db
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strconv"
 	"testing"
-
-	"github.com/bocheninc/L0/components/utils"
 )
 
-var testConfig = &Config{
-	DbPath:            "/tmp/rocksdb-test/",
-	Columnfamilies:    []string{"account", "balance", "ledger", "col3", "col2"},
-	KeepLogFileNumber: 10,
-	MaxLogFileSize:    10485760,
-	LogLevel:          "warn",
-}
-
-func TestNewDB(t *testing.T) {
-	NewDB(testConfig)
-}
 func TestReadAndWrite(t *testing.T) {
-	db := NewDB(testConfig)
+	db := NewDB(DefaultConfig())
+	defer os.RemoveAll(config.DbPath)
 	// Put
 	err := db.Put("default", []byte("foo"), []byte("bar"))
 	if err != nil {
@@ -56,7 +45,9 @@ func TestReadAndWrite(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	db := NewDB(testConfig)
+
+	db := NewDB(DefaultConfig())
+	defer os.RemoveAll(config.DbPath)
 
 	err := db.Put("default", []byte("foo"), []byte("bar"))
 	if err != nil {
@@ -72,48 +63,54 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestBulkRead(t *testing.T) {
-	prefix := "pre_"
-	db := NewDB(testConfig)
-	num := 100000
-	for i := 0; i < num; i++ {
-		keyStr := fmt.Sprintf("%s%d", prefix, i)
-		key := []byte(keyStr)
-		value := []byte("fdsfadsfasfsfdsfasf")
-		err := db.Put("default", key, value)
+func TestGetByRangeOrPrefix(t *testing.T) {
 
+	db := NewDB(DefaultConfig())
+	defer os.RemoveAll(config.DbPath)
+	for i := 0; i < 10; i++ {
+		key := []byte("key_" + strconv.Itoa(i))
+		value := []byte("value_" + strconv.Itoa(i))
+
+		err := db.Put("balance", key, value)
+		if err != nil {
+			t.Fatalf("faild to put, err: [%s]", err)
+		}
+		key1 := []byte("key_1" + strconv.Itoa(i))
+		value1 := []byte("value_1" + strconv.Itoa(i))
+
+		err = db.Put("balance", key1, value1)
 		if err != nil {
 			t.Fatalf("faild to put, err: [%s]", err)
 		}
 	}
 
-	begin := utils.CurrentTimestamp()
-	resCh := make(chan map[string][]byte)
-	go db.GetByPrefix([]byte(prefix), resCh)
-	for {
-		if r, ok := <-resCh; ok {
-			fmt.Println(r)
-		} else {
-			break
-		}
+	values := db.GetByRange("balance", []byte("key_1"), []byte("key_3"))
+
+	for _, v := range values {
+		fmt.Println("key: ", string(v.Key), "value: ", string(v.Value))
 	}
-	end := utils.CurrentTimestamp()
-	gap := end - begin
-	fmt.Println("time gap:", gap)
+
+	fmt.Println("-------------------------------")
+
+	values1 := db.GetByPrefix("balance", []byte("key_1"))
+
+	for _, v := range values1 {
+		fmt.Println("key: ", string(v.Key), "value: ", string(v.Value))
+	}
 }
 
 func TestWriteBatch(t *testing.T) {
-	db := NewDB(testConfig)
-
+	db := NewDB(DefaultConfig())
+	defer os.RemoveAll(config.DbPath)
 	var writeBatchs []*WriteBatch
 
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 100; i++ {
 		writeBatchs = append(writeBatchs, NewWriteBatch("balance", OperationPut, []byte("key"+strconv.Itoa(i)), []byte("value"+strconv.Itoa(i))))
 	}
 	fmt.Println("start writeBatch...")
 
 	var cnt int
-	for i := 0; i < 500; i++ {
+	for i := 0; i < 100; i++ {
 		fmt.Println("times: ", cnt)
 		db.AtomicWrite(writeBatchs)
 		cnt++

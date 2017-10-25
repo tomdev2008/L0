@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/bocheninc/L0/components/db"
 	"github.com/robertkrimen/otto"
 )
 
@@ -66,5 +67,24 @@ func TestObject(t *testing.T) {
 	}
 	if 100 != iage {
 		t.Error("age not equal")
+	}
+}
+
+func TestKvsToJSValue(t *testing.T) {
+	vm := otto.New()
+	v, _ := otto.ToValue("word")
+	value, _ := jsvalueToByte(v)
+	kvs := []*db.KeyValue{&db.KeyValue{Key: []byte("hello"), Value: value}}
+
+	v, err := kvsToJSValue(kvs, vm)
+	if err != nil {
+		t.Error("convert kvs error", err)
+	}
+	obj := v.Object()
+	result, _ := obj.Get("hello")
+	r, _ := result.ToString()
+
+	if r != "word" {
+		t.Error("error not same", r)
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"encoding/hex"
 	"math/big"
 
+	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -36,14 +37,19 @@ func TestEncode(t *testing.T) {
 	d := new(InvokeData)
 	d.FuncName = "fn"
 	d.SessionID = 123
-	d.SetParams("contract script code size illegal, max size is:5120 byte", false)
+	d.SetParams("contract script code size illegal, max size is:5120 byte", false, []*db.KeyValue{&db.KeyValue{Key: []byte("key"), Value: []byte("value")}})
 
 	fmt.Println("len:", len(d.Params))
 
 	var str string
 	var rst bool
-	d.DecodeParams(&str, &rst)
-	fmt.Println("str:", str, " rst:", rst)
+	var kvs []*db.KeyValue
+
+	d.DecodeParams(&str, &rst, &kvs)
+	for _, v := range kvs {
+		t.Log("key: ", string(v.Key), "value: ", string(v.Value))
+	}
+	t.Log("str:", str, " rst:", rst)
 }
 
 func TestExecute(t *testing.T) {
@@ -115,6 +121,16 @@ func (hd *L0Handler) SmartContractFailed() {
 
 func (hd *L0Handler) SmartContractCommitted() {
 
+}
+
+func (hd *L0Handler) GetByPrefix(prefix string) []*db.KeyValue {
+
+	return []*db.KeyValue{&db.KeyValue{Key: []byte("key"), Value: []byte("value")}}
+}
+
+func (hd *L0Handler) GetByRange(startKey, limitKey string) []*db.KeyValue {
+
+	return []*db.KeyValue{&db.KeyValue{Key: []byte("key1"), Value: []byte("value1")}}
 }
 
 func getCode() []byte {

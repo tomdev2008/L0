@@ -19,7 +19,12 @@
 package contract
 
 import (
+	"bytes"
+
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/core/ledger/contract/treap"
+	"github.com/bocheninc/base/log"
+	"github.com/bocheninc/base/utils"
 )
 
 type StateExtra struct {
@@ -41,7 +46,6 @@ func (stateExtra *StateExtra) get(scAddr string, key string) []byte {
 
 func (stateExtra *StateExtra) set(scAddr string, key string, value []byte) {
 	contractStateDelta := stateExtra.getOrCreateContractStateDelta(scAddr)
-
 	contractStateDelta.set(EnSmartContractKey(scAddr, key), value)
 	return
 }
@@ -50,6 +54,17 @@ func (stateExtra *StateExtra) delete(scAddr string, key string) {
 	contractStateDelta := stateExtra.getOrCreateContractStateDelta(scAddr)
 	contractStateDelta.remove(EnSmartContractKey(scAddr, key))
 	return
+}
+
+func (stateExtra *StateExtra) getByPrefix(scAddr string, prefix string) []*db.KeyValue {
+	contractStateDelta := stateExtra.getOrCreateContractStateDelta(scAddr)
+	return contractStateDelta.getByPrefix(EnSmartContractKey(scAddr, prefix))
+}
+
+func (stateExtra *StateExtra) getByRange(scAddr, startKey, limitKey string) []*db.KeyValue {
+	contractStateDelta := stateExtra.getOrCreateContractStateDelta(scAddr)
+	return contractStateDelta.getByRange(EnSmartContractKey(scAddr, startKey), EnSmartContractKey(scAddr, limitKey))
+
 }
 
 func (stateExtra *StateExtra) getOrCreateContractStateDelta(scAddr string) *ContractStateDelta {
@@ -67,42 +82,84 @@ func (stateExtra *StateExtra) getUpdatedContractStateDelta() map[string]*Contrac
 
 type ContractStateDelta struct {
 	contract string
-	cacheKVs map[string]*CacheKVs
+	cache    *treap.Immutable
 }
 
 func newContractStateDelta(scAddr string) *ContractStateDelta {
-	return &ContractStateDelta{scAddr, make(map[string]*CacheKVs)}
+	return &ContractStateDelta{scAddr, treap.NewImmutable()}
 }
 
 func (csd *ContractStateDelta) get(key string) []byte {
-	value, ok := csd.cacheKVs[key]
-	if ok {
-		if value.optype != db.OperationDelete {
-			return value.value
+	value := csd.cache.Get([]byte(key))
+
+	if value != nil {
+		cv := &CacheKVs{}
+		cv.deserialize(value)
+		if cv.Optype != db.OperationDelete {
+			return cv.Value
 		}
 	}
-
 	return nil
 }
 
 func (csd *ContractStateDelta) set(key string, value []byte) {
-	csd.cacheKVs[key] = newCacheKVs(db.OperationPut, key, value)
+	cv := newCacheKVs(db.OperationPut, key, value)
+	csd.cache = csd.cache.Put([]byte(key), cv.serialize())
 }
 
 func (csd *ContractStateDelta) remove(key string) {
-	csd.cacheKVs[key] = newCacheKVs(db.OperationDelete, key, []byte(""))
+	csd.cache = csd.cache.Delete([]byte(key))
 }
 
-func (csd *ContractStateDelta) getUpdatedKVs() map[string]*CacheKVs {
-	return csd.cacheKVs
+func (csd *ContractStateDelta) getByPrefix(prefix string) []*db.KeyValue {
+	var values []*db.KeyValue
+
+	for iter := csd.cache.Iterator([]byte(prefix), nil); iter.Next(); {
+		if !bytes.HasPrefix(iter.Key(), []byte(prefix)) {
+			break
+		}
+		cv := &CacheKVs{}
+		cv.deserialize(iter.Value())
+		values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
+
+	}
+	return values
+}
+
+func (csd *ContractStateDelta) getByRange(startKey string, limitkey string) []*db.KeyValue {
+	var values []*db.KeyValue
+
+	for iter := csd.cache.Iterator([]byte(startKey), nil); iter.Next(); {
+		// if bytes.HasPrefix(iter.Key(), []byte(startKey)) && len(iter.Key()) != len([]byte(startKey)) {
+		// 	continue
+		// }
+		cv := &CacheKVs{}
+		cv.deserialize(iter.Value())
+		values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
+		if bytes.Equal(iter.Key(), []byte(limitkey)) {
+			break
+		}
+	}
+	return values
+
 }
 
 type CacheKVs struct {
-	optype uint
-	key    string
-	value  []byte
+	Optype uint
+	Key    string
+	Value  []byte
 }
 
 func newCacheKVs(typ uint, key string, value []byte) *CacheKVs {
-	return &CacheKVs{optype: typ, key: key, value: value}
+	return &CacheKVs{Optype: typ, Key: key, Value: value}
+}
+
+func (c *CacheKVs) serialize() []byte {
+	return utils.Serialize(c)
+}
+
+func (c *CacheKVs) deserialize(cacheKVsBytes []byte) {
+	if err := utils.Deserialize(cacheKVsBytes, c); err != nil {
+		log.Errorln("CacheKVs deserialize error", err)
+	}
 }

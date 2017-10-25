@@ -50,7 +50,7 @@ func DefaultConfig() *Config {
 		ExecLimitMaxOpcodeCount:    10000,
 		ExecLimitMaxRunTime:        1000,
 		ExecLimitMaxScriptSize:     10240, //5K
-		ExecLimitMaxStateValueSize: 5120,  //5K
+		ExecLimitMaxStateValueSize: 10240, //5K
 		ExecLimitMaxStateItemCount: 1000,
 		ExecLimitMaxStateKeyLength: 256,
 		LuaVMExeFilePath:           "bin/luavm",

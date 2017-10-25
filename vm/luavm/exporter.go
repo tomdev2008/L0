@@ -22,6 +22,7 @@ package luavm
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/yuin/gopher-lua"
 )
@@ -34,6 +35,8 @@ func exporter() map[string]lua.LGFunction {
 		"GetState":           getStateFunc,
 		"PutState":           putStateFunc,
 		"DelState":           delStateFunc,
+		"GetByPrefix":        getByPrefixFunc,
+		"GetByRange":         getByRangeFunc,
 	}
 }
 
@@ -152,5 +155,67 @@ func delStateFunc(l *lua.LState) int {
 		l.Push(lua.LBool(true))
 	}
 
+	return 1
+}
+
+func getByPrefixFunc(l *lua.LState) int {
+	if l.GetTop() != 1 {
+		l.RaiseError("param illegality when invoke getByPrefix")
+		return 1
+	}
+
+	key := l.CheckString(1)
+
+	values, err := vmproc.CCallGetByPrefix(key)
+
+	if err != nil {
+		l.RaiseError("getByPrefix error key:%s  err:%s", key, err)
+	}
+	if values == nil {
+		l.Push(lua.LNil)
+		return 1
+	}
+
+	for _, v := range values {
+		fmt.Println("key: ", string(v.Key), "value: ", string(v.Value))
+	}
+
+	if lv, err := kvsToLValue(values); err != nil {
+		l.RaiseError("byteToLValue error")
+	} else {
+		l.Push(lv)
+	}
+
+	return 1
+}
+
+func getByRangeFunc(l *lua.LState) int {
+	if l.GetTop() != 2 {
+		l.RaiseError("param illegality when invoke getByRange")
+		return 1
+	}
+
+	startKey := l.CheckString(1)
+	limitKey := l.CheckString(2)
+	values, err := vmproc.CCallGetByRange(startKey, limitKey)
+	if err != nil {
+		l.RaiseError("getByRange error startKey:%s ,limitKsy:%s ,err:%s", startKey, limitKey, err)
+	}
+	if values == nil {
+		l.Push(lua.LNil)
+		return 1
+	}
+
+	lv, err := kvsToLValue(values)
+	if err != nil {
+		l.RaiseError("byteToLValue error")
+	} else {
+		l.Push(lv)
+	}
+
+	ntb := lv.(*lua.LTable)
+	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
+		fmt.Println("key： ", key, "value：", value)
+	})
 	return 1
 }

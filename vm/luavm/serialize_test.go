@@ -23,8 +23,7 @@ import (
 
 	"bytes"
 
-	"fmt"
-
+	"github.com/bocheninc/L0/components/db"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -71,7 +70,22 @@ func TestLValueConvert(t *testing.T) {
 	}
 	ntb := v.(*lua.LTable)
 	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
-		fmt.Println(key, " : ", value)
-	})
+		t.Log("key： ", key, "value：", value)
 
+	})
+}
+
+func TestKvsToLValue(t *testing.T) {
+
+	kvs := []*db.KeyValue{&db.KeyValue{Key: []byte("hello"), Value: lvalueToByte(lua.LString("word"))}}
+
+	v, err := kvsToLValue(kvs)
+	if err != nil {
+		t.Error("convert kvs error", err)
+	}
+
+	ntb := v.(*lua.LTable)
+	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
+		t.Log("key： ", key, "value：", value)
+	})
 }

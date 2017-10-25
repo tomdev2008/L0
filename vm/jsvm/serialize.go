@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"errors"
 
+	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/robertkrimen/otto"
 )
@@ -161,4 +162,17 @@ func byteToJSvalue(buf *bytes.Buffer, ottoVM *otto.Otto) (otto.Value, error) {
 	}
 
 	return otto.NullValue(), nil
+}
+
+func kvsToJSValue(kvs []*db.KeyValue, ottoVM *otto.Otto) (otto.Value, error) {
+	mp := make(map[string]interface{})
+	for _, v := range kvs {
+		buf := bytes.NewBuffer(v.Value)
+		value, err := byteToJSvalue(buf, ottoVM)
+		if err != nil {
+			return otto.NullValue(), err
+		}
+		mp[string(v.Key)] = value
+	}
+	return ottoVM.ToValue(mp)
 }

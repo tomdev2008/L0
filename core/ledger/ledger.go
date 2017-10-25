@@ -517,7 +517,7 @@ func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Trans
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	log.Debugln("contractSepc :", *contractSpec)
-	ledger.contract.ExecTransaction(tx, string(contractSpec.ContractAddr))
+	ledger.contract.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
 
 	_, err := vm.RealExecute(tx, contractSpec, ledger.contract)
 	if err != nil {

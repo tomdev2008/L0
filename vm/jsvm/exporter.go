@@ -42,6 +42,8 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 	exporterFuncs.Set("GetState", getStateFunc)
 	exporterFuncs.Set("PutState", putStateFunc)
 	exporterFuncs.Set("DelState", delStateFunc)
+	exporterFuncs.Set("GetByPrefix", getByPrefixFunc)
+	exporterFuncs.Set("GetByRange", getByRangeFunc)
 
 	return exporterFuncs, nil
 }
@@ -184,4 +186,55 @@ func delStateFunc(fc otto.FunctionCall) otto.Value {
 
 	val, _ := otto.ToValue(true)
 	return val
+}
+
+func getByPrefixFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 1 {
+		log.Error("param illegality when invoke GetByPrefix")
+		return fc.Otto.MakeCustomError("getByPrefixFunc", "param illegality when invoke GetByPrefix")
+	}
+
+	perfix, err := fc.Argument(0).ToString()
+	values, err := vmproc.CCallGetByPrefix(perfix)
+	if err != nil {
+		log.Errorf("getByPrefix error key:%s  err:%s", perfix, err)
+		return fc.Otto.MakeCustomError("getByPrefixFunc", "getByPrefix error:"+err.Error())
+	}
+	if values == nil {
+		return otto.NullValue()
+	}
+
+	val, err := kvsToJSValue(values, fc.Otto)
+	if err != nil {
+		log.Error("byteToJSvalue error", err)
+		return fc.Otto.MakeCustomError("getByPrefixFunc", "byteToJSvalue error:"+err.Error())
+	}
+	return val
+}
+
+func getByRangeFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 2 {
+		log.Error("param illegality when invoke GetByRange")
+		return fc.Otto.MakeCustomError("getByRangeFunc", "param illegality when invoke GetByRange")
+	}
+
+	startKey, err := fc.Argument(0).ToString()
+	limitKey, err := fc.Argument(1).ToString()
+
+	values, err := vmproc.CCallGetByRange(startKey, limitKey)
+	if err != nil {
+		log.Errorf("getByRange error startKey:%s  limitKey:%s  err:%s", startKey, limitKey, err)
+		return fc.Otto.MakeCustomError("getByRangeFunc", "getByRange error:"+err.Error())
+	}
+	if values == nil {
+		return otto.NullValue()
+	}
+
+	val, err := kvsToJSValue(values, fc.Otto)
+	if err != nil {
+		log.Error("byteToJSvalue error", err)
+		return fc.Otto.MakeCustomError("getByRangeFunc", "byteToJSvalue error:"+err.Error())
+	}
+	return val
+
 }

@@ -49,7 +49,8 @@ var (
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	sender         accounts.Address
 	privkey        *crypto.PrivateKey
-	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
+	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
+	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
@@ -151,7 +152,7 @@ func DeploySmartContractTX() {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeLuaContractInit,
+		types.TypeJSContractInit,
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
