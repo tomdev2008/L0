@@ -22,9 +22,9 @@ import (
 	"bytes"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/contract/treap"
-	"github.com/bocheninc/base/log"
-	"github.com/bocheninc/base/utils"
 )
 
 type StateExtra struct {
