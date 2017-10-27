@@ -30,8 +30,6 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-var DeployAddr = []byte("00000000000000000000")
-
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*big.Int, error)
 	Height() (uint32, error)
@@ -41,6 +39,8 @@ type ISmartConstract interface {
 	GetState(key string) ([]byte, error)
 	AddState(key string, value []byte)
 	DelState(key string)
+	GetByPrefix(prefix string) []*db.KeyValue
+	GetByRange(startKey, limitKey string) []*db.KeyValue
 	GetBalances(addr string) (*big.Int, error)
 	CurrentBlockHeight() uint32
 	AddTransfer(fromAddr, toAddr string, amount *big.Int, txType uint32)
@@ -109,11 +109,10 @@ func (sctx *SmartConstract) GetState(key string) ([]byte, error) {
 	}
 
 	value := sctx.stateExtra.get(sctx.scAddr, key)
-
 	if len(value) == 0 {
 		var err error
 		scAddrkey := EnSmartContractKey(sctx.scAddr, key)
-		log.Debugf("sctx.scAddr: %x,%s", sctx.scAddr, key)
+		log.Debugf("sctx.scAddr: %s,%s,%s", sctx.scAddr, key, scAddrkey)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
 		if err != nil {
 			return nil, fmt.Errorf("can't get date from db %s", err)
@@ -140,6 +139,50 @@ func (sctx *SmartConstract) DelState(key string) {
 	}
 
 	sctx.stateExtra.delete(sctx.scAddr, key)
+}
+
+func (sctx *SmartConstract) GetByPrefix(prefix string) []*db.KeyValue {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+	scAddrkey := EnSmartContractKey(sctx.scAddr, prefix)
+	cacheValues := sctx.stateExtra.getByPrefix(sctx.scAddr, prefix)
+	dbValues := sctx.dbHandler.GetByPrefix(sctx.columnFamily, []byte(scAddrkey))
+
+	return sctx.getKeyValues(cacheValues, dbValues)
+}
+
+func (sctx *SmartConstract) GetByRange(startKey, limitKey string) []*db.KeyValue {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	scAddrStartKey := EnSmartContractKey(sctx.scAddr, startKey)
+	scAddrlimitKey := EnSmartContractKey(sctx.scAddr, limitKey)
+	cacheValues := sctx.stateExtra.getByRange(sctx.scAddr, startKey, limitKey)
+	dbValues := sctx.dbHandler.GetByRange(sctx.columnFamily, []byte(scAddrStartKey), []byte(scAddrlimitKey))
+
+	return sctx.getKeyValues(cacheValues, dbValues)
+}
+
+func (sctx *SmartConstract) getKeyValues(cacheKVs []*db.KeyValue, dbKVS []*db.KeyValue) []*db.KeyValue {
+	var keyValues []*db.KeyValue
+
+	cacheValuesMap := make(map[string]*db.KeyValue)
+	for _, v := range cacheKVs {
+		_, key := DeSmartContractKey(string(v.Key))
+		cacheValuesMap[key] = v
+		v.Key = []byte(key)
+	}
+
+	for _, v := range dbKVS {
+		_, key := DeSmartContractKey(string(v.Key))
+		if _, ok := cacheValuesMap[key]; !ok {
+			v.Key = []byte(key)
+			keyValues = append(keyValues, v)
+		}
+	}
+	return append(keyValues, cacheKVs...)
 }
 
 // GetBalances get balance
@@ -195,18 +238,20 @@ func (sctx *SmartConstract) FinishContractTransaction() (types.Transactions, err
 func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch) ([]*db.WriteBatch, error) {
 	updateContractStateDelta := sctx.stateExtra.getUpdatedContractStateDelta()
 	for _, smartContract := range updateContractStateDelta {
-		updates := smartContract.getUpdatedKVs()
-		for _, value := range updates {
-			if value.optype == db.OperationDelete {
-				log.Debugf("Contract Del: %s", value.key)
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationDelete, []byte(value.key), value.value))
-			} else if value.optype == db.OperationPut {
-				log.Debugf("Contract Put: %s", value.key)
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationPut, []byte(value.key), value.value))
+		smartContract.cache.ForEach(func(key, value []byte) bool {
+			cv := &CacheKVs{}
+			cv.deserialize(value)
+			if cv.Optype == db.OperationDelete {
+				log.Debugln("Contract Del: ", string(key), string(cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationDelete, key, cv.Value))
+			} else if cv.Optype == db.OperationPut {
+				log.Debugln("Contract Put: ", string(key), string(cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationPut, key, cv.Value))
 			} else {
 				log.Errorf("invalid method ...")
 			}
-		}
+			return true
+		})
 	}
 
 	return writeBatch, nil

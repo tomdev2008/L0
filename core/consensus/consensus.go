@@ -48,6 +48,7 @@ type Consenter interface {
 
 	Start()
 	Stop()
+	Name() string
 
 	Quorum() int
 	BatchSize() int

@@ -49,10 +49,11 @@ var (
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	sender         accounts.Address
 	privkey        *crypto.PrivateKey
-	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
+	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
+	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
-	//contractPath = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
-	//contractPath = "/home/itcast/go/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
+	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
+	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
 )
 
 func main() {
@@ -135,7 +136,10 @@ func DeploySmartContractTX() {
 	txChan := make(chan *types.Transaction, 5)
 	go sendTransaction(txChan)
 	contractSpec := new(types.ContractSpec)
-	f, _ := os.Open(contractPath)
+	f, err := os.Open(contractPath)
+	if err != nil {
+		fmt.Println("open contract path", err)
+	}
 	buf, _ := ioutil.ReadAll(f)
 	var a accounts.Address
 	pubBytes := []byte(sender.String() + string(buf))
@@ -148,7 +152,7 @@ func DeploySmartContractTX() {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeLuaContractInit,
+		types.TypeJSContractInit,
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),

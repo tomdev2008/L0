@@ -116,6 +116,9 @@ func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
 // SetBlockchainConsenter sets the consenter of the blockchain
 func (bc *Blockchain) SetBlockchainConsenter(consenter consensus.Consenter) {
 	bc.consenter = consenter
+	if bc.consenter.Name() == "noops" {
+		bc.Start()
+	}
 }
 
 // SetNetworkStack sets the node of the blockchain

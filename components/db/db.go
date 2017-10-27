@@ -19,6 +19,7 @@
 package db
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 
@@ -50,6 +51,12 @@ var (
 	}
 )
 
+//KeyValue key value
+type KeyValue struct {
+	Key   []byte
+	Value []byte
+}
+
 // CfHandlerMap is columnfamilies handler set
 type CfHandlerMap map[string]*gorocksdb.ColumnFamilyHandle
 
@@ -79,7 +86,7 @@ type WriteBatch struct {
 // DefaultConfig defines the default configuration of the rocksdb
 func DefaultConfig() *Config {
 	return &Config{
-		DbPath:            "/tmp/rocksdb-test1/",
+		DbPath:            "/tmp/rocksdb-test/",
 		Columnfamilies:    deafultColumnfamilies,
 		KeepLogFileNumber: 10,
 		MaxLogFileSize:    10485760,
@@ -129,6 +136,7 @@ func (blockchainDB *BlockchainDB) open() {
 	opts.SetCreateIfMissingColumnFamilies(true)
 
 	var cfOpts []*gorocksdb.Options
+
 	Columnfamilies := append(config.Columnfamilies, "default")
 	for range Columnfamilies {
 		cfOpts = append(cfOpts, opts)
@@ -174,27 +182,47 @@ func (blockchainDB *BlockchainDB) Get(cfName string, key []byte) ([]byte, error)
 }
 
 // GetByPrefix for bulk reads
-func (blockchainDB *BlockchainDB) GetByPrefix(prefix []byte, resCh chan map[string][]byte) {
+func (blockchainDB *BlockchainDB) GetByPrefix(cfName string, prefix []byte) []*KeyValue {
+	blockchainDB.checkIfColumnExists(cfName)
+
+	var keyValues []*KeyValue
+
 	ro := gorocksdb.NewDefaultReadOptions()
-	ro.SetFillCache(false)
-	it := blockchainDB.DB.NewIterator(ro) //db.NewIterator(ro)
+	ro.SetFillCache(true)
+	defer ro.Destroy()
+	it := blockchainDB.DB.NewIteratorCF(ro, blockchainDB.cfHandlers[cfName])
 	defer it.Close()
-	it.Seek(prefix)
 
-	for {
-		if it.Valid() {
-			key := it.Key()
-			value := it.Value()
-			resCh <- map[string][]byte{utils.BytesToHex(key.Data()): value.Data()}
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		keyValues = append(keyValues, &KeyValue{Key: utils.MinimizeSilce(it.Key().Data()), Value: utils.MinimizeSilce(it.Value().Data())})
+		it.Key().Free()
+		it.Value().Free()
+	}
+	return keyValues
+}
 
-			key.Free()
-			value.Free()
-			it.Next()
-		} else {
-			close(resCh)
+//GetByRange Range query
+func (blockchainDB *BlockchainDB) GetByRange(cfName string, startkey []byte, limitKey []byte) []*KeyValue {
+	blockchainDB.checkIfColumnExists(cfName)
+
+	var keyValues []*KeyValue
+	ro := gorocksdb.NewDefaultReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Destroy()
+	it := blockchainDB.DB.NewIteratorCF(ro, blockchainDB.cfHandlers[cfName])
+	defer it.Close()
+
+	for it.Seek(startkey); it.Valid(); it.Next() {
+		keyValues = append(keyValues, &KeyValue{Key: utils.MinimizeSilce(it.Key().Data()), Value: utils.MinimizeSilce(it.Value().Data())})
+		if bytes.Equal(it.Key().Data(), limitKey) {
+			it.Key().Free()
+			it.Value().Free()
 			break
 		}
+		it.Key().Free()
+		it.Value().Free()
 	}
+	return keyValues
 }
 
 // Put saves the key/value in the given column family

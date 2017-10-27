@@ -25,6 +25,7 @@ import (
 
 	"errors"
 
+	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/utils"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -136,4 +137,17 @@ func byteToLValue(buf *bytes.Buffer) (lua.LValue, error) {
 	}
 
 	return nil, errors.New("not support data type")
+}
+
+func kvsToLValue(kvs []*db.KeyValue) (lua.LValue, error) {
+	tb := new(lua.LTable)
+	for _, v := range kvs {
+		buf := bytes.NewBuffer(v.Value)
+		value, err := byteToLValue(buf)
+		if err != nil {
+			return nil, err
+		}
+		tb.RawSet(lua.LString(string(v.Key)), value)
+	}
+	return tb, nil
 }

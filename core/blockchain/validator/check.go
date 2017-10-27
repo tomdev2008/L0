@@ -38,9 +38,9 @@ func (v *Verification) isExist(tx *types.Transaction) bool {
 		return true
 	}
 
-	if ledgerTx, _ := v.ledger.GetTxByTxHash(tx.Hash().Bytes()); ledgerTx != nil {
-		return true
-	}
+	// if ledgerTx, _ := v.ledger.GetTxByTxHash(tx.Hash().Bytes()); ledgerTx != nil {
+	// 	return true
+	// }
 
 	return false
 }

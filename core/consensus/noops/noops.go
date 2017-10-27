@@ -66,6 +66,10 @@ type Noops struct {
 	exit       chan struct{}
 }
 
+func (noops *Noops) Name() string {
+	return "noops"
+}
+
 func (noops *Noops) String() string {
 	bytes, _ := json.Marshal(noops.options)
 	return string(bytes)
@@ -115,7 +119,7 @@ func (noops *Noops) Start() {
 				}
 				batchReq.Function(3, txs)
 			} else {
-				batchReq.Function(2, txs)
+				//batchReq.Function(2, txs)
 			}
 		case <-noops.blockTimer.C:
 			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("timeout %s", noops.options.BlockTimeout))

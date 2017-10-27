@@ -20,7 +20,7 @@ func worker(id int, jobs <-chan *job) {
 }
 
 func startJobs(n int, jobs chan *job) {
-	log.Debugf("[jobs] start workers %d ...", n)
+	log.Infof("[jobs] start workers %d ...", n)
 	for i := 1; i <= n; i++ {
 		go worker(i, jobs)
 	}

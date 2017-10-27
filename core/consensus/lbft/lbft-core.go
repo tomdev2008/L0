@@ -21,6 +21,7 @@ package lbft
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/bocheninc/L0/components/log"
@@ -42,6 +43,7 @@ type lbftCore struct {
 
 	startTime time.Time
 	endTime   time.Time
+	sync.RWMutex
 }
 
 func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
@@ -60,8 +62,12 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 
 func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 	lbft.stopNewViewTimer()
+	core.Lock()
+	defer core.Unlock()
 	if core.newViewTimer == nil {
 		core.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
+			core.Lock()
+			defer core.Unlock()
 			vc := &ViewChange{
 				ID:        core.digest,
 				Priority:  lbft.priority,
@@ -73,11 +79,14 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 				Chain:     lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("%s request timeout(%s)", core.digest, lbft.options.Request))
+			core.newViewTimer = nil
 		})
 	}
 }
 
 func (lbft *Lbft) stopNewViewTimerForCore(core *lbftCore) {
+	core.Lock()
+	defer core.Unlock()
 	if core.newViewTimer != nil {
 		core.newViewTimer.Stop()
 		core.newViewTimer = nil
@@ -483,7 +492,7 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
 	}
-	log.Debugf("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
+	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
 	lbft.execute()
 
 	// for _, core := range lbft.coreStore {

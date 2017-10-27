@@ -24,6 +24,7 @@ import (
 
 	"errors"
 
+	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/contract"
@@ -127,6 +128,32 @@ func (p *VMProc) CCallDelState(key string) error {
 	p.StateChangeQueue.stateMap[key] = nil
 	p.StateChangeQueue.offer(&stateOpfunc{stateOpTypeDelete, key, nil})
 	return nil
+}
+
+func (p *VMProc) CCallGetByPrefix(key string) ([]*db.KeyValue, error) {
+	if err := CheckStateKey(key); err != nil {
+		return nil, err
+	}
+
+	// call parent proc
+	var result []*db.KeyValue
+	err := p.ccall("GetByPrefix", &result, key)
+	return result, err
+}
+
+func (p *VMProc) CCallGetByRange(startKey string, limitKey string) ([]*db.KeyValue, error) {
+	if err := CheckStateKey(startKey); err != nil {
+		return nil, err
+	}
+
+	if err := CheckStateKey(limitKey); err != nil {
+		return nil, err
+	}
+
+	// call parent proc
+	var result []*db.KeyValue
+	err := p.ccall("GetByRange", &result, startKey, limitKey)
+	return result, err
 }
 
 func (p *VMProc) CCallGetBalances(addr string) (int64, error) {

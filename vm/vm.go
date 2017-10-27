@@ -183,7 +183,7 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISm
 }
 
 func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
-	// log.Debugf("request parent proc funcName:%s\n", req.FuncName)
+	log.Debugf("request parent proc funcName:%s\n", req.FuncName)
 	switch req.FuncName {
 	case "GetState":
 		var key string
@@ -208,6 +208,21 @@ func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
 		}
 		vmproc.L0Handler.DelState(key)
 		return true, nil
+	case "GetByPrefix":
+		var prefix string
+		if err := req.DecodeParams(&prefix); err != nil {
+			return nil, err
+		}
+
+		return vmproc.L0Handler.GetByPrefix(prefix), nil
+
+	case "GetByRange":
+		var startKey, limitKey string
+		if err := req.DecodeParams(&startKey, &limitKey); err != nil {
+			return nil, err
+		}
+
+		return vmproc.L0Handler.GetByRange(startKey, limitKey), nil
 
 	case "GetBalances":
 		var addr string

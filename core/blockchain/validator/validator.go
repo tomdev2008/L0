@@ -206,6 +206,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			if !v.isLegalTransaction(tx) {
 				if primary {
 					log.Warnf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
+					v.txpool.Remove(tx)
+					delete(v.inTxs, tx.Hash())
 					continue
 				} else {
 					log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
