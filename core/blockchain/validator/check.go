@@ -25,6 +25,7 @@ import (
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -84,7 +85,7 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 		}
 	case types.TypeMerged:
 	//TODO nothing to do
-	case types.TypeIssue:
+	case types.TypeIssue, types.TypeIssueUpdate:
 		//TODO the first floor and meet issue account
 		fromChain := coordinate.HexToChainCoordinate(tx.FromChain())
 		toChain := coordinate.HexToChainCoordinate(tx.FromChain())
@@ -97,6 +98,14 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 
 		if !v.isIssueTransaction(tx) {
 			log.Errorf("[validator] illegal transaction %s: valid issue tx public key fail", tx.Hash())
+			isOK = false
+		}
+
+		asset := &state.Asset{
+			ID: tx.AssetID(),
+		}
+		if _, err := asset.Update(string(tx.Payload)); err != nil {
+			log.Errorf("[validator] illegal transaction %s: valid issue coin(%s)", tx.Hash(), string(tx.Payload))
 			isOK = false
 		}
 

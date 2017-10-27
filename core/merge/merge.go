@@ -20,6 +20,7 @@ package merge
 
 import (
 	"math/big"
+	"strconv"
 	"strings"
 	"time"
 
@@ -143,18 +144,19 @@ func (tm *TxMerge) mergerTx(txs types.Transactions) error {
 	for _, tx := range txs {
 		fromChain := tx.FromChain()
 		toChain := tx.ToChain()
+		assetID := tx.AssetID()
 		amount := tx.Amount()
 		txTime := tx.CreateTime()
 		txHash := tx.Hash()
 		fee := tx.Fee()
-		key := chainCoordinatesToString(fromChain, toChain)
+		key := chainCoordinatesToString(fromChain, toChain, assetID)
 		if ath, ok := m[key]; ok {
 			ath.amount.Add(ath.amount, amount)
 			ath.fee.Add(ath.fee, fee)
 			ath.txTime = txTime
 			ath.txsHash = append(ath.txsHash, txHash)
 		} else {
-			key1 := chainCoordinatesToString(toChain, fromChain)
+			key1 := chainCoordinatesToString(toChain, fromChain, assetID)
 			if ath, ok := m[key1]; ok {
 				ath.amount.Sub(ath.amount, amount)
 				ath.fee.Sub(ath.fee, fee)
@@ -169,12 +171,12 @@ func (tm *TxMerge) mergerTx(txs types.Transactions) error {
 	transactions := types.Transactions{}
 	for k, v := range m {
 
-		chainCoordinates := stringToChainCoordinates(k)
+		from, to, assetID := stringToChainCoordinates(k)
 
 		if v.amount.Sign() < 0 {
-			chainCoordinates[0], chainCoordinates[1] = chainCoordinates[1], chainCoordinates[0]
+			from, to = to, from
 		}
-		transaction := tm.maketransaction(chainCoordinates[0], chainCoordinates[1], v.amount.Abs(v.amount), v.fee, v.txTime)
+		transaction := tm.maketransaction(from, to, assetID, v.amount.Abs(v.amount), v.fee, v.txTime)
 
 		log.Infoln("mergeTxData: ", transaction.Data, " mergeTxHash: ", transaction.Hash())
 		if err := tm.ledger.PutTxsHashByMergeTxHash(transaction.Hash(), v.txsHash); err != nil {
@@ -207,8 +209,8 @@ func (tm *TxMerge) mergerTx(txs types.Transactions) error {
 	return nil
 }
 
-func (tm *TxMerge) maketransaction(fromchain, tochain coordinate.ChainCoordinate, amount *big.Int, fee *big.Int, timeStamp uint32) *types.Transaction {
-	tx := types.NewTransaction(fromchain.ParentCoorinate(), tochain.ParentCoorinate(), types.TypeMerged, uint32(0), accounts.ChainCoordinateToAddress(params.ChainID), accounts.ChainCoordinateToAddress(tochain), amount, fee, timeStamp)
+func (tm *TxMerge) maketransaction(fromchain, tochain coordinate.ChainCoordinate, assetID uint32, amount *big.Int, fee *big.Int, timeStamp uint32) *types.Transaction {
+	tx := types.NewTransaction(fromchain.ParentCoorinate(), tochain.ParentCoorinate(), types.TypeMerged, uint32(0), accounts.ChainCoordinateToAddress(params.ChainID), accounts.ChainCoordinateToAddress(tochain), assetID, amount, fee, timeStamp)
 	//merge transaction reused tx.Data.Signature for sender
 	senderAddress := accounts.ChainCoordinateToAddress(fromchain)
 	sig := &crypto.Signature{}
@@ -217,13 +219,14 @@ func (tm *TxMerge) maketransaction(fromchain, tochain coordinate.ChainCoordinate
 	return tx
 }
 
-func chainCoordinatesToString(src string, dst string) string {
-	return src + SEPARATOR + dst
+func chainCoordinatesToString(src string, dst string, assetID uint32) string {
+	return src + SEPARATOR + dst + SEPARATOR + strconv.FormatUint(uint64(assetID), 10)
 }
 
-func stringToChainCoordinates(str string) []coordinate.ChainCoordinate {
+func stringToChainCoordinates(str string) (coordinate.ChainCoordinate, coordinate.ChainCoordinate, uint32) {
 	strs := strings.Split(str, SEPARATOR)
 	from := coordinate.HexToChainCoordinate(strs[0])
 	to := coordinate.HexToChainCoordinate(strs[1])
-	return []coordinate.ChainCoordinate{from, to}
+	assetID, _ := strconv.ParseUint(strs[2], 10, 32)
+	return from, to, uint32(assetID)
 }

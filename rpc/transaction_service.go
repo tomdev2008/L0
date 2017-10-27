@@ -45,6 +45,7 @@ type TransactionCreateArgs struct {
 	ToChain   string
 	Recipient string
 	Nonce     uint32
+	AssetID   uint32
 	Amount    int64
 	Fee       int64
 	TxType    uint32
@@ -72,9 +73,10 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 	nonce := args.Nonce
 	recipient := accounts.HexToAddress(args.Recipient)
 	sender := accounts.Address{}
+	assetID := args.AssetID
 	amount := big.NewInt(args.Amount)
 	fee := big.NewInt(args.Fee)
-	tx := types.NewTransaction(fromChain, toChain, args.TxType, nonce, sender, recipient, amount, fee, utils.CurrentTimestamp())
+	tx := types.NewTransaction(fromChain, toChain, args.TxType, nonce, sender, recipient, assetID, amount, fee, utils.CurrentTimestamp())
 
 	switch tx.GetType() {
 	case types.TypeJSContractInit:
@@ -174,6 +176,7 @@ func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
 		uint32(0),
 		accounts.Address{},
 		accounts.NewAddress(contractSpec.ContractAddr),
+		uint32(0),
 		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),

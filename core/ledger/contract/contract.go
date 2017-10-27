@@ -27,11 +27,12 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
 type ILedgerSmartContract interface {
-	GetTmpBalance(addr accounts.Address) (*big.Int, error)
+	GetTmpBalance(addr accounts.Address) (*state.Balance, error)
 	Height() (uint32, error)
 }
 
@@ -41,9 +42,9 @@ type ISmartConstract interface {
 	DelState(key string)
 	GetByPrefix(prefix string) []*db.KeyValue
 	GetByRange(startKey, limitKey string) []*db.KeyValue
-	GetBalances(addr string) (*big.Int, error)
+	GetBalances(addr string) (*state.Balance, error)
 	CurrentBlockHeight() uint32
-	AddTransfer(fromAddr, toAddr string, amount *big.Int, txType uint32)
+	AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, txType uint32)
 	SmartContractFailed()
 	SmartContractCommitted()
 }
@@ -186,7 +187,7 @@ func (sctx *SmartConstract) getKeyValues(cacheKVs []*db.KeyValue, dbKVS []*db.Ke
 }
 
 // GetBalances get balance
-func (sctx *SmartConstract) GetBalances(addr string) (*big.Int, error) {
+func (sctx *SmartConstract) GetBalances(addr string) (*state.Balance, error) {
 	return sctx.ledgerHandler.GetTmpBalance(accounts.HexToAddress(addr))
 }
 
@@ -212,10 +213,10 @@ func (sctx *SmartConstract) SmartContractCommitted() {
 }
 
 // AddTransfer add transfer to make new transaction
-func (sctx *SmartConstract) AddTransfer(fromAddr, toAddr string, amount *big.Int, txType uint32) {
+func (sctx *SmartConstract) AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, txType uint32) {
 	tx := types.NewTransaction(sctx.currentTx.Data.FromChain, sctx.currentTx.Data.ToChain, txType,
 		sctx.currentTx.Data.Nonce, accounts.HexToAddress(fromAddr), accounts.HexToAddress(toAddr),
-		amount, sctx.currentTx.Data.Fee, sctx.currentTx.Data.CreateTime)
+		assetID, amount, sctx.currentTx.Data.Fee, sctx.currentTx.Data.CreateTime)
 
 	sctx.smartContractTxs = append(sctx.smartContractTxs, tx)
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -47,8 +48,10 @@ func newTestLedger() *TestLedger {
 	return &TestLedger{}
 }
 
-func (ledger *TestLedger) GetTmpBalance(addr accounts.Address) (*big.Int, error) {
-	return big.NewInt(int64(20)), nil
+func (ledger *TestLedger) GetTmpBalance(addr accounts.Address) (*state.Balance, error) {
+	b := state.NewBalance()
+	b.Set(0, big.NewInt(int64(20)))
+	return b, nil
 }
 func (ledger *TestLedger) Height() (uint32, error) {
 	return uint32(10), nil
@@ -75,6 +78,7 @@ func TestSmartConstract_ExecTransaction(t *testing.T) {
 		uint32(1),
 		testSender,
 		accounts.HexToAddress("00000000000000000000"),
+		uint32(0),
 		big.NewInt(10e11),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
@@ -110,7 +114,7 @@ func TestSmartConstract_GetBalances(t *testing.T) {
 }
 
 func TestSmartConstract_AddTransfer(t *testing.T) {
-	smartContract.AddTransfer("11000000000000000000", "22000000000000000000", big.NewInt(int64(10)), uint32(types.TypeAtomic))
+	smartContract.AddTransfer("11000000000000000000", "22000000000000000000", uint32(0), big.NewInt(int64(10)), uint32(types.TypeAtomic))
 }
 
 func TestSmartConstract_SmartContractCommitted(t *testing.T) {

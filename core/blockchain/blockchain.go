@@ -20,7 +20,6 @@ package blockchain
 
 import (
 	"container/list"
-	"math/big"
 	"sync"
 	"time"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
+	"github.com/bocheninc/L0/core/ledger/state"
 
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/types"
@@ -150,11 +150,11 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 	return hash, nil
 }
 
-// GetBalanceNonce returns balance and nonce
-func (bc *Blockchain) GetBalanceNonce(addr accounts.Address) (*big.Int, uint32) {
+// GetBalance returns balance
+func (bc *Blockchain) GetBalance(addr accounts.Address) *state.Balance {
 	if bc.validator == nil {
-		amount, nonce, _ := bc.ledger.GetBalance(addr)
-		return amount, nonce
+		b, _ := bc.ledger.GetBalanceFromDB(addr)
+		return b
 	}
 	return bc.validator.GetBalance(addr)
 }

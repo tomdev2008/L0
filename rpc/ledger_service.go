@@ -19,8 +19,6 @@
 package rpc
 
 import (
-	"math/big"
-
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -31,7 +29,7 @@ import (
 //LedgerInterface ledger interface
 type LedgerInterface interface {
 	Height() (uint32, error)
-	GetBalanceNonce(addr accounts.Address) (*big.Int, uint32)
+	GetBalance(addr accounts.Address) *state.Balance
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
 	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
 	GetBlockByNumber(number uint32) (*types.BlockHeader, error)
@@ -68,7 +66,7 @@ type GetTxsByBlockHashArgs struct {
 //Block json rpc return block
 type Block struct {
 	BlockHeader types.BlockHeader `json:"header"`
-	TxHashList  []crypto.Hash      `json:"txHashList"`
+	TxHashList  []crypto.Hash     `json:"txHashList"`
 }
 
 //Height get blockchain height
@@ -83,9 +81,8 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 
 //GetBalance returns balance by account address
 func (l *Ledger) GetBalance(addr string, reply *state.Balance) error {
-	amount, nonce := l.ledger.GetBalanceNonce(accounts.HexToAddress(addr))
-	nonce = nonce - 1
-	*reply = state.Balance{Amount: amount, Nonce: nonce}
+	b := l.ledger.GetBalance(accounts.HexToAddress(addr))
+	*reply = *b
 	return nil
 }
 

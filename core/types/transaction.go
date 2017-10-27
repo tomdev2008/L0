@@ -57,6 +57,7 @@ type txdata struct {
 	Nonce      uint32                     `json:"nonce"`
 	Sender     accounts.Address           `json:"sender"`
 	Recipient  accounts.Address           `json:"recipient"`
+	AssetID    uint32                     `json:"assetid"`
 	Amount     *big.Int                   `json:"amount"`
 	Fee        *big.Int                   `json:"fee"`
 	Signature  *crypto.Signature          `json:"signature"`
@@ -71,6 +72,7 @@ const (
 	TypeBackfront                     // 资金回笼交易
 	TypeDistribut                     // 下发交易
 	TypeIssue                         // 发行交易
+	TypeIssueUpdate                   // 发行更新
 	TypeJSContractInit                // js contract_Init
 	TypeLuaContractInit               // lua contract_Init
 	TypeContractInvoke                // contract_Invoke
@@ -82,7 +84,7 @@ func NewTransaction(
 	fromChain coordinate.ChainCoordinate,
 	toChain coordinate.ChainCoordinate,
 	txType uint32, nonce uint32, sender, reciepent accounts.Address,
-	amount, fee *big.Int, CreateTime uint32) *Transaction {
+	assetID uint32, amount, fee *big.Int, CreateTime uint32) *Transaction {
 	tx := Transaction{
 		Data: txdata{
 			FromChain:  fromChain,
@@ -91,6 +93,7 @@ func NewTransaction(
 			Nonce:      nonce,
 			Sender:     sender,
 			Recipient:  reciepent,
+			AssetID:    assetID,
 			Amount:     amount,
 			Fee:        fee,
 			CreateTime: CreateTime,
@@ -120,6 +123,7 @@ func (tx *Transaction) SignHash() crypto.Hash {
 		tx.Data.Nonce,
 		tx.Data.Sender,
 		tx.Data.Recipient,
+		tx.Data.AssetID,
 		tx.Data.Amount,
 		tx.Data.Fee,
 		tx.Data.CreateTime,
@@ -199,6 +203,11 @@ func (tx *Transaction) IsLocalChain() bool { return strings.Compare(tx.FromChain
 // Recipient returns the address of the recipient
 func (tx *Transaction) Recipient() accounts.Address {
 	return tx.Data.Recipient
+}
+
+// AssetID returns the transfer asset of the transaction
+func (tx *Transaction) AssetID() uint32 {
+	return tx.Data.AssetID
 }
 
 // Amount returns the transfer amount of the transaction

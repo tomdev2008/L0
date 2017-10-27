@@ -19,21 +19,55 @@
 package state
 
 import (
+	"fmt"
 	"math/big"
+	"sync"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 )
 
-// Balance contain amount nonce
-type Balance struct {
-	Amount *big.Int
-	Nonce  uint32
+// NewBalance Create an balance object
+func NewBalance() *Balance {
+	return &Balance{
+		Amounts: make(map[uint32]*big.Int),
+	}
 }
 
-// NewBalance initialization
-func NewBalance(amount *big.Int, nonce uint32) *Balance {
-	return &Balance{Amount: amount, Nonce: nonce}
+// Balance Contain all asset amounts and nonce
+type Balance struct {
+	Amounts map[uint32]*big.Int
+	Nonce   uint32
+	rw      sync.RWMutex
+}
+
+//Set Set amount of asset
+func (b *Balance) Set(id uint32, amount *big.Int) {
+	b.rw.Lock()
+	defer b.rw.Unlock()
+	b.Amounts[id] = amount
+}
+
+//Get Get amount of asset
+func (b *Balance) Get(id uint32) *big.Int {
+	//b.RLock()
+	//defer b.RUnlock()
+	if amount, ok := b.Amounts[id]; ok {
+		return amount
+	}
+	return big.NewInt(0)
+}
+
+//Add Set amount of asset to  sum +y and return.
+func (b *Balance) Add(id uint32, amount *big.Int) *big.Int {
+	b.rw.Lock()
+	defer b.rw.Unlock()
+	tamount, ok := b.Amounts[id]
+	if !ok {
+		tamount = big.NewInt(0)
+		b.Amounts[id] = tamount
+	}
+	tamount.Add(tamount, amount)
+	return tamount
 }
 
 func (b *Balance) serialize() []byte {
@@ -42,6 +76,6 @@ func (b *Balance) serialize() []byte {
 
 func (b *Balance) deserialize(balanceBytes []byte) {
 	if err := utils.Deserialize(balanceBytes, b); err != nil {
-		log.Errorln("balance deserialize error", err)
+		panic(fmt.Errorf("balance deserialize error: %s", err))
 	}
 }

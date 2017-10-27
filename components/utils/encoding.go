@@ -52,6 +52,8 @@ func recursiveEncode(w io.Writer, s reflect.Value) {
 		sliceEncode(w, s)
 	case reflect.Array:
 		arrayEncode(w, s)
+	case reflect.Map:
+		mapEncode(w, s)
 	case reflect.String:
 		WriteVarInt(w, uint64(len(s.String())))
 		w.Write([]byte(s.String()))
@@ -122,6 +124,17 @@ func arrayEncode(w io.Writer, v reflect.Value) {
 
 }
 
+func mapEncode(w io.Writer, v reflect.Value) {
+	size := v.Len()
+	WriteVarInt(w, (uint64)(size))
+	keys := v.MapKeys()
+	for _, key := range keys {
+		val := v.MapIndex(key)
+		recursiveEncode(w, key)
+		recursiveEncode(w, val)
+	}
+}
+
 // VarDecode decodes the data to val, val mustbe pointer
 func VarDecode(r io.Reader, val interface{}) error {
 	rv := reflect.ValueOf(val)
@@ -167,6 +180,8 @@ func recursiveDecode(r io.Reader, s reflect.Value) error {
 		} else {
 			err = fmt.Errorf("array decode length error")
 		}
+	case reflect.Map:
+		err = mapDecode(r, s)
 	case reflect.String:
 		if l, err = ReadVarInt(r); l > 0 && s.CanSet() {
 			buf := make([]byte, l)
@@ -212,6 +227,27 @@ func sliceDecode(r io.Reader, s reflect.Value) error {
 		}
 	}
 
+	return err
+}
+
+func mapDecode(r io.Reader, s reflect.Value) error {
+	var (
+		l   uint64
+		err error
+	)
+	l, err = ReadVarInt(r)
+
+	if l > 0 {
+		newVal := reflect.MakeMapWithSize(s.Type(), int(l))
+		for i := 0; i < int(l); i++ {
+			key := reflect.New(s.Type().Key())
+			val := reflect.New(s.Type().Elem())
+			err = recursiveDecode(r, key)
+			err = recursiveDecode(r, val)
+			newVal.SetMapIndex(reflect.Indirect(key), reflect.Indirect(val))
+		}
+		s.Set(newVal)
+	}
 	return err
 }
 

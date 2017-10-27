@@ -229,8 +229,7 @@ func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
 		if err := req.DecodeParams(&addr); err != nil {
 			return nil, err
 		}
-		b, err := vmproc.L0Handler.GetBalances(addr)
-		return b.Int64(), err
+		return vmproc.L0Handler.GetBalances(addr)
 
 	case "CurrentBlockHeight":
 		height := vmproc.L0Handler.CurrentBlockHeight()
@@ -239,13 +238,14 @@ func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
 	case "AddTransfer":
 		var (
 			fromAddr, toAddr string
+			assetID          uint32
 			amount           int64
 			txType           uint32
 		)
-		if err := req.DecodeParams(&fromAddr, &toAddr, &amount, &txType); err != nil {
+		if err := req.DecodeParams(&fromAddr, &toAddr, &assetID, &amount, &txType); err != nil {
 			return nil, err
 		}
-		vmproc.L0Handler.AddTransfer(fromAddr, toAddr, big.NewInt(amount), txType)
+		vmproc.L0Handler.AddTransfer(fromAddr, toAddr, assetID, big.NewInt(amount), txType)
 		return true, nil
 
 	case "SmartContractFailed":

@@ -30,6 +30,7 @@ import (
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/ledger"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -41,7 +42,7 @@ type Validator interface {
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
-	GetBalance(addr accounts.Address) (*big.Int, uint32)
+	GetBalance(addr accounts.Address) *state.Balance
 }
 
 type Verification struct {
@@ -53,8 +54,9 @@ type Verification struct {
 	requestBatchTimer  *time.Timer
 	blacklist          map[string]time.Time
 	rwBlacklist        sync.RWMutex
-	accounts           map[string]*account
+	accounts           map[string]*state.Balance
 	rwAccount          sync.RWMutex
+	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
 	sync.RWMutex
@@ -69,7 +71,8 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		requestBatchSignal: make(chan int),
 		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),
-		accounts:           make(map[string]*account),
+		accounts:           make(map[string]*state.Balance),
+		assets:             make(map[uint32]*state.Asset),
 		inTxs:              make(map[crypto.Hash]*types.Transaction),
 	}
 }
@@ -218,6 +221,71 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 			}
 		}
+
+		assetID := tx.AssetID()
+		if tx.GetType() != types.TypeIssue {
+			asset, ok := v.assets[assetID]
+			if !ok {
+				asset, _ = v.ledger.GetAssetFromDB(assetID)
+			}
+			if asset == nil {
+				if primary {
+					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
+					continue
+				} else {
+					log.Errorf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
+					for _, rollbackTx := range ttxs {
+						v.rollBackAccount(rollbackTx)
+					}
+					return false, nil
+				}
+			} else if tx.GetType() == types.TypeIssueUpdate {
+				if _, err := asset.Update(string(tx.Payload)); err != nil {
+					if primary {
+						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						continue
+					} else {
+						log.Errorf("[validator] issue update asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						for _, rollbackTx := range ttxs {
+							v.rollBackAccount(rollbackTx)
+						}
+						return false, nil
+					}
+				}
+			}
+		} else {
+			if _, ok := v.assets[assetID]; !ok {
+				asset := &state.Asset{
+					ID: assetID,
+				}
+				newAsset, err := asset.Update(string(tx.Payload))
+				if err != nil {
+					if primary {
+						log.Warnf("[validator] issue asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						continue
+					} else {
+						log.Errorf("[validator] issue asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						for _, rollbackTx := range ttxs {
+							v.rollBackAccount(rollbackTx)
+						}
+						return false, nil
+					}
+				}
+				v.assets[assetID] = newAsset
+			} else {
+				if primary {
+					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
+					continue
+				} else {
+					log.Errorf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
+					for _, rollbackTx := range ttxs {
+						v.rollBackAccount(rollbackTx)
+					}
+					return false, nil
+				}
+			}
+		}
+
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
 			if primary {
@@ -247,29 +315,41 @@ func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {
 	}
 }
 
-func (v *Verification) fetchAccount(address accounts.Address) *account {
+func (v *Verification) fetchAccount(address accounts.Address) *state.Balance {
 	account, ok := v.accounts[address.String()]
 	if !ok {
-		v.accounts[address.String()] = newAccount(address, v.ledger)
-		account = v.accounts[address.String()]
+		account, _ = v.ledger.GetBalanceFromDB(address)
+		v.accounts[address.String()] = account
 	}
 	return account
 }
 
 func (v *Verification) updateAccount(tx *types.Transaction) bool {
+	assetID := tx.AssetID()
+	plusAmount := big.NewInt(tx.Amount().Int64())
+	plusFee := big.NewInt(tx.Fee().Int64())
+	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
+	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
+
 	senderAccont := v.fetchAccount(tx.Sender())
 	if senderAccont != nil {
-		senderAccont.updateTransactionSenderBalance(tx)
+		senderAccont.Add(assetID, subAmount)
+		senderAccont.Add(assetID, subFee)
 		//	log.Debugln("[validator] updateAccount sender: ", tx.Sender(), "amount: ", senderAccont.amount)
-		if senderAccont.amount.Sign() == -1 && tx.GetType() != types.TypeIssue {
+		if tx.GetType() != types.TypeIssue && senderAccont.Get(assetID).Sign() == -1 {
+			senderAccont.Add(assetID, plusAmount)
+			senderAccont.Add(assetID, plusFee)
 			return false
 		}
 	}
 	receiverAccount := v.fetchAccount(tx.Recipient())
 	if receiverAccount != nil {
-		receiverAccount.updateTransactionReceiverBalance(tx)
+		receiverAccount.Add(assetID, plusAmount)
+		receiverAccount.Add(assetID, plusFee)
 		//	log.Debugln("[validator] updateAccount Recipient: ", tx.Recipient(), "amount: ", receiverAccount.amount)
-		if receiverAccount.amount.Sign() == -1 {
+		if receiverAccount.Get(assetID).Sign() == -1 {
+			receiverAccount.Add(assetID, subAmount)
+			receiverAccount.Add(assetID, subFee)
 			return false
 		}
 	}
@@ -278,13 +358,21 @@ func (v *Verification) updateAccount(tx *types.Transaction) bool {
 }
 
 func (v *Verification) rollBackAccount(tx *types.Transaction) {
+	assetID := tx.AssetID()
+	plusAmount := big.NewInt(tx.Amount().Int64())
+	plusFee := big.NewInt(tx.Fee().Int64())
+	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
+	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
+
 	senderAccont := v.fetchAccount(tx.Sender())
 	if senderAccont != nil {
-		senderAccont.rollBackTransactionSenderBalance(tx)
+		senderAccont.Add(assetID, plusAmount)
+		senderAccont.Add(assetID, plusFee)
 	}
 	receiverAccount := v.fetchAccount(tx.Recipient())
 	if receiverAccount != nil {
-		receiverAccount.rollBackTransactionReceiverBalance(tx)
+		senderAccont.Add(assetID, subAmount)
+		senderAccont.Add(assetID, subFee)
 	}
 }
 
@@ -308,9 +396,9 @@ func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transact
 	return nil, false
 }
 
-func (v *Verification) GetBalance(addr accounts.Address) (*big.Int, uint32) {
+func (v *Verification) GetBalance(addr accounts.Address) *state.Balance {
 	v.rwAccount.Lock()
 	defer v.rwAccount.Unlock()
 	acconut := v.fetchAccount(addr)
-	return acconut.amount, acconut.nonce
+	return acconut
 }

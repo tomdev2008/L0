@@ -19,191 +19,152 @@
 package state
 
 import (
-	"errors"
-
 	"math/big"
 
 	"sync"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/L0/core/types"
 )
 
 // State represents the account state
 type State struct {
 	dbHandler     *db.BlockchainDB
 	balancePrefix []byte
-	columnFamily  string
+	balanceCF     string
 	tmpBalance    map[string]*Balance
-	mu            sync.RWMutex
+	assetPrefix   []byte
+	assetCF       string
+	tmpAsset      map[uint32]*Asset
+	sync.RWMutex
 }
-
-const (
-	// OperationPlus is plus operation in state
-	OperationPlus uint32 = iota
-	// OperationSub is sub operation in state
-	OperationSub
-)
 
 // NewState returns a new State
 func NewState(db *db.BlockchainDB) *State {
 	return &State{
 		dbHandler:     db,
 		balancePrefix: []byte("bl_"),
-		columnFamily:  "balance",
+		balanceCF:     "balance",
 		tmpBalance:    make(map[string]*Balance),
+		assetPrefix:   []byte("ast_"),
+		assetCF:       "asset",
+		tmpAsset:      make(map[uint32]*Asset),
 	}
 }
 
-// UpdateBalance updates the account balance
-func (state *State) UpdateBalance(a accounts.Address, balance *Balance, fee *big.Int, operation uint32) ([]*db.WriteBatch, error) {
-	var writeBatchs []*db.WriteBatch
-	tmpBalance, err := state.GetTmpBalance(a)
-	if err != nil {
-		return nil, err
+//WriteBatch atomic writeBatchs
+func (state *State) WriteBatchs() []*db.WriteBatch {
+	state.Lock()
+	defer state.Unlock()
+	writeBatchs := make([]*db.WriteBatch, 0)
+	for a, b := range state.tmpBalance {
+		key := append(state.balancePrefix, []byte(a)...)
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.balanceCF, db.OperationPut, key, b.serialize()))
 	}
-
-	switch operation {
-	case OperationPlus:
-		if !state.checkBalance(tmpBalance.Amount, balance.Amount, big.NewInt(0), OperationPlus) {
-			return nil, ErrNegativeBalance
-		}
-		tmpBalance.Amount.Add(tmpBalance.Amount, balance.Amount)
-	case OperationSub:
-
-		if !state.checkBalance(tmpBalance.Amount, balance.Amount, fee, OperationSub) {
-			return nil, ErrNegativeBalance
-		}
-		tmpBalance.Amount.Sub(tmpBalance.Amount.Sub(tmpBalance.Amount, fee), balance.Amount)
-		tmpBalance.Nonce = balance.Nonce
-	default:
-		return nil, errors.New("unknown operation")
+	state.tmpBalance = make(map[string]*Balance)
+	for a, b := range state.tmpAsset {
+		id := utils.Serialize(a)
+		key := append(state.assetPrefix, id...)
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.assetCF, db.OperationPut, key, utils.Serialize(b)))
 	}
-
-	key := append(state.balancePrefix, a.Bytes()...)
-
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(state.columnFamily, db.OperationPut, key, tmpBalance.serialize()))
-
-	return writeBatchs, nil
+	state.tmpAsset = make(map[uint32]*Asset)
+	return writeBatchs
 }
 
 // GetBalance returns balance by account
-func (state *State) GetBalance(a accounts.Address) (*big.Int, uint32, error) {
-	key := append(state.balancePrefix, a.Bytes()...)
-	balanceBytes, err := state.dbHandler.Get(state.columnFamily, key)
-
-	if err != nil {
-		return big.NewInt(0), 0, err
-	}
-	if len(balanceBytes) == 0 {
-		return big.NewInt(0), 0, nil
-	}
-	balance := new(Balance)
-	balance.deserialize(balanceBytes)
-	return balance.Amount, balance.Nonce, nil
-}
-
-// Init initializes a account
-func (state *State) Init(a accounts.Address) error {
-	key := append(state.balancePrefix, a.Bytes()...)
-	value := big.NewInt(0).Bytes()
-	err := state.dbHandler.Put(state.columnFamily, key, value)
-	return err
-}
-
-// Transfer updates the sender->recipient account balance
-func (state *State) Transfer(sender, recipient accounts.Address, fee *big.Int, balance *Balance, txType uint32) ([]*db.WriteBatch, error) {
-	var writeBatchs []*db.WriteBatch
-
-	senderBalance, err := state.GetTmpBalance(sender)
+func (state *State) GetBalance(a accounts.Address) (*Balance, error) {
+	key := append(state.balancePrefix, []byte(a.String())...)
+	balanceBytes, err := state.dbHandler.Get(state.balanceCF, key)
 	if err != nil {
 		return nil, err
 	}
-
-	//sender=recipient Amount deducting fee
-	if sender.Equal(recipient) {
-		if !state.checkBalance(senderBalance.Amount, big.NewInt(0), fee, OperationSub) && txType != types.TypeIssue {
-			return nil, ErrNegativeBalance
-		}
-		senderBalance.Amount.Sub(senderBalance.Amount, fee)
-		senderBalance.Nonce = balance.Nonce
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.columnFamily, db.OperationPut, append(state.balancePrefix, sender.Bytes()...),
-			senderBalance.serialize()))
-		return writeBatchs, nil
-	}
-
-	if !state.checkBalance(senderBalance.Amount, balance.Amount, fee, OperationSub) && txType != types.TypeIssue {
-		return nil, ErrNegativeBalance
-	}
-	senderBalance.Amount.Sub(senderBalance.Amount.Sub(senderBalance.Amount, fee), balance.Amount)
-
-	senderBalance.Nonce = balance.Nonce
-
-	recipientBalance, err := state.GetTmpBalance(recipient)
-	if err != nil {
-		return nil, err
-	}
-
-	if !state.checkBalance(recipientBalance.Amount, balance.Amount, big.NewInt(0), OperationPlus) && txType != types.TypeIssue {
-		return nil, ErrNegativeBalance
-	}
-	recipientBalance.Amount.Add(recipientBalance.Amount, balance.Amount)
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(state.columnFamily, db.OperationPut, append(state.balancePrefix, sender.Bytes()...),
-		senderBalance.serialize()))
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(state.columnFamily, db.OperationPut, append(state.balancePrefix, recipient.Bytes()...),
-		recipientBalance.serialize()))
-
-	return writeBatchs, nil
-}
-
-//GetTmpBalance get tmpBalance When the block is not packaged
-func (state *State) GetTmpBalance(addr accounts.Address) (*Balance, error) {
-	state.mu.Lock()
-	defer state.mu.Unlock()
-	balance, ok := state.tmpBalance[addr.String()]
-	if !ok {
-		Amount, Nonce, err := state.GetBalance(addr)
-		if err != nil {
-			return nil, err
-		}
-		b := NewBalance(Amount, Nonce)
-		state.tmpBalance[addr.String()] = b
-		return b, nil
+	balance := NewBalance()
+	if len(balanceBytes) != 0 {
+		balance.deserialize(balanceBytes)
 	}
 	return balance, nil
 }
 
-//AtomicWrite atomic writeBatchs
-func (state *State) AtomicWrite(writeBatchs []*db.WriteBatch) error {
-	if err := state.dbHandler.AtomicWrite(writeBatchs); err != nil {
+//GetTmpBalance get tmpBalance When the block is not packaged
+func (state *State) GetTmpBalance(addr accounts.Address) (*Balance, error) {
+	state.Lock()
+	defer state.Unlock()
+	balance, ok := state.tmpBalance[addr.String()]
+	if !ok {
+		balance, err := state.GetBalance(addr)
+		if err != nil {
+			return nil, err
+		}
+		state.tmpBalance[addr.String()] = balance
+		return balance, nil
+	}
+	return balance, nil
+}
+
+// UpdateBalance updates the account balance
+func (state *State) UpdateBalance(a accounts.Address, id uint32, amount *big.Int, nonce uint32) error {
+	tmpBalance, err := state.GetTmpBalance(a)
+	if err != nil {
 		return err
 	}
-	//clear map
-	state.mu.Lock()
-	state.tmpBalance = make(map[string]*Balance)
-	state.mu.Unlock()
+	if tmpBalance.Nonce < nonce {
+		tmpBalance.Nonce = nonce
+	}
+	tamount := tmpBalance.Add(id, amount)
+	if tamount.Sign() < 0 {
+		return ErrNegativeBalance
+	}
 	return nil
 }
 
-//checkBalance check negative Balance,flag = 1 add, flag = 2 sub
-func (state *State) checkBalance(balance, change, fee *big.Int, operation uint32) bool {
-	tmpBalance := new(big.Int)
-	tmpChange := new(big.Int)
-	tmpFee := new(big.Int)
-
-	tmpBalance.Set(balance)
-	tmpChange.Set(change)
-	tmpFee.Set(fee)
-
-	switch operation {
-	case OperationPlus:
-		tmpBalance.Add(tmpBalance, tmpChange)
-	case OperationSub:
-		tmpBalance.Sub(tmpBalance.Sub(tmpBalance, fee), tmpChange)
+// GetAsset returns asset by id
+func (state *State) GetAsset(id uint32) (*Asset, error) {
+	key := append(state.assetPrefix, utils.Serialize(id)...)
+	bytes, err := state.dbHandler.Get(state.assetCF, key)
+	if err != nil {
+		return nil, err
 	}
-	if tmpBalance.Sign() < 0 {
-		return false
+	if len(bytes) != 0 {
+		asset := &Asset{}
+		utils.Deserialize(bytes, asset)
+		return asset, nil
 	}
-	return true
+	return nil, nil
+}
+
+//GetTmpAsset get tmpAsset When the block is not packaged
+func (state *State) GetTmpAsset(id uint32) (*Asset, error) {
+	state.Lock()
+	defer state.Unlock()
+	asset, ok := state.tmpAsset[id]
+	if !ok {
+		asset, err := state.GetAsset(id)
+		if err != nil {
+			return nil, err
+		}
+		if asset != nil {
+			state.tmpAsset[id] = asset
+		}
+		return asset, nil
+	}
+	return asset, nil
+}
+
+// UpdateAsset updates asset
+func (state *State) UpdateAsset(id uint32, jsonStr string) error {
+	state.Lock()
+	defer state.Unlock()
+	asset, ok := state.tmpAsset[id]
+	if !ok {
+		asset = &Asset{
+			ID: id,
+		}
+	}
+	newAsset, err := asset.Update(jsonStr)
+	if err != nil {
+		return err
+	}
+	state.tmpAsset[id] = newAsset
+	return nil
 }

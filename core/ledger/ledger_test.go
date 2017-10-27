@@ -49,7 +49,6 @@ var (
 
 func TestExecuteIssueTx(t *testing.T) {
 	params.ChainID = []byte{byte(0)}
-	var wrriteBash []*db.WriteBatch
 
 	issueTxKeypair, _ := crypto.GenerateKey()
 	addr := accounts.PublicKeyToAddress(*issueTxKeypair.Public())
@@ -60,21 +59,21 @@ func TestExecuteIssueTx(t *testing.T) {
 		uint32(1),
 		addr,
 		issueReciepent,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature)
 
-	wrriteBash, err := li.executeIssueTx(wrriteBash, issueTx)
+	err := li.executeTransaction(issueTx, false)
 	if err != nil {
 		t.Error(err)
 	}
-	li.state.AtomicWrite(wrriteBash)
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(issueReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(issueReciepent))
 
 }
 
@@ -90,6 +89,7 @@ func TestExecuteAtmoicTx(t *testing.T) {
 		uint32(1),
 		addr,
 		atmoicReciepent,
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -106,21 +106,22 @@ func TestExecuteAtmoicTx(t *testing.T) {
 		uint32(1),
 		addr,
 		atmoicSender,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, atmoicTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, atmoicTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(atmoicSender))
-	t.Log(li.GetBalance(atmoicReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(atmoicSender))
+	t.Log(li.GetBalanceFromDB(atmoicReciepent))
 
 }
 
@@ -136,6 +137,7 @@ func TestExecuteAcossTx1(t *testing.T) {
 		uint32(1),
 		addr,
 		acrossReciepent,
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -151,21 +153,22 @@ func TestExecuteAcossTx1(t *testing.T) {
 		uint32(1),
 		addr,
 		acrossSender,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, acrossTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(acrossSender))
-	t.Log(li.GetBalance(acrossReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(acrossSender))
+	t.Log(li.GetBalanceFromDB(acrossReciepent))
 }
 
 func TestExecuteAcossTx2(t *testing.T) {
@@ -180,6 +183,7 @@ func TestExecuteAcossTx2(t *testing.T) {
 		uint32(1),
 		addr,
 		acrossReciepent,
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -196,21 +200,22 @@ func TestExecuteAcossTx2(t *testing.T) {
 		uint32(1),
 		addr,
 		acrossReciepent,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, acrossTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, acrossTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(acrossSender))
-	t.Log(li.GetBalance(acrossReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(acrossSender))
+	t.Log(li.GetBalanceFromDB(acrossReciepent))
 }
 
 func TestExecuteMergedTx(t *testing.T) {
@@ -227,6 +232,7 @@ func TestExecuteMergedTx(t *testing.T) {
 		uint32(0),
 		accounts.ChainCoordinateToAddress(sender),
 		accounts.ChainCoordinateToAddress(reciepent),
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -245,6 +251,7 @@ func TestExecuteMergedTx(t *testing.T) {
 		uint32(1),
 		addr,
 		senderAddress,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
@@ -252,16 +259,16 @@ func TestExecuteMergedTx(t *testing.T) {
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, mergedTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, mergedTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	issueSenderaddress := issueTx.Sender()
 
-	t.Log(li.GetBalance(issueSenderaddress))
-	t.Log(li.GetBalance(accounts.ChainCoordinateToAddress(sender)))
-	t.Log(li.GetBalance(accounts.ChainCoordinateToAddress(reciepent)))
+	t.Log(li.GetBalanceFromDB(issueSenderaddress))
+	t.Log(li.GetBalanceFromDB(accounts.ChainCoordinateToAddress(sender)))
+	t.Log(li.GetBalanceFromDB(accounts.ChainCoordinateToAddress(reciepent)))
 }
 
 func TestExecuteDistributTx(t *testing.T) {
@@ -276,6 +283,7 @@ func TestExecuteDistributTx(t *testing.T) {
 		uint32(1),
 		addr,
 		distributReciepent,
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -291,22 +299,23 @@ func TestExecuteDistributTx(t *testing.T) {
 		uint32(1),
 		addr,
 		distributAddress,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, distributTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, distributTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(accounts.ChainCoordinateToAddress(coordinate.NewChainCoordinate([]byte{byte(1)}))))
-	t.Log(li.GetBalance(distributAddress))
-	t.Log(li.GetBalance(distributReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(accounts.ChainCoordinateToAddress(coordinate.NewChainCoordinate([]byte{byte(1)}))))
+	t.Log(li.GetBalanceFromDB(distributAddress))
+	t.Log(li.GetBalanceFromDB(distributReciepent))
 }
 
 func TestExecuteBackfrontTx(t *testing.T) {
@@ -321,6 +330,7 @@ func TestExecuteBackfrontTx(t *testing.T) {
 		uint32(1),
 		addr,
 		backfrontReciepent,
+		uint32(0),
 		Amount,
 		fee,
 		utils.CurrentTimestamp())
@@ -337,22 +347,23 @@ func TestExecuteBackfrontTx(t *testing.T) {
 		uint32(1),
 		addr,
 		backfrontAddrress,
+		uint32(0),
 		issueAmount,
 		fee,
 		utils.CurrentTimestamp())
 	signature1, _ := issueTxKeypair.Sign(issueTx.Hash().Bytes())
 	issueTx.WithSignature(signature1)
 
-	_, _, err := li.executeTransaction(types.Transactions{issueTx, backfrontTx}, false)
-	if err != nil {
-		t.Error(err)
+	_, _, errtxs := li.executeTransactions(types.Transactions{issueTx, backfrontTx}, false)
+	if len(errtxs) > 0 {
+		t.Error("error")
 	}
 
 	sender := issueTx.Sender()
-	t.Log(li.GetBalance(sender))
-	t.Log(li.GetBalance(accounts.ChainCoordinateToAddress(coordinate.NewChainCoordinate([]byte{byte(0)}))))
-	t.Log(li.GetBalance(backfrontAddrress))
-	t.Log(li.GetBalance(backfrontReciepent))
+	t.Log(li.GetBalanceFromDB(sender))
+	t.Log(li.GetBalanceFromDB(accounts.ChainCoordinateToAddress(coordinate.NewChainCoordinate([]byte{byte(0)}))))
+	t.Log(li.GetBalanceFromDB(backfrontAddrress))
+	t.Log(li.GetBalanceFromDB(backfrontReciepent))
 
 	os.RemoveAll("/tmp/rocksdb-test1")
 
