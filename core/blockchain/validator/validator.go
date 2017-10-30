@@ -42,6 +42,7 @@ type Validator interface {
 	RemoveTxsInVerification(txs types.Transactions)
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
 	GetBalance(addr accounts.Address) (*big.Int, uint32)
+	SetNotify(func(*types.Transaction, string))
 }
 
 type Verification struct {
@@ -57,6 +58,7 @@ type Verification struct {
 	rwAccount          sync.RWMutex
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
+	notify             func(*types.Transaction, string)
 	sync.RWMutex
 }
 
@@ -204,6 +206,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	for _, tx := range txs {
 		if !v.isExist(tx) {
 			if !v.isLegalTransaction(tx) {
+				v.notify(tx, "transaction illegal")
 				if primary {
 					log.Warnf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
 					v.txpool.Remove(tx)
@@ -220,6 +223,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
+			v.notify(tx, "balance is negative")
 			if primary {
 				log.Warnf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
 				continue
@@ -313,4 +317,8 @@ func (v *Verification) GetBalance(addr accounts.Address) (*big.Int, uint32) {
 	defer v.rwAccount.Unlock()
 	acconut := v.fetchAccount(addr)
 	return acconut.amount, acconut.nonce
+}
+
+func (v *Verification) SetNotify(callback func(*types.Transaction, string)) {
+	v.notify = callback
 }

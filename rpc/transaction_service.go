@@ -26,6 +26,7 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/blockchain"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -127,7 +128,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	if tx.Fee() == nil || tx.Fee().Sign() < 0 {
-		return errors.New("Invalid Fee in Tx, Fee must be >0")
+		return errors.New("Invalid Fee in Tx, Fee must bigger than 0")
 	}
 
 	_, err := tx.Verfiy()
@@ -135,7 +136,11 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errors.New("Invalid Tx, varify the signature of Tx failed")
 	}
 
+	ch := make(chan struct{}, 1)
 	t.pmHander.Relay(tx)
+	blockchain.Register(tx.Hash(), func(iTx interface{}) {
+		ch <- struct{}{}
+	})
 
 	if len(tx.Payload) != 0 {
 		contractSpec := new(types.ContractSpec)
@@ -145,7 +150,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return nil
 	}
 	*reply = BroadcastReply{TransactionHash: tx.Hash()}
-
+	<-ch
 	return nil
 }
 
