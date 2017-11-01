@@ -90,7 +90,7 @@ func (v *Verification) makeRequestBatch() types.Transactions {
 		if to == "" {
 			to = tx.ToChain()
 		}
-		if tx.ToChain() == to && len(requestBatch) < v.consenter.BatchSize() {
+		if tx.ToChain() == to && len(requestBatch) <= v.consenter.BatchSize() {
 			requestBatch = append(requestBatch, tx)
 		} else {
 			return true
@@ -114,7 +114,7 @@ func (v *Verification) processLoop() {
 			}
 			v.rwBlacklist.Unlock()
 		case cnt := <-v.requestBatchSignal:
-			if cnt > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
+			if cnt >= (v.config.TxPoolDelay + v.consenter.BatchSize()) {
 				requestBatch := v.makeRequestBatch()
 				log.Debugf("request Batch: %d ", len(requestBatch))
 				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
