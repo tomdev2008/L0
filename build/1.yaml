@@ -27,7 +27,7 @@ validator:
   txpool:
     capacity: 1000000
     timeout: 30m
-    txdelay:  10000
+    txdelay:  0
 
 issueaddr:
   addr: ["6ce1bb0858e71b50d603ebe4bec95b11d8833e6d"]
@@ -47,9 +47,9 @@ consensus:
     Q: 3
     K: 10
     batchSize: 10
-    batchTimeout: 1s
+    batchTimeout: 10ms
     blockSize: 10
-    blockTimeout: 1s
+    blockTimeout: 20ms
     request: 3s
     viewChange: 2s
     resendViewChange: 2s
