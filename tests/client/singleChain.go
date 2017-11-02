@@ -56,7 +56,7 @@ func sendTx() {
 	for {
 		select {
 		case tx := <-txChan:
-			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), " Type:", tx.GetType(), "txChan size:", len(txChan))
+			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 			Relay(NewMsg(0x14, tx.Serialize()))
 		}
 	}
@@ -68,10 +68,11 @@ func generateAtomicTx() {
 		toChain   = []byte{0}
 	)
 
+	id := uint32(0)
 	for {
 		select {
 		case key := <-list:
-			go func(privateKey *crypto.PrivateKey) {
+			go func(privateKey *crypto.PrivateKey, id uint32) {
 				time.Sleep(time.Second * 60)
 				sender := accounts.PublicKeyToAddress(*privateKey.Public())
 				nonce := uint32(0)
@@ -86,7 +87,7 @@ func generateAtomicTx() {
 						nonce,
 						sender,
 						addr,
-						uint32(0),
+						uint32(id),
 						big.NewInt(10),
 						big.NewInt(1),
 						uint32(time.Now().Unix()),
@@ -95,8 +96,9 @@ func generateAtomicTx() {
 					tx.WithSignature(sig)
 					txChan <- tx
 				}
-			}(key)
+			}(key, id)
 		}
+		id++
 	}
 }
 
@@ -120,11 +122,14 @@ func generateIssueTx() {
 			nonce,
 			sender,
 			addr,
-			uint32(0),
+			uint32(i),
 			big.NewInt(10e11),
 			big.NewInt(1),
 			uint32(time.Now().Unix()),
 		)
+		issueCoin := make(map[string]interface{})
+		issueCoin["id"] = i
+		tx.Payload, _ = json.Marshal(issueCoin)
 		sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 		tx.WithSignature(sig)
 		txChan <- tx

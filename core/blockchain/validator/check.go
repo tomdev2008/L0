@@ -101,12 +101,16 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 			isOK = false
 		}
 
-		asset := &state.Asset{
-			ID: tx.AssetID(),
-		}
-		if _, err := asset.Update(string(tx.Payload)); err != nil {
-			log.Errorf("[validator] illegal transaction %s: valid issue coin(%s)", tx.Hash(), string(tx.Payload))
-			isOK = false
+		if len(tx.Payload) > 0 {
+			asset := &state.Asset{
+				ID:     tx.AssetID(),
+				Issuer: tx.Sender(),
+				Owner:  tx.Recipient(),
+			}
+			if _, err := asset.Update(string(tx.Payload)); err != nil {
+				log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
+				isOK = false
+			}
 		}
 
 	}

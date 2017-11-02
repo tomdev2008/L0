@@ -223,11 +223,11 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 
 		assetID := tx.AssetID()
+		asset, ok := v.assets[assetID]
+		if !ok {
+			asset, _ = v.ledger.GetAssetFromDB(assetID)
+		}
 		if tx.GetType() != types.TypeIssue {
-			asset, ok := v.assets[assetID]
-			if !ok {
-				asset, _ = v.ledger.GetAssetFromDB(assetID)
-			}
 			if asset == nil {
 				if primary {
 					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
@@ -239,8 +239,9 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 					}
 					return false, nil
 				}
-			} else if tx.GetType() == types.TypeIssueUpdate {
-				if _, err := asset.Update(string(tx.Payload)); err != nil {
+			} else if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
+				newAsset, err := asset.Update(string(tx.Payload))
+				if err != nil {
 					if primary {
 						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						continue
@@ -252,11 +253,14 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 						return false, nil
 					}
 				}
+				v.assets[assetID] = newAsset
 			}
 		} else {
-			if _, ok := v.assets[assetID]; !ok {
+			if asset == nil {
 				asset := &state.Asset{
-					ID: assetID,
+					ID:     assetID,
+					Issuer: tx.Sender(),
+					Owner:  tx.Recipient(),
 				}
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
@@ -289,10 +293,10 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
 			if primary {
-				log.Warnf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				continue
 			} else {
-				log.Errorf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				log.Errorf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}

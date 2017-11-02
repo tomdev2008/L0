@@ -1,43 +1,30 @@
 package state
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"math/big"
 
 	"github.com/bocheninc/L0/core/accounts"
 )
 
-//AssetType
-const (
-	AssetUtilityToken uint32 = iota
-	AssetToken
-)
-
 //Asset Attributes
 type Asset struct {
-	ID         uint32   `json:"id"`         // id
-	Name       string   `json:"name"`       // name
-	Descr      string   `json:"descr"`      // description
-	Type       uint32   `json:"type"`       // type
-	Amount     *big.Int `json:"amount"`     // used
-	Available  *big.Int `json:"available"`  // unused
-	Precision  uint64   `json:"precision"`  // divisible, precision
-	Expiration uint32   `json:"expiration"` // expriation datetime
-	// issuer > admin > owner > fee
+	ID         uint32 `json:"id"`         // id
+	Name       string `json:"name"`       // name
+	Descr      string `json:"descr"`      // description
+	Precision  uint64 `json:"precision"`  // divisible, precision
+	Expiration uint32 `json:"expiration"` // expriation datetime
+
 	Issuer accounts.Address `json:"issuer"` // issuer address
-	Admin  accounts.Address `json:"admin"`  // admin address
 	Owner  accounts.Address `json:"owner"`  // owner address
-	// Fee
-	Fee        *big.Int         `json:"fee"`
-	FeeAddress accounts.Address `json:"feeOwner"` //fee address
 }
 
-//Copy
+//Update
 func (asset *Asset) Update(jsonStr string) (*Asset, error) {
 	tAsset := &Asset{}
 	if err := json.Unmarshal([]byte(jsonStr), tAsset); err != nil {
-		return nil, fmt.Errorf("invalid asset json string")
+		return nil, fmt.Errorf("invalid json string for asset")
 	}
 
 	var newVal map[string]interface{}
@@ -47,18 +34,20 @@ func (asset *Asset) Update(jsonStr string) (*Asset, error) {
 	var oldVal map[string]interface{}
 	json.Unmarshal(oldJSONAStr, &oldVal)
 
-	for k := range oldVal {
-		if val, ok := newVal[k]; ok {
+	for k, val := range newVal {
+		if _, ok := oldVal[k]; ok {
 			oldVal[k] = val
 		}
 	}
 
-	bytes, _ := json.Marshal(oldVal)
+	bts, _ := json.Marshal(oldVal)
 	newAsset := &Asset{}
-	json.Unmarshal(bytes, newAsset)
+	json.Unmarshal(bts, newAsset)
 
-	if asset.ID != newAsset.ID {
-		return nil, fmt.Errorf("id %d is readonly, not allowed to write", asset.ID)
+	if asset.ID != newAsset.ID ||
+		!bytes.Equal(asset.Issuer.Bytes(), newAsset.Issuer.Bytes()) ||
+		!bytes.Equal(asset.Owner.Bytes(), newAsset.Owner.Bytes()) {
+		return nil, fmt.Errorf("id, issuer, owner are readonly attribute, can't modified")
 	}
 
 	return newAsset, nil
