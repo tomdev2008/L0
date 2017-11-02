@@ -105,7 +105,7 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 			ID: tx.AssetID(),
 		}
 		if _, err := asset.Update(string(tx.Payload)); err != nil {
-			log.Errorf("[validator] illegal transaction %s: valid issue coin(%s)", tx.Hash(), string(tx.Payload))
+			log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
 			isOK = false
 		}
 

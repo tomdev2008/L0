@@ -254,7 +254,11 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 			}
 		} else {
-			if _, ok := v.assets[assetID]; !ok {
+			asset, ok := v.assets[assetID]
+ +			if !ok {
+ +				asset, _ = v.ledger.GetAssetFromDB(assetID)
+ +			}
+			if asset == nil {
 				asset := &state.Asset{
 					ID: assetID,
 				}
@@ -289,10 +293,10 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
 			if primary {
-				log.Warnf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				continue
 			} else {
-				log.Errorf("[validator] balance is negative ,tx_hash: %s", tx.Hash().String())
+				log.Errorf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
