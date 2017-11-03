@@ -111,6 +111,7 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 }
 
 type BroadcastReply struct {
+	Result          *string     `json:"result"`
 	ContractAddr    *string     `json:"contractAddr"`
 	TransactionHash crypto.Hash `json:"transactionHash"`
 }
@@ -138,18 +139,24 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 	ch := make(chan struct{}, 1)
 	t.pmHander.Relay(tx)
+	result := "Success"
 	blockchain.Register(tx.Hash(), func(iTx interface{}) {
 		ch <- struct{}{}
+		if iTx != nil {
+			if s, ok := iTx.(string); ok {
+				result = s
+			}
+		}
 	})
+
+	*reply = BroadcastReply{Result: &result, TransactionHash: tx.Hash()}
 
 	if len(tx.Payload) != 0 {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
-		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
-		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
-		return nil
+		*reply.ContractAddr = utils.BytesToHex(contractSpec.ContractAddr)
 	}
-	*reply = BroadcastReply{TransactionHash: tx.Hash()}
+
 	<-ch
 	return nil
 }

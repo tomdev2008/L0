@@ -21,7 +21,6 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -35,26 +34,26 @@ import (
 )
 
 func main() {
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10; i++ {
 		time.Sleep(10)
-		go func(n int) {
-			for j := 100 * n; j < 100*n+10; j++ {
-				go HttpSend(generateAtomicTx(uint32(j)))
+		go func() {
+			for j := 0; j < 10; j++ {
+				HttpSend(generateAtomicTx())
 			}
-		}(i)
+		}()
 	}
 
-	time.Sleep(time.Minute * 10)
+	time.Sleep(time.Minute * 3)
 }
 
-func HttpSend(param string) string {
+func HttpSend(param string) {
 	paramStr := `{"id":1,"method":"Transaction.Broadcast","params":["` + param + `"]}`
 	req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(paramStr))
 	if err != nil {
 		panic(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{
+	var client = &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: 1000,
 		},
@@ -62,21 +61,18 @@ func HttpSend(param string) string {
 	}
 	t := time.Now()
 	response, err := client.Do(req)
-	log.Println(time.Now().Sub(t))
 
-	if err != nil && response == nil {
-		return ""
-	} else {
+	if err == nil {
 		defer response.Body.Close()
 		body, er := ioutil.ReadAll(response.Body)
 		if er != nil {
-			panic(fmt.Errorf("couldn't parse response body. %+v", err))
+			log.Print("couldn't parse response body. ", err)
 		}
-		return string(body)
+		log.Println(time.Now().Sub(t), string(body))
 	}
 }
 
-func generateAtomicTx(nonce uint32) string {
+func generateAtomicTx() string {
 	issuePriKeyHex := "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privateKey, _ := crypto.HexToECDSA(issuePriKeyHex)
 	addr := accounts.HexToAddress("4ce1bb0858e71b50d603ebe4bec95b11d8833e6d")
@@ -85,10 +81,10 @@ func generateAtomicTx(nonce uint32) string {
 		coordinate.HexToChainCoordinate("00"),
 		coordinate.HexToChainCoordinate("00"),
 		uint32(5),
-		nonce,
+		0,
 		sender,
 		addr,
-		big.NewInt(1000000000),
+		big.NewInt(1000),
 		big.NewInt(1),
 		uint32(time.Now().Nanosecond()),
 	)

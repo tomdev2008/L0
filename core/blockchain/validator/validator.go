@@ -185,6 +185,7 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		for _, tx := range txs {
 			v.RollBackAccount(tx)
 			v.txpool.Add(tx)
+			v.notify(tx, "consensus failed & verified")
 		}
 	// consensus succeed
 	case 3:

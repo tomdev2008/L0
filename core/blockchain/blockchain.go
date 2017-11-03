@@ -110,6 +110,7 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
 	bc.validator = validator
 	bc.ledger.Validator = bc.validator
+	bc.validator.SetNotify(txNotify)
 }
 
 // SetBlockchainConsenter sets the consenter of the blockchain

@@ -68,7 +68,7 @@ type GetTxsByBlockHashArgs struct {
 //Block json rpc return block
 type Block struct {
 	BlockHeader types.BlockHeader `json:"header"`
-	TxHashList  []crypto.Hash      `json:"txHashList"`
+	TxHashList  []crypto.Hash     `json:"txHashList"`
 }
 
 //Height get blockchain height

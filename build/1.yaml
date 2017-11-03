@@ -47,9 +47,9 @@ consensus:
     Q: 3
     K: 10
     batchSize: 10
-    batchTimeout: 10ms
+    batchTimeout: 1s
     blockSize: 10
-    blockTimeout: 20ms
+    blockTimeout: 2s
     request: 3s
     viewChange: 2s
     resendViewChange: 2s
