@@ -158,7 +158,7 @@ func (lbft *Lbft) sendEmptyRequest() {
 	if lbft.isPrimary() {
 		req := &Request{
 			ID:     EMPTYREQUEST,
-			Time:   uint32(time.Now().Unix()),
+			Time:   uint32(time.Now().UnixNano()),
 			Height: lbft.height,
 			Txs:    nil,
 			Func:   nil,
