@@ -185,6 +185,25 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISm
 func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
 	// log.Debugf("request parent proc funcName:%s\n", req.FuncName)
 	switch req.FuncName {
+	case "GetGlobalState":
+		var key string
+		if err := req.DecodeParams(&key); err != nil {
+			return nil, err
+		}
+		return vmproc.L0Handler.GetGlobalState(key)
+	case "SetGlobalState":
+		var key string
+		var value []byte
+		if err := req.DecodeParams(&key, &value); err != nil {
+			return nil, err
+		}
+		return nil, vmproc.L0Handler.SetGlobalState(key, value)
+	case "DelGlobalState":
+		var key string
+		if err := req.DecodeParams(&key); err != nil {
+			return nil, err
+		}
+		return nil, vmproc.L0Handler.DelGlobalState(key)
 	case "GetState":
 		var key string
 		if err := req.DecodeParams(&key); err != nil {

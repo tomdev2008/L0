@@ -30,7 +30,11 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-var DeployAddr = []byte("00000000000000000000")
+var (
+	DeployAddr = []byte("00000000000000000000")
+
+	globalStateAddr = "globalStateAddr"
+)
 
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*big.Int, error)
@@ -38,6 +42,10 @@ type ILedgerSmartContract interface {
 }
 
 type ISmartConstract interface {
+	GetGlobalState(key string) ([]byte, error)
+	SetGlobalState(key string, value []byte) error
+	DelGlobalState(key string) error
+
 	GetState(key string) ([]byte, error)
 	AddState(key string, value []byte)
 	DelState(key string)
@@ -100,6 +108,50 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
+}
+
+// GetGlobalState returns the global state.
+func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	value := sctx.stateExtra.get(globalStateAddr, key)
+	if len(value) == 0 {
+		var err error
+		scAddrkey := EnSmartContractKey(globalStateAddr, key)
+		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
+		if err != nil {
+			return nil, fmt.Errorf("can't get date from db %s", err)
+		}
+	}
+	return value, nil
+}
+
+// SetGlobalState sets the global state.
+func (sctx *SmartConstract) SetGlobalState(key string, value []byte) error {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	// TODO: verify authority of data-admin account.
+
+	log.Debugf("SetGlobalState key=[%s], value=[%#v]", key, value)
+	sctx.stateExtra.set(globalStateAddr, key, value)
+	return nil
+}
+
+// DelGlobalState deletes the global state.
+func (sctx *SmartConstract) DelGlobalState(key string) error {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	// TODO: verify authority of data-admin account.
+
+	log.Debugf("DelGlobalState key=[%s]", key)
+	sctx.stateExtra.delete(globalStateAddr, key)
+	return nil
 }
 
 // GetState get value

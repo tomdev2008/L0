@@ -31,6 +31,9 @@ func exporter() map[string]lua.LGFunction {
 		"Account":            accountFunc,
 		"Transfer":           transferFunc,
 		"CurrentBlockHeight": currentBlockHeightFunc,
+		"getGlobalStateFunc": getGlobalStateFunc,
+		"setGlobalStateFunc": setGlobalStateFunc,
+		"delGlobalStateFunc": delGlobalStateFunc,
 		"GetState":           getStateFunc,
 		"PutState":           putStateFunc,
 		"DelState":           delStateFunc,
@@ -88,6 +91,71 @@ func currentBlockHeightFunc(l *lua.LState) int {
 	}
 
 	l.Push(lua.LNumber(height))
+	return 1
+}
+
+func getGlobalStateFunc(l *lua.LState) int {
+	if l.GetTop() != 1 {
+		l.RaiseError("param illegality when invoke GetGlobalState")
+		return 1
+	}
+
+	key := l.CheckString(1)
+	data, err := vmproc.CCallGetGlobalState(key)
+	if err != nil {
+		l.RaiseError("GetGlobalState error key:%s  err:%s", key, err)
+		return 1
+	}
+
+	if data == nil {
+		l.Push(lua.LNil)
+		return 1
+	}
+
+	buf := bytes.NewBuffer(data)
+	if lv, err := byteToLValue(buf); err != nil {
+		l.RaiseError("byteToLValue error")
+	} else {
+		l.Push(lv)
+	}
+
+	return 1
+}
+
+func setGlobalStateFunc(l *lua.LState) int {
+	if l.GetTop() != 2 {
+		l.RaiseError("param illegality when invoke SetGlobalState")
+		return 1
+	}
+
+	key := l.CheckString(1)
+	value := l.Get(2)
+
+	data := lvalueToByte(value)
+	err := vmproc.CCallSetGlobalState(key, data)
+	if err != nil {
+		l.RaiseError("SetGlobalState error key:%s  err:%s", key, err)
+	} else {
+		l.Push(lua.LBool(true))
+	}
+
+	return 1
+}
+
+func delGlobalStateFunc(l *lua.LState) int {
+	if l.GetTop() != 1 {
+		l.RaiseError("param illegality when invoke DelGlobalState")
+		return 1
+	}
+
+	key := l.CheckString(1)
+	err := vmproc.CCallDelGlobalState(key)
+	if err != nil {
+		l.RaiseError("DelGlobalState error key:%s   err:%s", key, err)
+	} else {
+		l.Push(lua.LBool(true))
+	}
+
 	return 1
 }
 

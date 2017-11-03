@@ -39,6 +39,9 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 	exporterFuncs.Set("Account", accountFunc)
 	exporterFuncs.Set("Transfer", transferFunc)
 	exporterFuncs.Set("CurrentBlockHeight", currentBlockHeightFunc)
+	exporterFuncs.Set("getGlobalStateFunc", getGlobalStateFunc)
+	exporterFuncs.Set("setGlobalStateFunc", setGlobalStateFunc)
+	exporterFuncs.Set("delGlobalStateFunc", delGlobalStateFunc)
 	exporterFuncs.Set("GetState", getStateFunc)
 	exporterFuncs.Set("PutState", putStateFunc)
 	exporterFuncs.Set("DelState", delStateFunc)
@@ -112,6 +115,78 @@ func currentBlockHeightFunc(fc otto.FunctionCall) otto.Value {
 	if err != nil {
 		return otto.NullValue()
 	}
+	return val
+}
+
+func getGlobalStateFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 1 {
+		log.Error("param illegality when invoke getGlobalState")
+		return fc.Otto.MakeCustomError("getGlobalStateFunc", "param illegality when invoke getGlobalState")
+	}
+
+	key, err := fc.Argument(0).ToString()
+	data, err := vmproc.CCallGetGlobalState(key)
+	if err != nil {
+		log.Errorf("getGlobalState error key:%s  err:%s", key, err)
+		return fc.Otto.MakeCustomError("getGlobalStateFunc", "getGlobalState error:"+err.Error())
+	}
+
+	if data == nil {
+		return otto.NullValue()
+	}
+
+	buf := bytes.NewBuffer(data)
+	val, err := byteToJSvalue(buf, fc.Otto)
+	if err != nil {
+		log.Error("byteToJSvalue error", err)
+		return fc.Otto.MakeCustomError("getGlobalStateFunc", "byteToJSvalue error:"+err.Error())
+	}
+	return val
+}
+
+func setGlobalStateFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 2 {
+		log.Error("param illegality when invoke SetGlobalState")
+		return fc.Otto.MakeCustomError("setGlobalStateFunc", "param illegality when invoke SetGlobalState")
+	}
+
+	key, err := fc.Argument(0).ToString()
+	if err != nil {
+		log.Error("get string key error", err)
+		return fc.Otto.MakeCustomError("setGlobalStateFunc", "get string key error"+err.Error())
+	}
+
+	value := fc.Argument(1)
+	data, err := jsvalueToByte(value)
+	if err != nil {
+		log.Errorf("jsvalueToByte error key:%s  err:%s", key, err)
+		return fc.Otto.MakeCustomError("setGlobalStateFunc", "jsvalueToByte error:"+err.Error())
+	}
+
+	err = vmproc.CCallSetGlobalState(key, data)
+	if err != nil {
+		log.Errorf("SetGlobalState error key:%s  err:%s", key, err)
+		return fc.Otto.MakeCustomError("setGlobalStateFunc", "SetGlobalState error:"+err.Error())
+	}
+
+	val, _ := otto.ToValue(true)
+	return val
+}
+
+func delGlobalStateFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 1 {
+		log.Error("param illegality when invoke DelGlobalState")
+		return fc.Otto.MakeCustomError("delGlobalStateFunc", "param illegality when invoke DelGlobalState")
+	}
+
+	key, err := fc.Argument(0).ToString()
+	err = vmproc.CCallDelGlobalState(key)
+	if err != nil {
+		log.Errorf("DelGlobalState error key:%s   err:%s", key, err)
+		return fc.Otto.MakeCustomError("delGlobalStateFunc", "DelGlobalState error:"+err.Error())
+	}
+
+	val, _ := otto.ToValue(true)
 	return val
 }
 
