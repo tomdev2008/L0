@@ -104,13 +104,21 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISm
 	switch tx.GetType() {
 	case types.TypeJSContractInit:
 		if realExec {
-			handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})) // add js contract code into state
+			if len(cs.ContractAddr) == 0 {
+				handler.SetGlobalState(contract.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"}))
+			} else {
+				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})) // add js contract code into state
+			}
 			return vm.PCallRealInitContract(cd, handler)
 		}
 		return vm.PCallPreInitContract(cd, handler)
 	case types.TypeLuaContractInit:
 		if realExec {
-			handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"})) // add lua contract code into state
+			if len(cs.ContractAddr) == 0 {
+				handler.SetGlobalState(contract.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"}))
+			} else {
+				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"})) // add lua contract code into state
+			}
 			return vm.PCallRealInitContract(cd, handler)
 		}
 		return vm.PCallPreInitContract(cd, handler)
@@ -162,7 +170,6 @@ func initVMProc(contractType string) error {
 }
 
 func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISmartConstract) (string, string, error) {
-
 	code := cs.ContractCode
 	if code != nil && len(code) > 0 {
 		if txType == types.TypeJSContractInit {
@@ -172,7 +179,13 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISm
 	}
 
 	cc := new(ContractCode)
-	code, err := handler.GetState(contractCodeKey)
+	var err error
+	if len(cs.ContractAddr) == 0 {
+		code, err = handler.GetGlobalState(contract.GlobalContractKey)
+	} else {
+		code, err = handler.GetState(contractCodeKey)
+	}
+
 	if len(code) != 0 && err == nil {
 		utils.Deserialize(code, cc)
 		return string(cc.Code), cc.Type, nil
