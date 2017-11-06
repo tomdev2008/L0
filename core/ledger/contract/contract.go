@@ -37,14 +37,16 @@ var (
 )
 
 const (
+	// globalStateKey is the key of global state.
 	globalStateKey = "globalStateKey"
 
-	// AdminKey is the key of admin account data.
-	AdminKey = "admin"
+	// adminKey is the key of admin account.
+	adminKey = "admin"
 
 	// GlobalContractKey is the key of global contract.
 	GlobalContractKey = "globalContract"
 
+	// permissionPrefix is the prefix of data permission key.
 	permissionPrefix = "permission."
 )
 
@@ -144,12 +146,12 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 	var dataAdmin []byte
 	var err error
 	switch {
-	case key == AdminKey:
+	case key == adminKey:
 		fallthrough
 	case key == GlobalContractKey:
 		fallthrough
 	case strings.Contains(key, permissionPrefix):
-		dataAdmin, err = sctx.GetGlobalState(AdminKey)
+		dataAdmin, err = sctx.GetGlobalState(adminKey)
 		if err != nil {
 			return err
 		}
@@ -161,7 +163,7 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 		}
 
 		if len(dataAdmin) == 0 {
-			dataAdmin, err = sctx.GetGlobalState(AdminKey)
+			dataAdmin, err = sctx.GetGlobalState(adminKey)
 			if err != nil {
 				return err
 			}
