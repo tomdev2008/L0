@@ -210,9 +210,6 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 			Txs:  txs,
 			Func: function,
 		}
-		if !req.isValid() {
-			panic("illegal request")
-		}
 		log.Debugf("Replica %s send Request for consensus %s", lbft.options.ID, req.Name())
 		lbft.recvConsensusMsgChan <- &Message{
 			Type:    MESSAGEREQUEST,
@@ -555,7 +552,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 		if core.prePrepare != nil {
 			req := core.prePrepare.Request
 			f := req.Func
-			if f != nil && req.fromChain() == lbft.options.Chain {
+			if f != nil {
 				f(2, req.Txs)
 			}
 		}
@@ -566,7 +563,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
 			f := req.Func
-			if f != nil && req.fromChain() == lbft.options.Chain {
+			if f != nil {
 				f(2, req.Txs)
 			}
 		}
