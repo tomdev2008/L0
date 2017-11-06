@@ -19,8 +19,10 @@
 package contract
 
 import (
+	"bytes"
 	"errors"
 	"math/big"
+	"strings"
 
 	"fmt"
 
@@ -32,8 +34,18 @@ import (
 
 var (
 	DeployAddr = []byte("00000000000000000000")
+)
 
-	globalStateAddr = "globalStateAddr"
+const (
+	globalStateKey = "globalStateKey"
+
+	// AdminKey is the key of admin account data.
+	AdminKey = "admin"
+
+	// GlobalContractKey is the key of global contract.
+	GlobalContractKey = "globalContract"
+
+	permissionPrefix = "permission."
 )
 
 type ILedgerSmartContract interface {
@@ -116,10 +128,10 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	value := sctx.stateExtra.get(globalStateAddr, key)
+	value := sctx.stateExtra.get(globalStateKey, key)
 	if len(value) == 0 {
 		var err error
-		scAddrkey := EnSmartContractKey(globalStateAddr, key)
+		scAddrkey := EnSmartContractKey(globalStateKey, key)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
 		if err != nil {
 			return nil, fmt.Errorf("can't get date from db %s", err)
@@ -128,16 +140,45 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 	return value, nil
 }
 
+func (sctx *SmartConstract) verifyPermission(key string) error {
+	var dataAdmin []byte
+	var err error
+	switch {
+	case key == AdminKey:
+		fallthrough
+	case key == GlobalContractKey:
+		fallthrough
+	case strings.Contains(key, permissionPrefix):
+		dataAdmin, err = sctx.GetGlobalState(AdminKey)
+	default:
+		permissionKey := permissionPrefix + key
+		dataAdmin, err = sctx.GetGlobalState(permissionKey)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	sender := sctx.currentTx.Sender().Bytes()
+	if len(dataAdmin) > 0 && !bytes.Equal(sender, dataAdmin) {
+		return fmt.Errorf("change global state, permission denied")
+	}
+	return nil
+}
+
 // SetGlobalState sets the global state.
 func (sctx *SmartConstract) SetGlobalState(key string, value []byte) error {
 	if !sctx.InProgress() {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	// TODO: verify authority of data-admin account.
+	err := sctx.verifyPermission(key)
+	if err != nil {
+		return err
+	}
 
 	log.Debugf("SetGlobalState key=[%s], value=[%#v]", key, value)
-	sctx.stateExtra.set(globalStateAddr, key, value)
+	sctx.stateExtra.set(globalStateKey, key, value)
 	return nil
 }
 
@@ -147,10 +188,13 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	// TODO: verify authority of data-admin account.
+	err := sctx.verifyPermission(key)
+	if err != nil {
+		return err
+	}
 
 	log.Debugf("DelGlobalState key=[%s]", key)
-	sctx.stateExtra.delete(globalStateAddr, key)
+	sctx.stateExtra.delete(globalStateKey, key)
 	return nil
 }
 
