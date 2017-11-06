@@ -150,13 +150,22 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 		fallthrough
 	case strings.Contains(key, permissionPrefix):
 		dataAdmin, err = sctx.GetGlobalState(AdminKey)
+		if err != nil {
+			return err
+		}
 	default:
 		permissionKey := permissionPrefix + key
 		dataAdmin, err = sctx.GetGlobalState(permissionKey)
-	}
+		if err != nil {
+			return err
+		}
 
-	if err != nil {
-		return err
+		if len(dataAdmin) == 0 {
+			dataAdmin, err = sctx.GetGlobalState(AdminKey)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	sender := sctx.currentTx.Sender().Bytes()
