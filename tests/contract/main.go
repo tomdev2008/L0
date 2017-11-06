@@ -65,18 +65,20 @@ const (
 
 // contract config
 type contractConf struct {
-	path     string
-	lang     contractLang
-	isGlobal bool
-	args     []string
+	path       string
+	lang       contractLang
+	isGlobal   bool
+	initArgs   []string
+	invokeArgs []string
 }
 
-func newContractConf(path string, lang contractLang, isGlobal bool, args []string) *contractConf {
+func newContractConf(path string, lang contractLang, isGlobal bool, initArgs, invokeArgs []string) *contractConf {
 	return &contractConf{
-		path:     path,
-		lang:     lang,
-		isGlobal: isGlobal,
-		args:     args,
+		path:       path,
+		lang:       lang,
+		isGlobal:   isGlobal,
+		initArgs:   initArgs,
+		invokeArgs: invokeArgs,
 	}
 }
 
@@ -87,24 +89,28 @@ var (
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0vote.lua",
 		langLua,
 		false,
+		[]string{},
 		[]string{"vote", "张三", "秦皇岛"})
 
 	coinLua = newContractConf(
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.lua",
 		langLua,
 		false,
+		[]string{},
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	coinJS = newContractConf(
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.js",
 		langJS,
 		false,
+		[]string{},
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalLua = newContractConf(
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
 		langLua,
 		false,
+		[]string{},
 		[]string{"SetGlobalState", "admin", sender.String()})
 )
 
@@ -156,6 +162,8 @@ func sendTransaction() {
 
 func deploySmartContractTX(conf *contractConf) {
 	contractSpec := new(types.ContractSpec)
+	contractSpec.ContractParams = conf.initArgs
+
 	f, _ := os.Open(conf.path)
 	buf, _ := ioutil.ReadAll(f)
 	contractSpec.ContractCode = buf
@@ -187,7 +195,7 @@ func deploySmartContractTX(conf *contractConf) {
 
 func execSmartContractTX(conf *contractConf) {
 	contractSpec := new(types.ContractSpec)
-	contractSpec.ContractParams = conf.args
+	contractSpec.ContractParams = conf.invokeArgs
 
 	if !conf.isGlobal {
 		f, _ := os.Open(conf.path)
