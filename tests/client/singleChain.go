@@ -42,6 +42,7 @@ var (
 		//"127.0.0.1:20170",
 	}
 
+	index          = time.Now().Nanosecond()
 	list           = make(chan *crypto.PrivateKey, 10)
 	txChan         = make(chan *types.Transaction, 1000)
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
@@ -87,7 +88,7 @@ func generateAtomicTx() {
 						nonce,
 						sender,
 						addr,
-						uint32(id),
+						uint32(id+uint32(index)),
 						big.NewInt(10),
 						big.NewInt(1),
 						uint32(time.Now().Unix()),
@@ -122,13 +123,13 @@ func generateIssueTx() {
 			nonce,
 			sender,
 			addr,
-			uint32(i),
+			uint32(i+index),
 			big.NewInt(10e11),
 			big.NewInt(1),
 			uint32(time.Now().Unix()),
 		)
 		issueCoin := make(map[string]interface{})
-		issueCoin["id"] = i
+		issueCoin["id"] = i + index
 		tx.Payload, _ = json.Marshal(issueCoin)
 		sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 		tx.WithSignature(sig)
