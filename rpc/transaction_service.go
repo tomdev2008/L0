@@ -139,7 +139,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 	t.pmHander.Relay(tx)
 
-	if len(tx.Payload) != 0 {
+	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
