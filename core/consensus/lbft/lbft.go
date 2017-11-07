@@ -203,6 +203,7 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 		return
 	}
 
+	function(1, txs)
 	if _, txs := lbft.stack.VerifyTxs(txs, true); len(txs) > 0 {
 		req := &Request{
 			ID:   time.Now().UnixNano(),
@@ -215,7 +216,6 @@ func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.
 			Type:    MESSAGEREQUEST,
 			Payload: utils.Serialize(req),
 		}
-		function(1, txs)
 	}
 }
 
