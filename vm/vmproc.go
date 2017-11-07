@@ -211,16 +211,16 @@ func doSend(p *VMProc, sendData []interface{}) {
 }
 
 func doReceive(p *VMProc, receiveData *InvokeData) {
-	log.Debugf("receive chan get one data %s pid:%d\n", receiveData.FuncName, os.Getpid())
+	//log.Debugf("receive chan get one data %s pid:%d\n", receiveData.FuncName, os.Getpid())
 	if InvokeTypeResponse == receiveData.Type {
 		ch := p.RequestMap[receiveData.SessionID]
 		ch <- receiveData
 		delete(p.RequestMap, receiveData.SessionID)
 	} else {
 		go func(data *InvokeData) {
-			log.Debugf("begin call requestHandle %s\n", data.FuncName)
+			//log.Debugf("begin call requestHandle %s\n", data.FuncName)
 			result, err := p.RequestHandle(p, data)
-			log.Debugf("after call requestHandle %s\n", data.FuncName)
+			//log.Debugf("after call requestHandle %s\n", data.FuncName)
 			errmsg := ""
 			if err != nil {
 				errmsg = err.Error()

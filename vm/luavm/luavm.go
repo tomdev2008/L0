@@ -21,7 +21,6 @@ package luavm
 import (
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
@@ -75,19 +74,12 @@ func PreExecute(cd *vm.ContractData) (interface{}, error) {
 
 func RealExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
-	t := time.Now()
 	ok, err := execContract(cd, "L0Invoke")
-	delay := time.Since(t)
-	log.Debugln("execContract delay: ", delay)
-
 	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
-	t1 := time.Now()
 	err = vmproc.CCallCommit()
-	delay1 := time.Since(t1)
-	log.Debugln("CCallCommit delay: ", delay1)
 
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", vmproc.ContractData.ContractAddr, err.Error())
@@ -104,7 +96,7 @@ func QueryContract(cd *vm.ContractData) ([]byte, error) {
 	result, err := execContract(cd, "L0Query")
 
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
 
 	return []byte(result.(string)), nil
@@ -118,13 +110,13 @@ func resetProc(cd *vm.ContractData) {
 
 // execContract start a lua vm and execute smart contract script
 func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
+	log.Debugf("luaVM execContract funcName:%s\n", funcName)
 	defer func() {
 		if e := recover(); e != nil {
-			log.Error("exec contract code error ", e)
+			log.Error("LuaVM exec contract code error ", e)
 		}
 	}()
 
-	// log.Debugf("execContract funcName:%s\n", funcName)
 	code := cd.ContractCode
 	if err := vm.CheckContractCode(code); err != nil {
 		return false, err
@@ -171,7 +163,7 @@ func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 }
 
 func requestHandle(vmproc *vm.VMProc, req *vm.InvokeData) (interface{}, error) {
-	// log.Debug("call luavm FuncName:", req.FuncName)
+	log.Debug("call luavm FuncName:", req.FuncName)
 
 	cd := new(vm.ContractData)
 	if err := req.DecodeParams(cd); err != nil {
@@ -257,7 +249,6 @@ func callLuaFunc(L *lua.LState, funcName string, params ...string) (interface{},
 	}
 
 	err = L.CallByParam(p, lvparams...)
-
 	if err != nil {
 		return false, err
 	}
