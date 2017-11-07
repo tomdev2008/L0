@@ -121,6 +121,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	)
 
 	t := time.Now()
+	ledger.Validator.RemoveTxsInVerification(block.Transactions)
 	bh, _ := ledger.Height()
 	ledger.contract.StartConstract(bh)
 
@@ -135,9 +136,6 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		return err
 	}
 	delay := time.Since(t)
-
-	ledger.Validator.RemoveTxsInVerification(block.Transactions)
-
 	ledger.contract.StopContract(bh)
 	log.Infoln("append block delay :", delay, " remove txs in txpool delay ", time.Since(t), " transactions : ", len(block.Transactions))
 
