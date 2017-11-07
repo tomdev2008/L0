@@ -29,8 +29,10 @@ import (
 	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/consensus"
+	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -223,11 +225,11 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 
 		assetID := tx.AssetID()
+		asset, ok := v.assets[assetID]
+		if !ok {
+			asset, _ = v.ledger.GetAssetFromDB(assetID)
+		}
 		if tx.GetType() != types.TypeIssue {
-			asset, ok := v.assets[assetID]
-			if !ok {
-				asset, _ = v.ledger.GetAssetFromDB(assetID)
-			}
 			if asset == nil {
 				if primary {
 					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
@@ -239,8 +241,9 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 					}
 					return false, nil
 				}
-			} else if tx.GetType() == types.TypeIssueUpdate {
-				if _, err := asset.Update(string(tx.Payload)); err != nil {
+			} else if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
+				newAsset, err := asset.Update(string(tx.Payload))
+				if err != nil {
 					if primary {
 						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						continue
@@ -252,15 +255,14 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 						return false, nil
 					}
 				}
+				v.assets[assetID] = newAsset
 			}
 		} else {
-			asset, ok := v.assets[assetID]
-			if !ok {
-				asset, _ = v.ledger.GetAssetFromDB(assetID)
-			}
 			if asset == nil {
 				asset := &state.Asset{
-					ID: assetID,
+					ID:     assetID,
+					Issuer: tx.Sender(),
+					Owner:  tx.Recipient(),
 				}
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
@@ -335,29 +337,33 @@ func (v *Verification) updateAccount(tx *types.Transaction) bool {
 	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
 	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
 
-	senderAccont := v.fetchAccount(tx.Sender())
-	if senderAccont != nil {
-		senderAccont.Add(assetID, subAmount)
-		senderAccont.Add(assetID, subFee)
-		//	log.Debugln("[validator] updateAccount sender: ", tx.Sender(), "amount: ", senderAccont.amount)
-		if tx.GetType() != types.TypeIssue && senderAccont.Get(assetID).Sign() == -1 {
-			senderAccont.Add(assetID, plusAmount)
-			senderAccont.Add(assetID, plusFee)
-			return false
-		}
-	}
-	receiverAccount := v.fetchAccount(tx.Recipient())
-	if receiverAccount != nil {
-		receiverAccount.Add(assetID, plusAmount)
-		receiverAccount.Add(assetID, plusFee)
-		//	log.Debugln("[validator] updateAccount Recipient: ", tx.Recipient(), "amount: ", receiverAccount.amount)
-		if receiverAccount.Get(assetID).Sign() == -1 {
-			receiverAccount.Add(assetID, subAmount)
-			receiverAccount.Add(assetID, subFee)
-			return false
+	if fromChain := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes(); bytes.Equal(fromChain, params.ChainID) {
+		senderAccont := v.fetchAccount(tx.Sender())
+		if senderAccont != nil {
+			senderAccont.Add(assetID, subAmount)
+			senderAccont.Add(assetID, subFee)
+			//	log.Debugln("[validator] updateAccount sender: ", tx.Sender(), "amount: ", senderAccont.amount)
+			if tx.GetType() != types.TypeIssue && senderAccont.Get(assetID).Sign() == -1 {
+				senderAccont.Add(assetID, plusAmount)
+				senderAccont.Add(assetID, plusFee)
+				return false
+			}
 		}
 	}
 
+	if toChain := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes(); bytes.Equal(toChain, params.ChainID) {
+		receiverAccount := v.fetchAccount(tx.Recipient())
+		if receiverAccount != nil {
+			receiverAccount.Add(assetID, plusAmount)
+			receiverAccount.Add(assetID, plusFee)
+			//	log.Debugln("[validator] updateAccount Recipient: ", tx.Recipient(), "amount: ", receiverAccount.amount)
+			if receiverAccount.Get(assetID).Sign() == -1 {
+				receiverAccount.Add(assetID, subAmount)
+				receiverAccount.Add(assetID, subFee)
+				return false
+			}
+		}
+	}
 	return true
 }
 
@@ -368,15 +374,20 @@ func (v *Verification) rollBackAccount(tx *types.Transaction) {
 	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
 	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
 
-	senderAccont := v.fetchAccount(tx.Sender())
-	if senderAccont != nil {
-		senderAccont.Add(assetID, plusAmount)
-		senderAccont.Add(assetID, plusFee)
+	if fromChain := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes(); bytes.Equal(fromChain, params.ChainID) {
+		senderAccont := v.fetchAccount(tx.Sender())
+		if senderAccont != nil {
+			senderAccont.Add(assetID, plusAmount)
+			senderAccont.Add(assetID, plusFee)
+		}
 	}
-	receiverAccount := v.fetchAccount(tx.Recipient())
-	if receiverAccount != nil {
-		senderAccont.Add(assetID, subAmount)
-		senderAccont.Add(assetID, subFee)
+
+	if toChain := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes(); bytes.Equal(toChain, params.ChainID) {
+		receiverAccount := v.fetchAccount(tx.Recipient())
+		if receiverAccount != nil {
+			receiverAccount.Add(assetID, subAmount)
+			receiverAccount.Add(assetID, subFee)
+		}
 	}
 }
 

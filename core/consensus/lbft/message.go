@@ -37,44 +37,9 @@ type Request struct {
 	Txs    types.Transactions
 }
 
-func (msg *Request) isValid() bool {
-	if msg.ID == EMPTYREQUEST {
-		return true
-	}
-	fromChains := map[string]string{}
-	toChains := map[string]string{}
-	for _, tx := range msg.Txs {
-		from := tx.FromChain()
-		to := tx.ToChain()
-		fromChains[from] = from
-		toChains[to] = to
-	}
-	return len(fromChains) == 1 && len(toChains) == 1
-}
-
-//fromChain from
-func (msg *Request) fromChain() (from string) {
-	for _, tx := range msg.Txs {
-		from = tx.FromChain()
-		break
-	}
-	return
-}
-
-//toChain to
-func (msg *Request) toChain() (to string) {
-	for _, tx := range msg.Txs {
-		to = tx.ToChain()
-		break
-	}
-	return
-}
-
-//key name
+//Name key name
 func (msg *Request) Name() string {
-	keys := make([]string, 4)
-	keys[0] = msg.fromChain()
-	keys[1] = msg.toChain()
+	keys := make([]string, 0)
 	r := &Request{
 		ID:   msg.ID,
 		Time: msg.Time,
@@ -83,8 +48,8 @@ func (msg *Request) Name() string {
 		Txs:  msg.Txs,
 	}
 	hash := sha256.Sum256(utils.Serialize(r))
-	keys[2] = hex.EncodeToString(hash[:])
-	keys[3] = strconv.Itoa(len(msg.Txs))
+	keys = append(keys, hex.EncodeToString(hash[:]))
+	keys = append(keys, strconv.Itoa(len(msg.Txs)))
 	return strings.Join(keys, "-")
 }
 

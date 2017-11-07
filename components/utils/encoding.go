@@ -247,7 +247,7 @@ func mapDecode(r io.Reader, s reflect.Value) error {
 	l, err = ReadVarInt(r)
 
 	if l > 0 {
-		newVal := reflect.MakeMapWithSize(s.Type(), int(l))
+		newVal := reflect.MakeMap(s.Type())
 		for i := 0; i < int(l); i++ {
 			key := reflect.New(s.Type().Key())
 			val := reflect.New(s.Type().Elem())
