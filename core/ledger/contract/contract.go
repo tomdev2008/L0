@@ -19,8 +19,10 @@
 package contract
 
 import (
+	"bytes"
 	"errors"
 	"math/big"
+	"strings"
 
 	"fmt"
 
@@ -31,12 +33,34 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
+var (
+	DeployAddr = []byte("00000000000000000000")
+)
+
+const (
+	// globalStateKey is the key of global state.
+	globalStateKey = "globalStateKey"
+
+	// adminKey is the key of admin account.
+	adminKey = "admin"
+
+	// GlobalContractKey is the key of global contract.
+	GlobalContractKey = "globalContract"
+
+	// permissionPrefix is the prefix of data permission key.
+	permissionPrefix = "permission."
+)
+
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*state.Balance, error)
 	Height() (uint32, error)
 }
 
 type ISmartConstract interface {
+	GetGlobalState(key string) ([]byte, error)
+	SetGlobalState(key string, value []byte) error
+	DelGlobalState(key string) error
+
 	GetState(key string) ([]byte, error)
 	AddState(key string, value []byte)
 	DelState(key string)
@@ -101,6 +125,91 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
+}
+
+// GetGlobalState returns the global state.
+func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	value := sctx.stateExtra.get(globalStateKey, key)
+	if len(value) == 0 {
+		var err error
+		scAddrkey := EnSmartContractKey(globalStateKey, key)
+		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
+		if err != nil {
+			return nil, fmt.Errorf("can't get date from db %s", err)
+		}
+	}
+	return value, nil
+}
+
+func (sctx *SmartConstract) verifyPermission(key string) error {
+	var dataAdmin []byte
+	var err error
+	switch {
+	case key == adminKey:
+		fallthrough
+	case key == GlobalContractKey:
+		fallthrough
+	case strings.Contains(key, permissionPrefix):
+		dataAdmin, err = sctx.GetGlobalState(adminKey)
+		if err != nil {
+			return err
+		}
+	default:
+		permissionKey := permissionPrefix + key
+		dataAdmin, err = sctx.GetGlobalState(permissionKey)
+		if err != nil {
+			return err
+		}
+
+		if len(dataAdmin) == 0 {
+			dataAdmin, err = sctx.GetGlobalState(adminKey)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	sender := sctx.currentTx.Sender().Bytes()
+	if len(dataAdmin) > 0 && !bytes.Equal(sender, dataAdmin) {
+		return fmt.Errorf("change global state, permission denied")
+	}
+	return nil
+}
+
+// SetGlobalState sets the global state.
+func (sctx *SmartConstract) SetGlobalState(key string, value []byte) error {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	err := sctx.verifyPermission(key)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("SetGlobalState key=[%s], value=[%#v]", key, value)
+	sctx.stateExtra.set(globalStateKey, key, value)
+	return nil
+}
+
+// DelGlobalState deletes the global state.
+func (sctx *SmartConstract) DelGlobalState(key string) error {
+	if !sctx.InProgress() {
+		log.Errorf("State can be changed only in context of a block.")
+	}
+
+	err := sctx.verifyPermission(key)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("DelGlobalState key=[%s]", key)
+	sctx.stateExtra.delete(globalStateKey, key)
+	return nil
 }
 
 // GetState get value

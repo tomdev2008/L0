@@ -95,6 +95,46 @@ func (p *VMProc) PCallQueryContract(cd *ContractData, handler contract.ISmartCon
 }
 
 /************************** call for child proc (vm proc) ******************************/
+func (p *VMProc) CCallGetGlobalState(key string) ([]byte, error) {
+	if err := CheckStateKey(key); err != nil {
+		return nil, err
+	}
+
+	if v, ok := p.StateChangeQueue.stateMap[key]; ok {
+		return v, nil
+	}
+
+	// call parent proc
+	var result []byte
+	err := p.ccall("GetGlobalState", &result, key)
+	return result, err
+}
+
+func (p *VMProc) CCallSetGlobalState(key string, value []byte) error {
+	if err := CheckStateKeyValue(key, value); err != nil {
+		return err
+	}
+
+	if err := p.ccall("SetGlobalState", nil); err != nil {
+		return err
+	}
+
+	p.StateChangeQueue.stateMap[key] = value
+	return nil
+}
+
+func (p *VMProc) CCallDelGlobalState(key string) error {
+	if err := CheckStateKey(key); err != nil {
+		return err
+	}
+
+	if err := p.ccall("DelGlobalState", nil); err != nil {
+		return err
+	}
+
+	p.StateChangeQueue.stateMap[key] = nil
+	return nil
+}
 
 func (p *VMProc) CCallGetState(key string) ([]byte, error) {
 	if err := CheckStateKey(key); err != nil {

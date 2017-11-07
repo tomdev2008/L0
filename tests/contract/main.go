@@ -22,20 +22,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	//"encoding/json"
-	//"fmt"
-
-	"github.com/bocheninc/L0/components/crypto"
-	//"github.com/bocheninc/L0/components/utils"
-
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
-	"fmt"
-	"os"
-
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -47,29 +41,98 @@ var (
 	toChain        = []byte{0}
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
-	sender         accounts.Address
-	privkey        *crypto.PrivateKey
-	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
+
+	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
 	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
+	privkey, _ = crypto.HexToECDSA(privkeyHex)
+	sender     = accounts.PublicKeyToAddress(*privkey.Public())
+
+	txChan = make(chan *types.Transaction, 5)
+)
+
+// contract lang
+type contractLang string
+
+func (lang contractLang) ConvertInitTxType() uint32 {
+	if lang == langLua {
+		return types.TypeLuaContractInit
+	}
+	return types.TypeJSContractInit
+}
+
+const (
+	langLua = "lua"
+	langJS  = "js"
+)
+
+// contract config
+type contractConf struct {
+	path       string
+	lang       contractLang
+	isGlobal   bool
+	initArgs   []string
+	invokeArgs []string
+}
+
+func newContractConf(path string, lang contractLang, isGlobal bool, initArgs, invokeArgs []string) *contractConf {
+	return &contractConf{
+		path:       path,
+		lang:       lang,
+		isGlobal:   isGlobal,
+		initArgs:   initArgs,
+		invokeArgs: invokeArgs,
+	}
+}
+
+var (
+	gopath = os.Getenv("GOPATH")
+
+	voteLua = newContractConf(
+		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0vote.lua",
+		langLua,
+		false,
+		[]string{},
+		[]string{"vote", "张三", "秦皇岛"})
+
+	coinLua = newContractConf(
+		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.lua",
+		langLua,
+		false,
+		[]string{},
+		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+
+	coinJS = newContractConf(
+		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.js",
+		langJS,
+		false,
+		[]string{},
+		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+
+	globalLua = newContractConf(
+		gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
+		langLua,
+		false,
+		[]string{},
+		[]string{"SetGlobalState", "admin", sender.String()})
 )
 
 func main() {
-	privkey, _ = crypto.HexToECDSA(privkeyHex)
-	sender = accounts.PublicKeyToAddress(*privkey.Public())
-
-	// issueTX()
-	// time.Sleep(40 * time.Second)
-	DeploySmartContractTX()
+	go sendTransaction()
+	time.Sleep(1 * time.Microsecond)
+	issueTX()
+	conf := globalLua
+	deploySmartContractTX(conf)
 	time.Sleep(1 * time.Second)
-	//ExecSmartContractTX([]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
-	ExecSmartContractTX([]string{"vote", "张三", "秦皇岛"})
-	time.Sleep(40 * time.Second)
+
+	execSmartContractTX(conf)
+
+	time.Sleep(5 * time.Second)
 }
 
-func sendTransaction(txChan chan *types.Transaction) {
+func sendTransaction() {
 	client := &http.Client{
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: 100,
@@ -98,17 +161,14 @@ func sendTransaction(txChan chan *types.Transaction) {
 			}
 			var dat map[string]interface{}
 			json.Unmarshal(body, &dat)
-			//fmt.Println(dat)
+			fmt.Println(dat)
 		}
 	}
 }
 
 func issueTX() {
 	issueKey, _ := crypto.HexToECDSA(issuePriKeyHex)
-
 	nonce := 1
-	txChan := make(chan *types.Transaction, 5)
-	go sendTransaction(txChan)
 	issueSender := accounts.PublicKeyToAddress(*issueKey.Public())
 
 	privateKey, _ := crypto.GenerateKey()
@@ -120,42 +180,46 @@ func issueTX() {
 		uint32(nonce),
 		issueSender,
 		sender,
+		0,
 		big.NewInt(10e11),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
 	)
-	fmt.Println("issueSender address: ", issueSender.String())
+
+	issueCoin := make(map[string]interface{})
+	issueCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(issueCoin)
+
+	fmt.Println("issueSender address: ", issueSender.String(), " receriver: ", sender.String())
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txChan <- tx
 }
 
-func DeploySmartContractTX() {
+func deploySmartContractTX(conf *contractConf) {
+	contractSpec := new(types.ContractSpec)
+	contractSpec.ContractParams = conf.initArgs
+
+	f, _ := os.Open(conf.path)
+	buf, _ := ioutil.ReadAll(f)
+	contractSpec.ContractCode = buf
+
+	if !conf.isGlobal {
+		var a accounts.Address
+		pubBytes := []byte(sender.String() + string(buf))
+		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+		contractSpec.ContractAddr = a.Bytes()
+	}
 
 	nonce := 1
-	txChan := make(chan *types.Transaction, 5)
-	go sendTransaction(txChan)
-	contractSpec := new(types.ContractSpec)
-	f, err := os.Open(contractPath)
-	if err != nil {
-		fmt.Println("open contract path", err)
-	}
-	buf, _ := ioutil.ReadAll(f)
-	var a accounts.Address
-	pubBytes := []byte(sender.String() + string(buf))
-	a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
-
-	contractSpec.ContractCode = buf
-	contractSpec.ContractAddr = a.Bytes()
-	contractSpec.ContractParams = []string{}
-
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeJSContractInit,
+		conf.lang.ConvertInitTxType(),
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
+		0,
 		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
@@ -166,32 +230,30 @@ func DeploySmartContractTX() {
 	txChan <- tx
 }
 
-func ExecSmartContractTX(params []string) {
-	nonce := 2
-	txChan := make(chan *types.Transaction, 5)
-
-	go sendTransaction(txChan)
+func execSmartContractTX(conf *contractConf) {
 	contractSpec := new(types.ContractSpec)
-	f, _ := os.Open(contractPath)
-	buf, _ := ioutil.ReadAll(f)
+	contractSpec.ContractParams = conf.invokeArgs
 
-	var a accounts.Address
-	pubBytes := []byte(sender.String() + string(buf))
-	a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+	if !conf.isGlobal {
+		f, _ := os.Open(conf.path)
+		buf, _ := ioutil.ReadAll(f)
 
-	contractSpec.ContractCode = []byte("")
-	contractSpec.ContractAddr = a.Bytes()
-	//contractSpec.ContractParams =
-	contractSpec.ContractParams = params
-	privateKey, _ := crypto.GenerateKey()
-	accounts.PublicKeyToAddress(*privateKey.Public())
+		var a accounts.Address
+		pubBytes := []byte(sender.String() + string(buf))
+		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+
+		contractSpec.ContractAddr = a.Bytes()
+	}
+
+	nonce := 2
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeContractInvoke,
+		conf.lang.ConvertInitTxType(),
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
+		0,
 		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
