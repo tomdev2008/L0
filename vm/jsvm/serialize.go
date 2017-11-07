@@ -21,9 +21,11 @@ package jsvm
 import (
 	"bytes"
 	"errors"
+	"strconv"
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/robertkrimen/otto"
 )
 
@@ -174,5 +176,31 @@ func kvsToJSValue(kvs []*db.KeyValue, ottoVM *otto.Otto) (otto.Value, error) {
 		}
 		mp[string(v.Key)] = value
 	}
+	return ottoVM.ToValue(mp)
+}
+
+func objToLValue(balance *state.Balance, ottoVM *otto.Otto) (otto.Value, error) {
+	mp := make(map[string]interface{})
+	amountsMp := make(map[string]interface{})
+	for k, v := range balance.Amounts {
+		value, err := ottoVM.ToValue(v.String())
+		if err != nil {
+			return otto.NullValue(), err
+		}
+		amountsMp[strconv.Itoa(int(k))] = value
+	}
+
+	amounts, err := ottoVM.ToValue(amountsMp)
+	if err != nil {
+		return otto.NullValue(), err
+	}
+
+	mp["Amounts"] = amounts
+
+	nonce, err := ottoVM.ToValue(balance.Nonce)
+	if err != nil {
+		return otto.NullValue(), err
+	}
+	mp["Nonce"] = nonce
 	return ottoVM.ToValue(mp)
 }

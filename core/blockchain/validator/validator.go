@@ -255,9 +255,9 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			}
 		} else {
 			asset, ok := v.assets[assetID]
- +			if !ok {
- +				asset, _ = v.ledger.GetAssetFromDB(assetID)
- +			}
+			if !ok {
+				asset, _ = v.ledger.GetAssetFromDB(assetID)
+			}
 			if asset == nil {
 				asset := &state.Asset{
 					ID: assetID,

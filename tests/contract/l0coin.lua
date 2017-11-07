@@ -6,6 +6,20 @@ function L0Init(args)
     print("in L0Init")
     L0.PutState("minter", L0.Account().Address)
     L0.PutState("balances", {})
+
+-- 合约账户的余额
+    local accountBalance = L0.Account().Balances
+    for k, v in pairs(accountBalance) do
+        if (k == "Amounts") then
+            for id, value in pairs(v) do
+                print("L0 account balance amounts",id,value)
+            end 
+        else           
+        print("L0 account balance nonce",k,v)
+        end        
+    end
+
+
     return true
 end
 
@@ -65,6 +79,6 @@ function send(receiver, amount)
 end
 
 function transfer(receiver, amount)
-    print("do transfer print by lua")
-    L0.Transfer(receiver, amount)
+    print("do transfer print by lua",receiver,amount)
+    L0.Transfer(receiver, 0, amount)
 end

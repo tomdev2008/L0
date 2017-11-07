@@ -49,10 +49,10 @@ var (
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	sender         accounts.Address
 	privkey        *crypto.PrivateKey
-	contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
+	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
 	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
-	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
+	contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
 )
 
@@ -60,12 +60,12 @@ func main() {
 	privkey, _ = crypto.HexToECDSA(privkeyHex)
 	sender = accounts.PublicKeyToAddress(*privkey.Public())
 
-	// issueTX()
-	// time.Sleep(40 * time.Second)
+	issueTX()
+	time.Sleep(1 * time.Second)
 	DeploySmartContractTX()
 	time.Sleep(1 * time.Second)
-	//ExecSmartContractTX([]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
-	ExecSmartContractTX([]string{"vote", "张三", "秦皇岛"})
+	ExecSmartContractTX([]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+	//ExecSmartContractTX([]string{"vote", "张三", "秦皇岛"})
 	time.Sleep(40 * time.Second)
 }
 
@@ -120,10 +120,16 @@ func issueTX() {
 		uint32(nonce),
 		issueSender,
 		sender,
+		0,
 		big.NewInt(10e11),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
 	)
+
+	issueCoin := make(map[string]interface{})
+	issueCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(issueCoin)
+
 	fmt.Println("issueSender address: ", issueSender.String())
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
@@ -156,13 +162,21 @@ func DeploySmartContractTX() {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		big.NewInt(0),
+		0,
+		big.NewInt(1000),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
+
+	deployCoin := make(map[string]interface{})
+	deployCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(deployCoin)
+
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
+	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
+
 	txChan <- tx
 }
 
@@ -192,10 +206,16 @@ func ExecSmartContractTX(params []string) {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
+		0,
 		big.NewInt(0),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
+
+	invokeCoin := make(map[string]interface{})
+	invokeCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(invokeCoin)
+
 	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())

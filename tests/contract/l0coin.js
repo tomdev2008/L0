@@ -6,6 +6,18 @@ function L0Init(args) {
     L0.PutState("minter", account.Address);
     L0.PutState("balances", {});
 
+// 合约账户余额
+    var accountBalance = account.Balances
+
+    for(var i in accountBalance){//用javascript的for/in循环遍历对象的属性 
+        if (typeof(accountBalance[i])=="object"){
+            for(var key in accountBalance[i]){
+                console.log("amount key:",key,",amount value:",accountBalance[i][key]);
+                }
+            }else{
+                console.log("key:",i," value:",accountBalance[i]);        
+            }
+    } 
     return true;
 }
 
@@ -62,7 +74,7 @@ function send(receiver, amount) {
 }
 
 function transfer(receiver, amount) {
-    // console.log("call transfer...");
-    L0.Transfer(receiver, amount);
+    console.log("call transfer...",receiver,amount);
+    L0.Transfer(receiver,0,amount);
     return true;
 }

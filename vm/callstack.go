@@ -20,6 +20,8 @@ package vm
 
 import (
 	"container/list"
+
+	"github.com/bocheninc/L0/core/ledger/state"
 )
 
 const (
@@ -61,17 +63,18 @@ type transferOpfunc struct {
 	txType uint32
 	from   string
 	to     string
+	id     uint32
 	amount int64
 }
 
 type transferQueue struct {
 	lst         *list.List
-	balancesMap map[string]int64
+	balancesMap map[string]*state.Balance
 }
 
 func NewTransferQueue() *transferQueue {
 	lst := list.New()
-	balances := make(map[string]int64)
+	balances := make(map[string]*state.Balance)
 	return &transferQueue{lst, balances}
 }
 

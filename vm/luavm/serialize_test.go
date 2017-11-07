@@ -19,11 +19,13 @@
 package luavm
 
 import (
+	"math/big"
 	"testing"
 
 	"bytes"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/core/ledger/state"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -88,4 +90,28 @@ func TestKvsToLValue(t *testing.T) {
 	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
 		t.Log("key： ", key, "value：", value)
 	})
+}
+
+func TestObjToLValue(t *testing.T) {
+	balance := state.NewBalance()
+	balance.Amounts[0] = big.NewInt(0)
+	balance.Amounts[1] = big.NewInt(-1)
+	balance.Amounts[2] = big.NewInt(2)
+
+	balance.Nonce = 100
+
+	v := objToLValue(balance)
+
+	ntb := v.(*lua.LTable)
+	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
+		switch value.(type) {
+		case *lua.LTable:
+			amountsTb := value.(*lua.LTable)
+			amountsTb.ForEach(func(key lua.LValue, value lua.LValue) {
+				t.Log("amounts key： ", key, ",amounts value：", value)
+			})
+		}
+		t.Log("key： ", key, ",value：", value)
+	})
+
 }

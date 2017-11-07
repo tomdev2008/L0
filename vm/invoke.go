@@ -21,6 +21,7 @@ package vm
 import (
 	"bytes"
 	"encoding/hex"
+	"math/big"
 
 	"errors"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/contract"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -156,16 +158,16 @@ func (p *VMProc) CCallGetByRange(startKey string, limitKey string) ([]*db.KeyVal
 	return result, err
 }
 
-func (p *VMProc) CCallGetBalances(addr string) (int64, error) {
+func (p *VMProc) CCallGetBalances(addr string) (*state.Balance, error) {
 	if err := CheckAddr(addr); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if v, ok := p.TransferQueue.balancesMap[addr]; ok {
 		return v, nil
 	}
 
 	// call parent proc
-	var result int64
+	var result *state.Balance
 	err := p.ccall("GetBalances", &result, addr)
 	return result, err
 }
@@ -176,8 +178,8 @@ func (p *VMProc) CCallCurrentBlockHeight() (uint32, error) {
 	return result, err
 }
 
-func (p *VMProc) CCallTransfer(recipientAddr string, amount int64, txType uint32) error {
-	// log.Debugf("CCallTransfer recipientAddr:%s, amount:%d, type:%d\n", recipientAddr, amount, txType)
+func (p *VMProc) CCallTransfer(recipientAddr string, id, amount int64, txType uint32) error {
+	log.Debugf("CCallTransfer recipientAddr:%s, id:%d, amount:%d, type:%d\n", recipientAddr, id, amount, txType)
 	if err := CheckAddr(recipientAddr); err != nil {
 		return err
 	}
@@ -186,7 +188,7 @@ func (p *VMProc) CCallTransfer(recipientAddr string, amount int64, txType uint32
 	}
 
 	contractAddr := p.ContractData.ContractAddr
-	var contractBalances int64
+	contractBalances := state.NewBalance()
 	if v, ok := p.TransferQueue.balancesMap[contractAddr]; ok { // get contract balances from cache
 		contractBalances = v
 	} else { // get contract balances from parent proc
@@ -195,11 +197,12 @@ func (p *VMProc) CCallTransfer(recipientAddr string, amount int64, txType uint32
 			return errors.New("get balances error")
 		}
 	}
-	if contractBalances < amount {
+
+	if contractBalances.Amounts[uint32(id)].Int64() < amount {
 		return errors.New("balances not enough")
 	}
 
-	var recipientBalances int64
+	recipientBalances := state.NewBalance()
 	if v, ok := p.TransferQueue.balancesMap[recipientAddr]; ok { // get recipient balances from cache
 		recipientBalances = v
 	} else { // get recipient balances from parent proc
@@ -209,9 +212,15 @@ func (p *VMProc) CCallTransfer(recipientAddr string, amount int64, txType uint32
 		}
 	}
 
-	p.TransferQueue.balancesMap[contractAddr] = contractBalances - amount
-	p.TransferQueue.balancesMap[recipientAddr] = recipientBalances + amount
-	p.TransferQueue.offer(&transferOpfunc{txType, contractAddr, recipientAddr, amount})
+	contractBalances.Amounts[uint32(id)].Sub(contractBalances.Amounts[uint32(id)], big.NewInt(amount))
+	p.TransferQueue.balancesMap[contractAddr] = contractBalances
+
+	if recipientBalances.Amounts[uint32(id)] == nil {
+		recipientBalances.Amounts[uint32(id)] = big.NewInt(0)
+	}
+	recipientBalances.Amounts[uint32(id)].Add(recipientBalances.Amounts[uint32(id)], big.NewInt(amount))
+	p.TransferQueue.balancesMap[recipientAddr] = recipientBalances
+	p.TransferQueue.offer(&transferOpfunc{txType, contractAddr, recipientAddr, uint32(id), amount})
 
 	return nil
 }
@@ -232,7 +241,7 @@ func (p *VMProc) CCallCommit() error {
 		}
 
 		// call parent proc for real transfer
-		if err := p.ccall("AddTransfer", nil, txOP.from, txOP.to, txOP.amount, txOP.txType); err != nil {
+		if err := p.ccall("AddTransfer", nil, txOP.from, txOP.to, txOP.id, txOP.amount, txOP.txType); err != nil {
 			return err
 		}
 		// log.Debugf("commit -> AddTransfer from:%s, to:%s, amount:%d, type:%d\n", txOP.from, txOP.to, txOP.amount, txOP.txType)

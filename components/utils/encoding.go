@@ -80,6 +80,15 @@ func ptrEncode(w io.Writer, s reflect.Value) {
 	switch v.(type) {
 	case *big.Int:
 		bigVal := v.(*big.Int)
+		switch bigVal.Sign() {
+		case -1:
+			WriteVarInt(w, (uint64)(1))
+		case 0:
+			WriteVarInt(w, (uint64)(2))
+		case 1:
+			WriteVarInt(w, (uint64)(3))
+		}
+
 		WriteVarInt(w, (uint64)(len(bigVal.Bytes())))
 		w.Write(bigVal.Bytes())
 	default:
@@ -253,20 +262,24 @@ func mapDecode(r io.Reader, s reflect.Value) error {
 
 func ptrDecode(r io.Reader, s reflect.Value) error {
 	var (
-		l   uint64
-		n   int
-		err error
+		sign, l uint64
+		n       int
+		err     error
 	)
 	v := s.Interface()
 	switch v.(type) {
 	case *big.Int:
 		bigVal := new(big.Int)
+		sign, err = ReadVarInt(r)
 		l, err = ReadVarInt(r)
 		if l > 0 {
 			buf := make([]byte, l)
 			n, err = io.ReadFull(r, buf)
 			if n == int(l) && s.CanSet() {
 				bigVal.SetBytes(buf)
+				if sign == 1 {
+					bigVal = bigVal.Neg(bigVal)
+				}
 				s.Set(reflect.ValueOf(bigVal))
 			}
 		}
