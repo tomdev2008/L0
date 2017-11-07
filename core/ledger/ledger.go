@@ -19,10 +19,9 @@
 package ledger
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
-
-	"bytes"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
@@ -281,6 +280,7 @@ func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 
 // init generates the genesis block
 func (ledger *Ledger) init() error {
+	// genesis block
 	blockHeader := new(types.BlockHeader)
 	blockHeader.TimeStamp = uint32(0)
 	blockHeader.Nonce = uint32(100)
@@ -290,6 +290,14 @@ func (ledger *Ledger) init() error {
 	genesisBlock.Header = blockHeader
 	writeBatchs := ledger.block.AppendBlock(genesisBlock)
 	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
+
+	// admin address
+	writeBatchs = append(writeBatchs,
+		db.NewWriteBatch(contract.ColumnFamily,
+			db.OperationPut,
+			[]byte(contract.AdminKey),
+			contract.DefaultAdminAddr.Bytes()))
+
 	return ledger.dbHandler.AtomicWrite(writeBatchs)
 }
 

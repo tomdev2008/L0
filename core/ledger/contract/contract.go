@@ -33,16 +33,15 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-var (
-	DeployAddr = []byte("00000000000000000000")
-)
-
 const (
+	// ColumnFamily is the column family of contract state in db.
+	ColumnFamily = "scontract"
+
 	// globalStateKey is the key of global state.
 	globalStateKey = "globalStateKey"
 
-	// adminKey is the key of admin account.
-	adminKey = "admin"
+	// AdminKey is the key of admin account.
+	AdminKey = "admin"
 
 	// GlobalContractKey is the key of global contract.
 	GlobalContractKey = "globalContract"
@@ -93,7 +92,7 @@ func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) 
 	return &SmartConstract{
 		dbHandler:     db,
 		balancePrefix: []byte("sc_"),
-		columnFamily:  "scontract",
+		columnFamily:  ColumnFamily,
 		ledgerHandler: ledgerHandler,
 		stateExtra:    NewStateExtra(),
 	}
@@ -149,12 +148,12 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 	var dataAdmin []byte
 	var err error
 	switch {
-	case key == adminKey:
+	case key == AdminKey:
 		fallthrough
 	case key == GlobalContractKey:
 		fallthrough
 	case strings.Contains(key, permissionPrefix):
-		dataAdmin, err = sctx.GetGlobalState(adminKey)
+		dataAdmin, err = sctx.GetGlobalState(AdminKey)
 		if err != nil {
 			return err
 		}
@@ -166,7 +165,7 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 		}
 
 		if len(dataAdmin) == 0 {
-			dataAdmin, err = sctx.GetGlobalState(adminKey)
+			dataAdmin, err = sctx.GetGlobalState(AdminKey)
 			if err != nil {
 				return err
 			}
