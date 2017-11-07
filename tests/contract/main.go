@@ -113,7 +113,7 @@ var (
 	globalLua = newContractConf(
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
 		langLua,
-		false,
+		true,
 		[]string{},
 		[]string{"SetGlobalState", "admin", sender.String()})
 )
