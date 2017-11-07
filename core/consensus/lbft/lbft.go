@@ -523,7 +523,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 }
 
 func (lbft *Lbft) newView(vc *ViewChange) {
-	log.Infof("Replica %s vote new PrimaryID %s (%d %d)", lbft.options.ID, vc.PrimaryID, vc.SeqNo, vc.Height)
+	log.Infof("Replica %s vote new PrimaryID %s (%d %d) --- %s", lbft.options.ID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.ID)
 	lbft.primaryID = vc.PrimaryID
 	lbft.seqNo = vc.SeqNo
 	lbft.height = vc.Height
