@@ -20,9 +20,11 @@ package jsvm
 
 import (
 	"bytes"
+	"math/big"
 	"testing"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/robertkrimen/otto"
 )
 
@@ -87,4 +89,50 @@ func TestKvsToJSValue(t *testing.T) {
 	if r != "word" {
 		t.Error("error not same", r)
 	}
+}
+
+func TestObjToLValue(t *testing.T) {
+	vm := otto.New()
+	balance := state.NewBalance()
+	balance.Amounts[0] = big.NewInt(0)
+	balance.Amounts[1] = big.NewInt(-1)
+	balance.Amounts[2] = big.NewInt(2)
+
+	balance.Nonce = 100
+
+	v, err := objToLValue(balance, vm)
+	if err != nil {
+		t.Error("convert obj error: ", err)
+	}
+
+	obj := v.Object()
+
+	nonce, err := obj.Get("Nonce")
+	if err != nil {
+		t.Error("obj get Nonce error: ", err)
+	}
+
+	n, err := nonce.ToInteger()
+	if err != nil {
+		t.Error("convert Nonce error: ", err)
+	}
+
+	if uint32(n) != balance.Nonce {
+		t.Error("error not same", n)
+	}
+
+	amounts, err := obj.Get("Amounts")
+	if err != nil {
+		t.Error("obj get amounts error: ", err)
+	}
+	amountsObj := amounts.Object()
+	value, err := amountsObj.Get("0")
+	if err != nil {
+		t.Error("obj get id = 0 error: ", err)
+	}
+	amount, err := value.ToString()
+	if amount != "0" {
+		t.Error("error not same", amount)
+	}
+
 }

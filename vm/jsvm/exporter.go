@@ -65,10 +65,17 @@ func accountFunc(fc otto.FunctionCall) otto.Value {
 		log.Error("accountFunc -> call CCallGetBalances error", err)
 		return fc.Otto.MakeCustomError("accountFunc", "call CCallGetBalances error:"+err.Error())
 	}
+
+	balancesValue, err := objToLValue(balances, fc.Otto)
+	if err != nil {
+		log.Error("accountFunc -> call objToLValue error", err)
+		return fc.Otto.MakeCustomError("accountFunc", "call objToLValue error:"+err.Error())
+	}
+
 	sender = vmproc.ContractData.Transaction.Sender().String()
 	mp := make(map[string]interface{}, 3)
 	mp["Address"] = addr
-	mp["Balances"] = balances
+	mp["Balances"] = balancesValue
 	mp["Sender"] = sender
 
 	val, err := fc.Otto.ToValue(mp)
@@ -80,7 +87,7 @@ func accountFunc(fc otto.FunctionCall) otto.Value {
 }
 
 func transferFunc(fc otto.FunctionCall) otto.Value {
-	if len(fc.ArgumentList) != 2 {
+	if len(fc.ArgumentList) != 3 {
 		log.Error("transferFunc -> param illegality when invoke Transfer")
 		return fc.Otto.MakeCustomError("transferFunc", "param illegality when invoke Transfer")
 	}
@@ -90,13 +97,20 @@ func transferFunc(fc otto.FunctionCall) otto.Value {
 		log.Errorf("transferFunc -> get recipientAddr arg error")
 		return fc.Otto.MakeCustomError("transferFunc", err.Error())
 	}
-	amout, err := fc.Argument(1).ToInteger()
+
+	id, err := fc.Argument(1).ToInteger()
+	if err != nil {
+		log.Errorf("transferFunc -> get id arg error")
+		return fc.Otto.MakeCustomError("transferFunc", err.Error())
+	}
+
+	amout, err := fc.Argument(2).ToInteger()
 	if err != nil {
 		log.Errorf("transferFunc -> get amout arg error")
 		return fc.Otto.MakeCustomError("transferFunc", err.Error())
 	}
 	txType := uint32(0)
-	err = vmproc.CCallTransfer(recipientAddr, amout, txType)
+	err = vmproc.CCallTransfer(recipientAddr, id, amout, txType)
 	if err != nil {
 		log.Errorf("transferFunc -> contract do transfer error recipientAddr:%s, amout:%d, txType:%d  err:%s", recipientAddr, amout, txType, err)
 		return fc.Otto.MakeCustomError("transferFunc", err.Error())

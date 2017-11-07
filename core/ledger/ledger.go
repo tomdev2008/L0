@@ -24,8 +24,6 @@ import (
 
 	"bytes"
 
-	"time"
-
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -120,8 +118,6 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		errTxs        types.Transactions
 	)
 
-	t := time.Now()
-	ledger.Validator.RemoveTxsInVerification(block.Transactions)
 	bh, _ := ledger.Height()
 	ledger.contract.StartConstract(bh)
 
@@ -135,9 +131,10 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
 		return err
 	}
-	delay := time.Since(t)
+
+	ledger.Validator.RemoveTxsInVerification(block.Transactions)
+
 	ledger.contract.StopContract(bh)
-	log.Infoln("append block delay :", delay, " remove txs in txpool delay ", time.Since(t), " transactions : ", len(block.Transactions))
 
 	for _, tx := range block.Transactions {
 		if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {
@@ -308,6 +305,16 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 	for _, tx := range txs {
 		switch tp := tx.GetType(); tp {
 		case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
+			if err := ledger.executeTransaction(tx, false); err != nil {
+				errTxs = append(errTxs, tx)
+				//rollback Validator balance cache
+				if ledger.Validator != nil {
+					ledger.Validator.RollBackAccount(tx)
+				}
+				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
+				continue
+			}
+
 			ttxs, err := ledger.executeSmartContractTx(tx)
 			if err != nil {
 				errTxs = append(errTxs, tx)
@@ -339,7 +346,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				}
 				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 			}
-			fallthrough
+			syncTxs = append(syncTxs, tx)
 		default:
 			if err := ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
@@ -431,7 +438,6 @@ func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) e
 func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
-	log.Debugln("contractSepc :", *contractSpec)
 	ledger.contract.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
 
 	_, err := vm.RealExecute(tx, contractSpec, ledger.contract)

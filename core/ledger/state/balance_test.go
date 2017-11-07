@@ -54,7 +54,7 @@ func TestBalance(t *testing.T) {
 
 func TestSerializeAndDeserialize(t *testing.T) {
 	b := NewBalance()
-	b.Set(0, big.NewInt(int64(100)))
+	b.Set(0, big.NewInt(int64(-100)))
 	b.Set(1, big.NewInt(int64(200)))
 	b.Set(3, big.NewInt(int64(300)))
 	balanceBytes := b.serialize()

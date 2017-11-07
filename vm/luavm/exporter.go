@@ -22,7 +22,6 @@ package luavm
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/yuin/gopher-lua"
 )
@@ -56,29 +55,28 @@ func accountFunc(l *lua.LState) int {
 		l.RaiseError("get balances error addr:%s  err:%s", addr, err)
 		return 1
 	}
-
 	sender = vmproc.ContractData.Transaction.Sender().String()
 	tb := l.NewTable()
 	tb.RawSetString("Sender", lua.LString(sender))
 	tb.RawSetString("Address", lua.LString(addr))
-	tb.RawSetString("Balances", lua.LNumber(balances))
-
+	tb.RawSetString("Balances", objToLValue(balances))
 	l.Push(tb)
 	return 1
 }
 
 func transferFunc(l *lua.LState) int {
-	if l.GetTop() != 2 {
+	if l.GetTop() != 3 {
 		l.RaiseError("param illegality when invoke Transfer")
 		return 1
 	}
 
 	recipientAddr := l.CheckString(1)
-	amout := int64(float64(l.CheckNumber(2)))
+	id := int64(float64(l.CheckNumber(2)))
+	amout := int64(float64(l.CheckNumber(3)))
 	txType := uint32(0)
-	err := vmproc.CCallTransfer(recipientAddr, amout, txType)
+	err := vmproc.CCallTransfer(recipientAddr, id, amout, txType)
 	if err != nil {
-		l.RaiseError("contract do transfer error recipientAddr:%s, amout:%d, txType:%d  err:%s", recipientAddr, amout, txType, err)
+		l.RaiseError("contract do transfer error recipientAddr:%s,id:%d, amout:%d, txType:%d  err:%s", recipientAddr, id, amout, txType, err)
 		return 1
 	}
 
@@ -244,10 +242,6 @@ func getByPrefixFunc(l *lua.LState) int {
 		return 1
 	}
 
-	for _, v := range values {
-		fmt.Println("key: ", string(v.Key), "value: ", string(v.Value))
-	}
-
 	if lv, err := kvsToLValue(values); err != nil {
 		l.RaiseError("byteToLValue error")
 	} else {
@@ -281,9 +275,5 @@ func getByRangeFunc(l *lua.LState) int {
 		l.Push(lv)
 	}
 
-	ntb := lv.(*lua.LTable)
-	ntb.ForEach(func(key lua.LValue, value lua.LValue) {
-		fmt.Println("key： ", key, "value：", value)
-	})
 	return 1
 }

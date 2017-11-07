@@ -41,11 +41,10 @@ var (
 	toChain        = []byte{0}
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
-
 	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
 	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
 
-	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
+	contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
 	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
 	privkey, _ = crypto.HexToECDSA(privkeyHex)
 	sender     = accounts.PublicKeyToAddress(*privkey.Public())
@@ -123,7 +122,7 @@ func main() {
 	go sendTransaction()
 	time.Sleep(1 * time.Microsecond)
 	issueTX()
-	conf := globalLua
+	conf := coinJS
 	deploySmartContractTX(conf)
 	time.Sleep(1 * time.Second)
 
@@ -220,13 +219,20 @@ func deploySmartContractTX(conf *contractConf) {
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
 		0,
-		big.NewInt(0),
+		big.NewInt(1000),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
+
+	deployCoin := make(map[string]interface{})
+	deployCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(deployCoin)
+
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
+	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
+
 	txChan <- tx
 }
 
@@ -249,7 +255,7 @@ func execSmartContractTX(conf *contractConf) {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		conf.lang.ConvertInitTxType(),
+		types.TypeContractInvoke,
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
@@ -258,6 +264,11 @@ func execSmartContractTX(conf *contractConf) {
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
+
+	invokeCoin := make(map[string]interface{})
+	invokeCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(invokeCoin)
+
 	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
