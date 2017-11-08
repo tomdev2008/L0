@@ -127,3 +127,48 @@ func (v *Verification) isIssueTransaction(tx *types.Transaction) bool {
 	}
 	return false
 }
+
+func (v *Verification) checkTransaction(tx *types.Transaction) bool {
+	if !v.isLegalTransaction(tx) {
+		return false
+	}
+
+	address, err := tx.Verfiy()
+	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
+		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+		return false
+	}
+
+	v.rwInTxs.Lock()
+	if v.isExist(tx) {
+		v.rwInTxs.Unlock()
+		return false
+	}
+
+	if v.isOverCapacity() {
+		elem := v.txpool.RemoveFront()
+		delete(v.inTxs, elem.(*types.Transaction).Hash())
+		log.Warnf("[validator]  excess capacity, remove front transaction")
+	}
+
+	return true
+}
+
+func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
+	if !v.isLegalTransaction(tx) {
+		return false
+	}
+
+	address, err := tx.Verfiy()
+	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
+		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+		return false
+	}
+
+	return true
+}
+
+func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
+	//handle contract
+	return true
+}

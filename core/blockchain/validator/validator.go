@@ -132,27 +132,15 @@ func (v *Verification) processLoop() {
 }
 
 func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
-	if !v.isLegalTransaction(tx) {
+	if !v.checkTransaction(tx) {
 		return false
 	}
 
-	address, err := tx.Verfiy()
-	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+	//TODO handle global and security contract
+	if !v.checkTransactionSecurity(tx) {
 		return false
 	}
-
-	v.rwInTxs.Lock()
-	if v.isExist(tx) {
-		v.rwInTxs.Unlock()
-		return false
-	}
-
-	if v.isOverCapacity() {
-		elem := v.txpool.RemoveFront()
-		delete(v.inTxs, elem.(*types.Transaction).Hash())
-		log.Warnf("[validator]  excess capacity, remove front transaction")
-	}
+	//TODO
 
 	v.txpool.Add(tx)
 	v.inTxs[tx.Hash()] = tx
@@ -208,7 +196,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	var ttxs types.Transactions
 	for _, tx := range txs {
 		if !v.isExist(tx) {
-			if !v.isLegalTransaction(tx) {
+			if !v.checkTransactionInConsensus(tx) {
 				if primary {
 					log.Warnf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
 					v.txpool.Remove(tx)
@@ -222,6 +210,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 					return false, nil
 				}
 			}
+			v.checkTransactionSecurity(tx)
 		}
 
 		assetID := tx.AssetID()
