@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	_ "encoding/json"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	_ "github.com/bocheninc/L0/components/utils"
@@ -39,14 +40,17 @@ const (
 	// ColumnFamily is the column family of contract state in db.
 	ColumnFamily = "scontract"
 
-	// globalStateKey is the key of global state.
-	globalStateKey = "globalStateKey"
+	// GlobalStateKey is the key of global state.
+	GlobalStateKey = "globalStateKey"
 
 	// AdminKey is the key of admin account.
 	AdminKey = "admin"
 
 	// GlobalContractKey is the key of global contract.
 	GlobalContractKey = "globalContract"
+
+	// SecurityContractKey is the key of security contract address.
+	SecurityContractKey = "securityContract"
 
 	// permissionPrefix is the prefix of data permission key.
 	permissionPrefix = "permission."
@@ -138,16 +142,7 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	value := sctx.stateExtra.get(globalStateKey, key)
-	if len(value) == 0 {
-		var err error
-		scAddrkey := EnSmartContractKey(globalStateKey, key)
-		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
-		if err != nil {
-			return nil, fmt.Errorf("can't get date from db %s", err)
-		}
-	}
-	return value, nil
+	return sctx.GetStateInOneAddr(GlobalStateKey, key)
 }
 
 func (sctx *SmartConstract) verifyPermission(key string) error {
@@ -159,19 +154,19 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 	case key == GlobalContractKey:
 		fallthrough
 	case strings.Contains(key, permissionPrefix):
-		dataAdmin, err = sctx.GetGlobalState(AdminKey)
+		dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, AdminKey)
 		if err != nil {
 			return err
 		}
 	default:
 		permissionKey := permissionPrefix + key
-		dataAdmin, err = sctx.GetGlobalState(permissionKey)
+		dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, permissionKey)
 		if err != nil {
 			return err
 		}
 
 		if len(dataAdmin) == 0 {
-			dataAdmin, err = sctx.GetGlobalState(AdminKey)
+			dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, AdminKey)
 			if err != nil {
 				return err
 			}
@@ -197,7 +192,7 @@ func (sctx *SmartConstract) SetGlobalState(key string, value []byte) error {
 	}
 
 	log.Debugf("SetGlobalState key=[%s], value=[%#v]", key, value)
-	sctx.stateExtra.set(globalStateKey, key, value)
+	sctx.stateExtra.set(GlobalStateKey, key, value)
 	return nil
 }
 
@@ -213,7 +208,7 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 	}
 
 	log.Debugf("DelGlobalState key=[%s]", key)
-	sctx.stateExtra.delete(globalStateKey, key)
+	sctx.stateExtra.delete(GlobalStateKey, key)
 	return nil
 }
 

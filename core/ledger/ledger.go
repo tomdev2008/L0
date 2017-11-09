@@ -291,16 +291,16 @@ func (ledger *Ledger) init() error {
 	writeBatchs := ledger.block.AppendBlock(genesisBlock)
 	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
 
+	// admin address
 	buf, err := contract.ConcrateStateJson(contract.DefaultAdminAddr)
 	if err != nil {
 		return err
 	}
 
-	//log.Infof("init admin, key: %+v, value: %+v", contract.EnSmartContractKey(utils.BytesToHex(contract.DefaultAdminAddr.Bytes()), contract.AdminKey), buf.Bytes())
 	writeBatchs = append(writeBatchs,
 		db.NewWriteBatch(contract.ColumnFamily,
 			db.OperationPut,
-			[]byte(contract.EnSmartContractKey(utils.BytesToHex(contract.DefaultAdminAddr.Bytes()), contract.AdminKey)),
+			[]byte(contract.EnSmartContractKey(contract.GlobalStateKey, contract.AdminKey)),
 			buf.Bytes()))
 
 	return ledger.dbHandler.AtomicWrite(writeBatchs)
