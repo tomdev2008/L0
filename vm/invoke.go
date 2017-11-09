@@ -28,7 +28,6 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -66,31 +65,31 @@ func NewContractData(tx *types.Transaction, cs *types.ContractSpec, contractCode
 
 /************************** call for parent proc (L0 proc) ******************************/
 
-func (p *VMProc) PCallPreInitContract(cd *ContractData, handler contract.ISmartConstract) (bool, error) {
+func (p *VMProc) PCallPreInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
 	var success bool
 	err := p.pcall("PreInitContract", cd, handler, &success)
 	return success, err
 }
 
-func (p *VMProc) PCallRealInitContract(cd *ContractData, handler contract.ISmartConstract) (bool, error) {
+func (p *VMProc) PCallRealInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
 	var success bool
 	err := p.pcall("RealInitContract", cd, handler, &success)
 	return success, err
 }
 
-func (p *VMProc) PCallPreExecute(cd *ContractData, handler contract.ISmartConstract) (bool, error) {
+func (p *VMProc) PCallPreExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
 	var success bool
 	err := p.pcall("PreExecute", cd, handler, &success)
 	return success, err
 }
 
-func (p *VMProc) PCallRealExecute(cd *ContractData, handler contract.ISmartConstract) (bool, error) {
+func (p *VMProc) PCallRealExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
 	var success bool
 	err := p.pcall("RealExecute", cd, handler, &success)
 	return success, err
 }
 
-func (p *VMProc) PCallQueryContract(cd *ContractData, handler contract.ISmartConstract) ([]byte, error) {
+func (p *VMProc) PCallQueryContract(cd *ContractData, handler ISmartConstract) ([]byte, error) {
 	var result []byte
 	err := p.pcall("QueryContract", cd, handler, &result)
 	return result, err
@@ -342,7 +341,7 @@ func (data *InvokeData) DecodeParams(dataObj ...interface{}) error {
 	return nil
 }
 
-func (p *VMProc) pcall(funcName string, cd *ContractData, handler contract.ISmartConstract, ret interface{}) error {
+func (p *VMProc) pcall(funcName string, cd *ContractData, handler ISmartConstract, ret interface{}) error {
 	p.ContractData = cd
 	p.L0Handler = handler
 

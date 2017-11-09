@@ -31,6 +31,7 @@ import (
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger"
+	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -62,6 +63,7 @@ type Verification struct {
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
 	sync.RWMutex
+	sctx *contract.SmartConstract
 }
 
 func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.Consenter) *Verification {
@@ -76,6 +78,7 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		accounts:           make(map[string]*state.Balance),
 		assets:             make(map[uint32]*state.Asset),
 		inTxs:              make(map[crypto.Hash]*types.Transaction),
+		sctx:               contract.NewSmartConstract(ledger.DBHandler(), ledger),
 	}
 }
 
@@ -210,7 +213,10 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 					return false, nil
 				}
 			}
-			v.checkTransactionSecurity(tx)
+			if !v.checkTransactionSecurity(tx) {
+				log.Errorf("check transaction security fail, tx_hash: %+v", tx.Hash().String())
+				return false, nil
+			}
 		}
 
 		assetID := tx.AssetID()

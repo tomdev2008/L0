@@ -30,27 +30,17 @@ import (
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
-	_ "github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/vm"
 )
 
 const (
 	// ColumnFamily is the column family of contract state in db.
 	ColumnFamily = "scontract"
-
-	// GlobalStateKey is the key of global state.
-	GlobalStateKey = "globalStateKey"
-
-	// AdminKey is the key of admin account.
-	AdminKey = "admin"
-
-	// GlobalContractKey is the key of global contract.
-	GlobalContractKey = "globalContract"
-
-	// SecurityContractKey is the key of security contract address.
-	SecurityContractKey = "securityContract"
 
 	// permissionPrefix is the prefix of data permission key.
 	permissionPrefix = "permission."
@@ -59,23 +49,6 @@ const (
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*state.Balance, error)
 	Height() (uint32, error)
-}
-
-type ISmartConstract interface {
-	GetGlobalState(key string) ([]byte, error)
-	SetGlobalState(key string, value []byte) error
-	DelGlobalState(key string) error
-
-	GetState(key string) ([]byte, error)
-	AddState(key string, value []byte)
-	DelState(key string)
-	GetByPrefix(prefix string) []*db.KeyValue
-	GetByRange(startKey, limitKey string) []*db.KeyValue
-	GetBalances(addr string) (*state.Balance, error)
-	CurrentBlockHeight() uint32
-	AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, txType uint32)
-	SmartContractFailed()
-	SmartContractCommitted()
 }
 
 // State represents the account state
@@ -93,11 +66,11 @@ type SmartConstract struct {
 	smartContractTxs types.Transactions
 }
 
-var sctx *SmartConstract
+//var sctx *SmartConstract
 
 // NewSmartConstract returns a new State
 func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) *SmartConstract {
-	sctx = &SmartConstract{
+	sctx := &SmartConstract{
 		dbHandler:     db,
 		balancePrefix: []byte("sc_"),
 		columnFamily:  ColumnFamily,
@@ -142,31 +115,31 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	return sctx.GetStateInOneAddr(GlobalStateKey, key)
+	return sctx.GetStateInOneAddr(params.GlobalStateKey, key)
 }
 
 func (sctx *SmartConstract) verifyPermission(key string) error {
 	var dataAdmin []byte
 	var err error
 	switch {
-	case key == AdminKey:
+	case key == params.AdminKey:
 		fallthrough
-	case key == GlobalContractKey:
+	case key == params.GlobalContractKey:
 		fallthrough
 	case strings.Contains(key, permissionPrefix):
-		dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, AdminKey)
+		dataAdmin, err = sctx.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 		if err != nil {
 			return err
 		}
 	default:
 		permissionKey := permissionPrefix + key
-		dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, permissionKey)
+		dataAdmin, err = sctx.GetContractStateData(params.GlobalStateKey, permissionKey)
 		if err != nil {
 			return err
 		}
 
 		if len(dataAdmin) == 0 {
-			dataAdmin, err = sctx.GetContractStateData(GlobalStateKey, AdminKey)
+			dataAdmin, err = sctx.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {
 				return err
 			}
@@ -192,7 +165,7 @@ func (sctx *SmartConstract) SetGlobalState(key string, value []byte) error {
 	}
 
 	log.Debugf("SetGlobalState key=[%s], value=[%#v]", key, value)
-	sctx.stateExtra.set(GlobalStateKey, key, value)
+	sctx.stateExtra.set(params.GlobalStateKey, key, value)
 	return nil
 }
 
@@ -208,7 +181,7 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 	}
 
 	log.Debugf("DelGlobalState key=[%s]", key)
-	sctx.stateExtra.delete(GlobalStateKey, key)
+	sctx.stateExtra.delete(params.GlobalStateKey, key)
 	return nil
 }
 
@@ -380,6 +353,51 @@ func (sctx *SmartConstract) GetContractStateData(scAddr string, key string) ([]b
 	}
 
 	return value, nil
+}
+
+func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
+	contractSpec := new(types.ContractSpec)
+	utils.Deserialize(tx.Payload, contractSpec)
+	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
+
+	_, err := vm.RealExecute(tx, contractSpec, sctx)
+	if err != nil {
+		return nil, fmt.Errorf("contract execute failed : %v ", err)
+	}
+
+	smartContractTxs, err := sctx.FinishContractTransaction()
+	if err != nil {
+		log.Error("FinishContractTransaction: ", err)
+		return nil, err
+	}
+
+	return smartContractTxs, nil
+}
+
+func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr string) error {
+	contractSpec := new(types.ContractSpec)
+	contractSpec.ContractAddr = utils.HexToBytes(scAddr)
+	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
+
+	_, err := vm.RealExecute(tx, contractSpec, sctx)
+	if err != nil {
+		return fmt.Errorf("contract execute failed : %v ", err)
+	}
+
+	return nil
+}
+
+func (sctx *SmartConstract) QueryContract(tx *types.Transaction) ([]byte, error) {
+	contractSpec := new(types.ContractSpec)
+	utils.Deserialize(tx.Payload, contractSpec)
+	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
+
+	result, err := vm.Query(tx, contractSpec, sctx)
+	if err != nil {
+		log.Error("contract query execute failed  ", err)
+		return nil, fmt.Errorf("contract query execute failed : %v ", err)
+	}
+	return result, nil
 }
 
 //func GetContractStateData(scAddr, key string) (interface{}, error) {

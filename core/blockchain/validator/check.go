@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"strings"
 
+	"encoding/json"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -169,6 +170,31 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 }
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
+	return true
 	//handle contract
+	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	if err != nil {
+		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+		return false
+	}
+
+	var f interface{}
+	err = json.Unmarshal(securityAddr, &f)
+	if err != nil {
+		log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
+		return false
+	}
+
+	addr := f.(string)
+
+	bh, _ := v.ledger.Height()
+	v.sctx.StartConstract(bh)
+	err = v.sctx.ExecuteRequireContract(tx, addr)
+	v.sctx.StopContract(bh)
+	if err != nil {
+		log.Errorf("Security contract fail, err: %+v", err)
+		return false
+	}
+
 	return true
 }

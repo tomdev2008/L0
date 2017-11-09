@@ -35,7 +35,6 @@ import (
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/L0/vm"
 )
 
 var (
@@ -75,6 +74,10 @@ func NewLedger(db *db.BlockchainDB) *Ledger {
 
 	ledgerInstance.contract = contract.NewSmartConstract(db, ledgerInstance)
 	return ledgerInstance
+}
+
+func (ledger *Ledger) DBHandler() *db.BlockchainDB {
+	return ledger.dbHandler
 }
 
 // VerifyChain verifys the blockchain data
@@ -266,16 +269,7 @@ func (ledger *Ledger) GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transa
 
 //QueryContract processes new contract query transaction
 func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
-	contractSpec := new(types.ContractSpec)
-	utils.Deserialize(tx.Payload, contractSpec)
-	ledger.contract.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
-
-	result, err := vm.Query(tx, contractSpec, ledger.contract)
-	if err != nil {
-		log.Error("contract query execute failed  ", err)
-		return nil, fmt.Errorf("contract query execute failed : %v ", err)
-	}
-	return result, nil
+	return ledger.contract.QueryContract(tx)
 }
 
 // init generates the genesis block
@@ -300,7 +294,7 @@ func (ledger *Ledger) init() error {
 	writeBatchs = append(writeBatchs,
 		db.NewWriteBatch(contract.ColumnFamily,
 			db.OperationPut,
-			[]byte(contract.EnSmartContractKey(contract.GlobalStateKey, contract.AdminKey)),
+			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
 			buf.Bytes()))
 
 	return ledger.dbHandler.AtomicWrite(writeBatchs)
@@ -449,22 +443,7 @@ func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) e
 }
 
 func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
-	contractSpec := new(types.ContractSpec)
-	utils.Deserialize(tx.Payload, contractSpec)
-	ledger.contract.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
-
-	_, err := vm.RealExecute(tx, contractSpec, ledger.contract)
-	if err != nil {
-		return nil, fmt.Errorf("contract execute failed : %v ", err)
-	}
-
-	smartContractTxs, err := ledger.contract.FinishContractTransaction()
-	if err != nil {
-		log.Error("FinishContractTransaction: ", err)
-		return nil, err
-	}
-
-	return smartContractTxs, nil
+	return ledger.contract.ExecuteSmartContractTx(tx)
 }
 
 func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {

@@ -29,7 +29,7 @@ import (
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/L0/core/ledger/contract"
+	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -51,7 +51,7 @@ var (
 )
 
 // PreExecute execute contract but not commit change(balances and state)
-func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract) (bool, error) {
+func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
 	ret, err := execute(tx, cs, handler, false)
 	if err != nil {
 		return false, err
@@ -60,7 +60,7 @@ func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler contract.
 }
 
 // RealExecute execute contract and commit change(balances and state)
-func RealExecute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract) (bool, error) {
+func RealExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
 	ret, err := execute(tx, cs, handler, true)
 	if err != nil {
 		return false, err
@@ -69,7 +69,7 @@ func RealExecute(tx *types.Transaction, cs *types.ContractSpec, handler contract
 	return ret.(bool), err
 }
 
-func Query(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract) ([]byte, error) {
+func Query(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) ([]byte, error) {
 	ret, err := execute(tx, cs, handler, true)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func Query(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmar
 	return ret.([]byte), err
 }
 
-func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISmartConstract, realExec bool) (interface{}, error) {
+func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract, realExec bool) (interface{}, error) {
 
 	contractCode, contractType, err := getContractCode(cs, tx.GetType(), handler)
 	if err != nil {
@@ -105,7 +105,7 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISm
 	case types.TypeJSContractInit:
 		if realExec {
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(contract.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"}))
+				handler.SetGlobalState(params.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"}))
 			} else {
 				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})) // add js contract code into state
 			}
@@ -115,7 +115,7 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler contract.ISm
 	case types.TypeLuaContractInit:
 		if realExec {
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(contract.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"}))
+				handler.SetGlobalState(params.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"}))
 			} else {
 				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"})) // add lua contract code into state
 			}
@@ -169,7 +169,7 @@ func initVMProc(contractType string) error {
 	return err
 }
 
-func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISmartConstract) (string, string, error) {
+func getContractCode(cs *types.ContractSpec, txType uint32, handler ISmartConstract) (string, string, error) {
 	code := cs.ContractCode
 	if code != nil && len(code) > 0 {
 		if txType == types.TypeJSContractInit {
@@ -181,7 +181,7 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler contract.ISm
 	cc := new(ContractCode)
 	var err error
 	if len(cs.ContractAddr) == 0 {
-		code, err = handler.GetGlobalState(contract.GlobalContractKey)
+		code, err = handler.GetGlobalState(params.GlobalContractKey)
 	} else {
 		code, err = handler.GetState(contractCodeKey)
 	}

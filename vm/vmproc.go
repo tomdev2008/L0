@@ -27,7 +27,6 @@ import (
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/ledger/contract"
 )
 
 // VMProc the vm process struct
@@ -42,7 +41,7 @@ type VMProc struct {
 	Running          bool
 	RequestHandle    RequestHandleType
 	ContractData     *ContractData
-	L0Handler        contract.ISmartConstract
+	L0Handler        ISmartConstract
 	RequestMap       map[uint32]chan *InvokeData
 	StateChangeQueue *stateQueue
 	TransferQueue    *transferQueue
