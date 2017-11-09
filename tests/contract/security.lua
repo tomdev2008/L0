@@ -30,7 +30,7 @@ function L0Invoke(funcName, args)
     end
 
     -- receiver
-    local receiver = L0.Account().Receiver
+    local receiver = L0.Account().Recipient
     local receiverAccount = L0.GetGlobalState("account." .. receiver)
     if not(receiverAccount) then
         return false
