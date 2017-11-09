@@ -14,35 +14,38 @@
 local L0 = require("L0")
 
 function L0Init(args)
-    if type(args) ~= "table" then
-        return false
-    end
-
-    local safetyContractAddr = args[0]
-    if type(key) ~= "string" then
-        return false
-    end
-
-    L0.SetGlobalState("safetyContract", safetyContractAddr)
     return true
 end
 
 function L0Invoke(funcName, args)
-    if type(args) ~= "table" then
+    if funcName ~= "verify" then
         return false
     end
 
-    local sender = args[0]
-    local receiver = args[1]
-    local amount = tonumber(args[2])
-
-    local singleAmountLimit = tonumber(L0.GetGlobalState("singleTransactionLimit"))
-    if amount > singleAmountLimit then
+    -- sender
+    local sender = L0.Account().Sender
+    local senderAccount = L0.GetGlobalState("account." .. sender)
+    if not(senderAccount) then
         return false
     end
 
-    local dailyAmountLimit = tonumber(L0.GetGlobalState("dailyTransactionLimit"))
-    if amount > dailyAmountLimit then
+    -- receiver
+    local receiver = L0.Account().Receiver
+    local receiverAccount = L0.GetGlobalState("account." .. receiver)
+    if not(receiverAccount) then
+        return false
+    end
+
+    -- amount
+    local amount = L0.Account().Amount
+
+    local singleAmountLimit = tonumber(L0.GetGlobalState("singleTransactionLimit")) or 0
+    if singleAmountLimit > 0 and amount > singleAmountLimit then
+        return false
+    end
+
+    local dailyAmountLimit = tonumber(L0.GetGlobalState("dailyTransactionLimit")) or 0
+    if dailyAmountLimit > 0 and amount > dailyAmountLimit then
         return false
     end
 
