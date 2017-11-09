@@ -268,7 +268,7 @@ func (ledger *Ledger) GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transa
 func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
-	ledger.contract.ExecTransaction(tx, string(contractSpec.ContractAddr))
+	ledger.contract.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
 
 	result, err := vm.Query(tx, contractSpec, ledger.contract)
 	if err != nil {
