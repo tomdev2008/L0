@@ -37,7 +37,7 @@ func main() {
 	for i := 0; i < 10; i++ {
 		time.Sleep(10)
 		go func() {
-			for j := 0; j < 10; j++ {
+			for j := 0; j < 5; j++ {
 				HttpSend(generateAtomicTx())
 			}
 		}()
@@ -47,8 +47,10 @@ func main() {
 }
 
 func HttpSend(param string) {
-	paramStr := `{"id":1,"method":"Transaction.Broadcast","params":["` + param + `"]}`
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(paramStr))
+	paramStr := `{"id":1,"chainId":"00","method":"Transaction.Broadcast","params":["` + param + `"]}`
+	req, err := http.NewRequest("POST", "http://127.0.0.1:8989", bytes.NewBufferString(paramStr))
+	// paramStr := `{"id":1,"method":"Transaction.Broadcast","params":["` + param + `"]}`
+	// req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(paramStr))
 	if err != nil {
 		panic(err)
 	}
@@ -68,7 +70,7 @@ func HttpSend(param string) {
 		if er != nil {
 			log.Print("couldn't parse response body. ", err)
 		}
-		log.Println(time.Now().Sub(t), string(body))
+		log.Print(time.Now().Sub(t), string(body))
 	}
 }
 
