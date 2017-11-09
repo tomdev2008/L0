@@ -14,6 +14,8 @@ function L0Init(args)
     L0.PutState("minter", L0.Account().Address)
     L0.PutState("balances", {})
 
+    print("address: ",L0.Account().Address,"sender: ",L0.Account().Sender,"amont: ",L0.Account().Amount,"recipient: ",L0.Account().Recipient)
+
 -- 合约账户的余额
     local accountBalance = L0.Account().Balances
     for k, v in pairs(accountBalance) do

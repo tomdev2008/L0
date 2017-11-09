@@ -14,6 +14,8 @@ function L0Init(args) {
 // 合约账户余额
     var accountBalance = account.Balances
 
+    console.log("address: ",account.Address,"sender: ",account.Sender,"amont: ",account.Amount,"recipient: ",account.Recipient)
+
     for(var i in accountBalance){//用javascript的for/in循环遍历对象的属性 
         if (typeof(accountBalance[i])=="object"){
             for(var key in accountBalance[i]){

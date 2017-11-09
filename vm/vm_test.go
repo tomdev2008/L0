@@ -19,19 +19,33 @@
 package vm
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
 
 	"encoding/hex"
 	"math/big"
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
+
+func TestMain(m *testing.M) {
+	VMConf = DefaultConfig()
+	VMConf.JSVMExeFilePath = "../build/bin/jsvm"
+	VMConf.LuaVMExeFilePath = "../build/bin/luavm"
+
+	if err := initVMProc("luavm"); err != nil {
+		fmt.Println("init vm proc ", err)
+	}
+
+	flag.Parse()
+	os.Exit(m.Run())
+}
 
 func TestEncode(t *testing.T) {
 	d := new(InvokeData)
@@ -39,7 +53,7 @@ func TestEncode(t *testing.T) {
 	d.SessionID = 123
 	d.SetParams("contract script code size illegal, max size is:5120 byte", false, []*db.KeyValue{&db.KeyValue{Key: []byte("key"), Value: []byte("value")}})
 
-	fmt.Println("len:", len(d.Params))
+	t.Log("len:", len(d.Params))
 
 	var str string
 	var rst bool
@@ -53,7 +67,7 @@ func TestEncode(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	tx := types.NewTransaction(nil, nil, types.TypeContractInvoke, 0, accounts.Address{}, accounts.NewAddress([]byte("999999999999999999")), nil, nil, 0)
+	tx := types.NewTransaction(nil, nil, types.TypeContractInvoke, 0, accounts.Address{}, accounts.NewAddress([]byte("999999999999999999")), 0, big.NewInt(0), big.NewInt(0), 0)
 
 	cs := &types.ContractSpec{
 		ContractCode:   getCode(),
@@ -64,20 +78,10 @@ func TestExecute(t *testing.T) {
 
 	success, err := PreExecute(tx, cs, hd)
 	if err != nil {
-		fmt.Println("percall error", err)
+		t.Error("percall error", err)
 	}
-	fmt.Println("success:", success)
+	t.Log("success:", success)
 
-	begin := time.Now().UnixNano() / 1000000
-	// for i := 0; i < 1; i++ {
-	// 	_, err := PreExecute(tx, cs, hd)
-	// 	if err != nil {
-	// 		fmt.Println("percall error", err)
-	// 		break
-	// 	}
-	// }
-	end := time.Now().UnixNano() / 1000000
-	fmt.Println("time：", end-begin)
 }
 
 type L0Handler struct {
@@ -102,16 +106,18 @@ func (hd *L0Handler) DelState(key string) {
 
 }
 
-func (hd *L0Handler) GetBalances(addr string) (*big.Int, error) {
-	fmt.Println("GetBalances:", addr)
-	return big.NewInt(100), nil
+func (hd *L0Handler) GetBalances(addr string) (*state.Balance, error) {
+	//fmt.Println("test GetBalances:", addr)
+	amount := make(map[uint32]*big.Int)
+	amount[0] = big.NewInt(100)
+	return &state.Balance{Amounts: amount, Nonce: 0}, nil
 }
 
 func (hd *L0Handler) CurrentBlockHeight() uint32 {
 	return 100
 }
 
-func (hd *L0Handler) AddTransfer(fromAddr, toAddr string, amount *big.Int, txType uint32) {
+func (hd *L0Handler) AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, txType uint32) {
 	fmt.Printf("AddTransfer from:%s to:%s amount:%d txType:%d", fromAddr, toAddr, amount.Int64(), txType)
 }
 
@@ -133,10 +139,21 @@ func (hd *L0Handler) GetByRange(startKey, limitKey string) []*db.KeyValue {
 	return []*db.KeyValue{&db.KeyValue{Key: []byte("key1"), Value: []byte("value1")}}
 }
 
+func (hd *L0Handler) DelGlobalState(key string) error {
+	return nil
+}
+
+func (hd *L0Handler) GetGlobalState(key string) ([]byte, error) {
+	return nil, nil
+}
+
+func (hd *L0Handler) SetGlobalState(key string, value []byte) error {
+	return nil
+}
+
 func getCode() []byte {
-	f, _ := os.Open("../tests/contract/l0coin.js")
+	f, _ := os.Open("../tests/contract/l0coin.lua")
 	defer f.Close()
 	buf, _ := ioutil.ReadAll(f)
-
 	return buf
 }

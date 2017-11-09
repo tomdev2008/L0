@@ -354,7 +354,7 @@ func (p *VMProc) pcall(funcName string, cd *ContractData, handler contract.ISmar
 	var errmsg string
 	err = result.DecodeParams(&errmsg, ret)
 	if err != nil {
-		log.Error("DecodeParams error")
+		log.Error("DecodeParams error: ", err)
 		return err
 	} else if len(errmsg) > 0 {
 		return errors.New(errmsg)
