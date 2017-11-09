@@ -23,6 +23,7 @@ package luavm
 import (
 	"bytes"
 
+	"github.com/bocheninc/L0/vm/luavm/utils"
 	"github.com/yuin/gopher-lua"
 )
 
@@ -39,6 +40,8 @@ func exporter() map[string]lua.LGFunction {
 		"DelState":           delStateFunc,
 		"GetByPrefix":        getByPrefixFunc,
 		"GetByRange":         getByRangeFunc,
+		"jsonEncode":         utils.ApiEncode,
+		"jsonDecode":         utils.ApiDecode,
 	}
 }
 

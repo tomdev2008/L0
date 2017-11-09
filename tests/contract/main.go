@@ -107,7 +107,7 @@ var (
 		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.js",
 		langJS,
 		false,
-		[]string{},
+		[]string{"hello", "world"},
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalLua = newContractConf(

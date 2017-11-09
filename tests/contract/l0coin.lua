@@ -4,6 +4,13 @@ local L0 = require("L0")
 -- 合约创建时会被调用一次，之后就不会被调用
 function L0Init(args)
     print("in L0Init")
+    print("L0", type(L0))
+
+
+    local obj = L0.jsonEncode({name="Tim",number=12345})
+    local deObj = L0.jsonEncode(obj)
+    print("json", obj, deObj)
+    L0.PutState("hello", L0.jsonEncode("world"))
     L0.PutState("minter", L0.Account().Address)
     L0.PutState("balances", {})
 

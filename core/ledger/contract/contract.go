@@ -26,8 +26,10 @@ import (
 
 	"fmt"
 
+	_ "encoding/json"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
+	_ "github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
@@ -87,15 +89,19 @@ type SmartConstract struct {
 	smartContractTxs types.Transactions
 }
 
+var sctx *SmartConstract
+
 // NewSmartConstract returns a new State
 func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) *SmartConstract {
-	return &SmartConstract{
+	sctx = &SmartConstract{
 		dbHandler:     db,
 		balancePrefix: []byte("sc_"),
 		columnFamily:  ColumnFamily,
 		ledgerHandler: ledgerHandler,
 		stateExtra:    NewStateExtra(),
 	}
+
+	return sctx
 }
 
 // StartConstract start constract
@@ -217,11 +223,15 @@ func (sctx *SmartConstract) GetState(key string) ([]byte, error) {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
-	value := sctx.stateExtra.get(sctx.scAddr, key)
+	return sctx.GetStateInOneAddr(sctx.scAddr, key)
+}
+
+func (sctx *SmartConstract) GetStateInOneAddr(scAddr, key string) ([]byte, error) {
+	value := sctx.stateExtra.get(scAddr, key)
 	if len(value) == 0 {
 		var err error
-		scAddrkey := EnSmartContractKey(sctx.scAddr, key)
-		log.Debugf("sctx.scAddr: %s,%s,%s", sctx.scAddr, key, scAddrkey)
+		scAddrkey := EnSmartContractKey(scAddr, key)
+		log.Debugf("sctx.scAddr: %s,%s,%s", scAddr, key, scAddrkey)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
 		if err != nil {
 			return nil, fmt.Errorf("can't get date from db %s", err)
@@ -365,3 +375,60 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 
 	return writeBatch, nil
 }
+
+func (sctx *SmartConstract) GetContractStateData(scAddr string, key string) ([]byte, error) {
+	srcValue, err := sctx.GetStateInOneAddr(scAddr, key)
+	value, err := DoContractStateData(srcValue)
+	if err != nil {
+		log.Errorf("can't handle state data, err: %+v, value: %+v, src: %+v", err, srcValue, string(srcValue))
+		return nil, err
+	}
+
+	return value, nil
+}
+
+//func GetContractStateData(scAddr, key string) (interface{}, error) {
+//	if sctx != nil {
+//		oriCtxDat, err := sctx.GetContractStateData(scAddr, key)
+//		log.Errorf("===========>>> GetContractStateData, key: %+v, src: %+v,  err: %+v", key, oriCtxDat, err)
+//		if err != nil {
+//			log.Errorf("origin data: %+v, origin str: %+v", oriCtxDat, string(oriCtxDat))
+//			return "", err
+//		}
+//
+//		var f interface{}
+//		err = json.Unmarshal(oriCtxDat, &f)
+//		if err != nil {
+//			log.Errorf("src data: %+v, json unmarshal err: %+v", oriCtxDat, err)
+//			return "", err
+//		}
+//
+//		log.Errorf("===========>>> GetContractStateData, src: %+v,  f: %+v", oriCtxDat, f)
+//		return f, nil
+//	}
+//
+//	return "", errors.New("not Contract Instance")
+//}
+//
+//func FetchContractStateData(key string) (interface{}, error) {
+//	if sctx != nil {
+//		oriCtxDat, err := sctx.GetContractStateData(utils.BytesToHex(DefaultAdminAddr.Bytes()), key)
+//		log.Errorf("===========>>> FetchContractStateData, key: %+v, src: %+v,  err: %+v", key, oriCtxDat, err)
+//		if err != nil {
+//			log.Errorf("origin data: %+v, origin str: %+v", oriCtxDat, string(oriCtxDat))
+//			return "", err
+//		}
+//
+//		var f interface{}
+//		err = json.Unmarshal(oriCtxDat, &f)
+//		if err != nil {
+//			log.Errorf("src data: %+v, json unmarshal err: %+v", oriCtxDat, err)
+//			return "", err
+//		}
+//
+//		log.Errorf("===========>>> FetchContractStateData, src: %+v,  f: %+v", oriCtxDat, f)
+//		return f, nil
+//	}
+//
+//	return "", errors.New("not Contract Instance")
+//}

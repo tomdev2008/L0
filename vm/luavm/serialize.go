@@ -31,11 +31,18 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
+//const (
+//	lstringType = byte(1)
+//	lboolType   = byte(2)
+//	lnumberType = byte(3)
+//	ltableTYpe  = byte(4)
+//)
+
 const (
-	lstringType = byte(1)
-	lboolType   = byte(2)
-	lnumberType = byte(3)
-	ltableTYpe  = byte(4)
+	lstringType = iota
+	lboolType
+	lnumberType
+	ltableTYpe
 )
 
 func lvalueToByte(value lua.LValue) []byte {
