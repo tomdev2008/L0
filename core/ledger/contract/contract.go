@@ -374,17 +374,17 @@ func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types
 	return smartContractTxs, nil
 }
 
-func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr string) error {
+func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr string) (bool, error) {
 	contractSpec := new(types.ContractSpec)
 	contractSpec.ContractAddr = utils.HexToBytes(scAddr)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
 
-	_, err := vm.RealExecute(tx, contractSpec, sctx)
+	ok, err := vm.RealExecute(tx, contractSpec, sctx)
 	if err != nil {
-		return fmt.Errorf("contract execute failed : %v ", err)
+		return ok, fmt.Errorf("contract execute failed : %v ", err)
 	}
 
-	return nil
+	return ok, nil
 }
 
 func (sctx *SmartConstract) QueryContract(tx *types.Transaction) ([]byte, error) {

@@ -189,9 +189,9 @@ func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 
 	bh, _ := v.ledger.Height()
 	v.sctx.StartConstract(bh)
-	err = v.sctx.ExecuteRequireContract(tx, addr)
+	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
 	v.sctx.StopContract(bh)
-	if err != nil {
+	if ok != true || err != nil {
 		log.Errorf("Security contract fail, err: %+v", err)
 		return false
 	}
