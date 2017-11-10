@@ -153,17 +153,16 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 //Query contract query
 func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
+	var contractAddress []byte
+	if len(args.ContractAddr) > 0 {
+		if args.ContractAddr[0:2] == "0x" {
+			args.ContractAddr = args.ContractAddr[2:]
+		}
 
-	if len(args.ContractAddr) == 0 {
-		return errors.New("contract address is illegal")
-	}
-
-	if args.ContractAddr[0:2] == "0x" {
-		args.ContractAddr = args.ContractAddr[2:]
-	}
-	contractAddress := utils.HexToBytes(args.ContractAddr)
-	if len(contractAddress) != 20 && len(contractAddress) != 22 {
-		return errors.New("contract address is illegal")
+		contractAddress := utils.HexToBytes(args.ContractAddr)
+		if len(contractAddress) != 20 && len(contractAddress) != 22 {
+			return errors.New("contract address is illegal")
+		}
 	}
 
 	contractSpec := new(types.ContractSpec)
