@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"encoding/json"
+
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -170,7 +171,6 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 }
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
-	return true
 	//handle contract
 	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
 	if err != nil {

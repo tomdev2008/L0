@@ -19,7 +19,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -27,6 +26,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -37,19 +37,23 @@ import (
 )
 
 var (
-	fromChain      = []byte{0}
-	toChain        = []byte{0}
+	fromChain = []byte{0}
+	toChain   = []byte{0}
+
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
-	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/getByRangeOrPrefix.js"
-	//contractPath   = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0vote.lua"
-
-	contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.js"
-	//contractPath = os.Getenv("GOPATH") + "/src/github.com/bocheninc/L0/tests/contract/l0coin.lua"
-	privkey, _ = crypto.HexToECDSA(privkeyHex)
-	sender     = accounts.PublicKeyToAddress(*privkey.Public())
+	privkey, _     = crypto.HexToECDSA(privkeyHex)
+	sender         = accounts.PublicKeyToAddress(*privkey.Public())
 
 	txChan = make(chan *types.Transaction, 5)
+
+	httpClient = &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 100,
+		},
+		Timeout: time.Second * 500,
+	}
+	url = "http://localhost:8881"
 )
 
 // contract lang
@@ -74,17 +78,15 @@ type contractConf struct {
 	isGlobal   bool
 	initArgs   []string
 	invokeArgs []string
-	queryArgs  []string
 }
 
-func newContractConf(path string, lang contractLang, isGlobal bool, initArgs, invokeArgs, queryArgs []string) *contractConf {
+func newContractConf(path string, lang contractLang, isGlobal bool, initArgs, invokeArgs []string) *contractConf {
 	return &contractConf{
 		path:       path,
 		lang:       lang,
 		isGlobal:   isGlobal,
 		initArgs:   initArgs,
 		invokeArgs: invokeArgs,
-		queryArgs:  queryArgs,
 	}
 }
 
@@ -94,88 +96,77 @@ var (
 		langLua,
 		false,
 		nil,
-		[]string{"vote", "张三", "秦皇岛"},
-		nil)
+		[]string{"vote", "张三", "秦皇岛"})
 
 	coinLua = newContractConf(
 		"./l0coin.lua",
 		langLua,
 		false,
 		nil,
-		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"},
-		nil)
+		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	coinJS = newContractConf(
 		"./l0coin.js",
 		langJS,
 		false,
 		[]string{"hello", "world"},
-		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"},
-		nil)
+		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalSetAccountLua = newContractConf(
 		"./global.lua",
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "account." + sender.String(), sender.String()},
-		nil)
+		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
 
 	securityLua = newContractConf(
 		"./security.lua",
 		langLua,
 		false,
 		nil,
-		nil,
 		nil)
 )
 
 func main() {
-	testSecurityContract()
-	return
-
 	go sendTransaction()
 	time.Sleep(1 * time.Microsecond)
-	issueTX()
-	conf := coinJS
-	deploySmartContractTX(conf)
-	time.Sleep(1 * time.Second)
 
-	execSmartContractTX(conf)
+	testSecurityContract()
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(3 * time.Second)
+}
+
+func httpPost(postForm string, resultHandler func(result map[string]interface{})) {
+	req, _ := http.NewRequest("POST", url, strings.NewReader(postForm))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(fmt.Errorf("Couldn't parse response body. %+v", err))
+	}
+
+	var result map[string]interface{}
+	json.Unmarshal(body, &result)
+	if resultHandler == nil {
+		fmt.Println("http response:", result)
+	} else {
+		resultHandler(result)
+	}
 }
 
 func sendTransaction() {
-	client := &http.Client{
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 100,
-		},
-		Timeout: time.Second * 500,
-	}
-	URL := "http://" + "localhost" + ":" + "8881"
 	for {
 		select {
 		case tx := <-txChan:
-			//tx := new(types.Transaction)
-			//tx.Deserialize(utils.HexToBytes(txHex))
-			fmt.Println(" hash: ", tx.Hash().String(), " type ", tx.GetType(), " nonce: ", tx.Nonce(), " amount: ", tx.Amount())
-			req, _ := http.NewRequest("POST", URL, bytes.NewBufferString(
-				`{"id":1,"method":"Transaction.Broadcast","params":["`+hex.EncodeToString(tx.Serialize())+`"]}`,
-			))
-			req.Header.Set("Content-Type", "application/json")
-			resp, err := client.Do(req)
-			if err != nil {
-				panic(err)
-			}
-			defer resp.Body.Close()
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				panic(fmt.Errorf("Couldn't parse response body. %+v", err))
-			}
-			var dat map[string]interface{}
-			json.Unmarshal(body, &dat)
-			fmt.Println(dat)
+			fmt.Printf("hash: %s, type: %v, nonce: %v, amount: %v\n",
+				tx.Hash().String(), tx.GetType(), tx.Nonce(), tx.Amount())
+
+			httpPost(`{"id":1,"method":"Transaction.Broadcast","params":["`+hex.EncodeToString(tx.Serialize())+`"]}`, nil)
 		}
 	}
 }
@@ -242,7 +233,7 @@ func deploySmartContractTX(conf *contractConf) []byte {
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
+	fmt.Println("> deploy ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 
 	txChan <- tx
 	return contractSpec.ContractAddr
@@ -277,59 +268,45 @@ func execSmartContractTX(conf *contractConf) {
 		uint32(time.Now().Unix()),
 	)
 
-	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
+	fmt.Println("> exe ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txChan <- tx
 }
 
-func testDeployGlobalContract() {
-	deploySmartContractTX(globalSetAccountLua)
-	time.Sleep(1 * time.Second)
-
-	execSmartContractTX(globalSetAccountLua)
-	time.Sleep(1 * time.Second)
-}
-
-func testDeploySecurityContract() {
-	addr := deploySmartContractTX(securityLua)
-	time.Sleep(1 * time.Second)
-
-	globalLua := newContractConf(
-		"./global.lua",
-		langLua,
-		true,
-		nil,
-		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)},
-		[]string{"securityContract"})
-	execSmartContractTX(globalLua)
-	time.Sleep(1 * time.Second)
+func queryGlobalContract(key string) {
+	form := `{"id": 2, "method": "Transaction.Query", "params":[{"ContractAddr":"","ContractParams":["` + key + `"]}]}`
+	httpPost(form, func(result map[string]interface{}) {
+		if result != nil {
+			fmt.Printf("> query result: %s\n", result["result"])
+		} else {
+			fmt.Println("> query failed")
+		}
+	})
 }
 
 func testSecurityContract() {
-	go sendTransaction()
-	time.Sleep(1 * time.Microsecond)
-
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
-	time.Sleep(1 * time.Second)
 
-	execSmartContractTX(globalSetAccountLua)
 	time.Sleep(1 * time.Second)
+	execSmartContractTX(globalSetAccountLua)
 
 	// security contract
-	addr := deploySmartContractTX(securityLua)
 	time.Sleep(1 * time.Second)
+	addr := deploySmartContractTX(securityLua)
 
 	globalLua := newContractConf(
 		"./global.lua",
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)},
-		[]string{"securityContract"})
+		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)})
+	time.Sleep(1 * time.Second)
 	execSmartContractTX(globalLua)
 
-	time.Sleep(5 * time.Second)
+	// query
+	time.Sleep(2 * time.Second)
+	queryGlobalContract("securityContract")
 }
