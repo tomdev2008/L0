@@ -89,10 +89,8 @@ func newContractConf(path string, lang contractLang, isGlobal bool, initArgs, in
 }
 
 var (
-	gopath = os.Getenv("GOPATH")
-
 	voteLua = newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0vote.lua",
+		"./l0vote.lua",
 		langLua,
 		false,
 		nil,
@@ -100,7 +98,7 @@ var (
 		nil)
 
 	coinLua = newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.lua",
+		"./l0coin.lua",
 		langLua,
 		false,
 		nil,
@@ -108,7 +106,7 @@ var (
 		nil)
 
 	coinJS = newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/l0coin.js",
+		"./l0coin.js",
 		langJS,
 		false,
 		[]string{"hello", "world"},
@@ -116,7 +114,7 @@ var (
 		nil)
 
 	globalSetAccountLua = newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
+		"./global.lua",
 		langLua,
 		true,
 		nil,
@@ -124,7 +122,7 @@ var (
 		nil)
 
 	securityLua = newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/security.lua",
+		"./security.lua",
 		langLua,
 		false,
 		nil,
@@ -286,73 +284,52 @@ func execSmartContractTX(conf *contractConf) {
 	txChan <- tx
 }
 
-func querySmartContractTx(conf *contractConf) {
-	contractSpec := new(types.ContractSpec)
-	contractSpec.ContractParams = conf.queryArgs
+func testDeployGlobalContract() {
+	deploySmartContractTX(globalSetAccountLua)
+	time.Sleep(1 * time.Second)
 
-	if !conf.isGlobal {
-		f, _ := os.Open(conf.path)
-		buf, _ := ioutil.ReadAll(f)
+	execSmartContractTX(globalSetAccountLua)
+	time.Sleep(1 * time.Second)
+}
 
-		var a accounts.Address
-		pubBytes := []byte(sender.String() + string(buf))
-		a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
+func testDeploySecurityContract() {
+	addr := deploySmartContractTX(securityLua)
+	time.Sleep(1 * time.Second)
 
-		contractSpec.ContractAddr = a.Bytes()
-	}
-
-	nonce := 3
-	tx := types.NewTransaction(
-		coordinate.NewChainCoordinate(fromChain),
-		coordinate.NewChainCoordinate(toChain),
-		types.TypeContractQuery,
-		uint32(nonce),
-		sender,
-		accounts.NewAddress(contractSpec.ContractAddr),
-		0,
-		big.NewInt(0),
-		big.NewInt(0),
-		uint32(time.Now().Unix()),
-	)
-
-	fmt.Println("ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
-	tx.Payload = utils.Serialize(contractSpec)
-	sig, _ := privkey.Sign(tx.SignHash().Bytes())
-	tx.WithSignature(sig)
-	txChan <- tx
+	globalLua := newContractConf(
+		"./global.lua",
+		langLua,
+		true,
+		nil,
+		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)},
+		[]string{"securityContract"})
+	execSmartContractTX(globalLua)
+	time.Sleep(1 * time.Second)
 }
 
 func testSecurityContract() {
 	go sendTransaction()
 	time.Sleep(1 * time.Microsecond)
 
+	// global contract
+	deploySmartContractTX(globalSetAccountLua)
+	time.Sleep(1 * time.Second)
+
+	execSmartContractTX(globalSetAccountLua)
+	time.Sleep(1 * time.Second)
+
+	// security contract
+	addr := deploySmartContractTX(securityLua)
+	time.Sleep(1 * time.Second)
+
 	globalLua := newContractConf(
-		gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
+		"./global.lua",
 		langLua,
 		true,
 		nil,
-		nil,
+		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)},
 		[]string{"securityContract"})
-	querySmartContractTx(globalLua)
-
-	/*
-		deploySmartContractTX(globalSetAccountLua)
-		time.Sleep(1 * time.Second)
-
-		execSmartContractTX(globalSetAccountLua)
-		time.Sleep(1 * time.Second)
-
-		addr := deploySmartContractTX(securityLua)
-
-		globalLua := newContractConf(
-			gopath+"/src/github.com/bocheninc/L0/tests/contract/global.lua",
-			langLua,
-			true,
-			nil,
-			[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)},
-			[]string{"securityContract"})
-		execSmartContractTX(globalLua)
-	*/
+	execSmartContractTX(globalLua)
 
 	time.Sleep(5 * time.Second)
 }
