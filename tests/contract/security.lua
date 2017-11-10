@@ -28,6 +28,7 @@ function L0Invoke(funcName, args)
     if not(senderAccount) then
         return false
     end
+    senderAccount = L0.jsonDecode(senderAccount) 
 
     -- receiver
     local receiver = accountInfo.Recipient
@@ -36,6 +37,8 @@ function L0Invoke(funcName, args)
         if not(receiverAccount) then
             return false
         end
+
+        receiverAccount = L0.jsonDecode(receiverAccount)
     end
 
     -- amount
