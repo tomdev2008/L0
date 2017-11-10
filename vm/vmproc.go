@@ -217,6 +217,12 @@ func doReceive(p *VMProc, receiveData *InvokeData) {
 		delete(p.RequestMap, receiveData.SessionID)
 	} else {
 		go func(data *InvokeData) {
+			defer func() {
+				if err := recover(); err != nil {
+					log.Errorf("doReceive, call RequestHandle panic, %v", err)
+				}
+			}()
+
 			//log.Debugf("begin call requestHandle %s\n", data.FuncName)
 			result, err := p.RequestHandle(p, data)
 			//log.Debugf("after call requestHandle %s\n", data.FuncName)
