@@ -200,21 +200,17 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	for _, tx := range txs {
 		if !v.isExist(tx) {
 			if !v.checkTransactionInConsensus(tx) {
-				if primary {
-					log.Warnf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
-					v.txpool.Remove(tx)
-					delete(v.inTxs, tx.Hash())
-					continue
-				} else {
-					log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
-					for _, rollbackTx := range ttxs {
-						v.rollBackAccount(rollbackTx)
-					}
-					return false, nil
+				log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
+				for _, rollbackTx := range ttxs {
+					v.rollBackAccount(rollbackTx)
 				}
+				return false, nil
 			}
 			if !v.checkTransactionSecurity(tx) {
 				log.Errorf("check transaction security fail, tx_hash: %+v", tx.Hash().String())
+				for _, rollbackTx := range ttxs {
+					v.rollBackAccount(rollbackTx)
+				}
 				return false, nil
 			}
 		}
@@ -228,6 +224,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			if asset == nil {
 				if primary {
 					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
+					delete(v.inTxs, tx.Hash())
+					v.txpool.Remove(tx)
 					continue
 				} else {
 					log.Errorf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
@@ -241,6 +239,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				if err != nil {
 					if primary {
 						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						delete(v.inTxs, tx.Hash())
+						v.txpool.Remove(tx)
 						continue
 					} else {
 						log.Errorf("[validator] issue update asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
@@ -263,6 +263,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				if err != nil {
 					if primary {
 						log.Warnf("[validator] issue asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
+						delete(v.inTxs, tx.Hash())
+						v.txpool.Remove(tx)
 						continue
 					} else {
 						log.Errorf("[validator] issue asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
@@ -276,6 +278,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			} else {
 				if primary {
 					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
+					delete(v.inTxs, tx.Hash())
+					v.txpool.Remove(tx)
 					continue
 				} else {
 					log.Errorf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
@@ -291,6 +295,8 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		if !v.updateAccount(tx) {
 			if primary {
 				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
+				delete(v.inTxs, tx.Hash())
+				v.txpool.Remove(tx)
 				continue
 			} else {
 				log.Errorf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())

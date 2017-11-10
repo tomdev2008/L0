@@ -22,8 +22,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/bocheninc/L0/components/utils"
 	"strings"
+
+	"github.com/bocheninc/L0/components/utils"
 )
 
 const (
@@ -44,6 +45,10 @@ func DeSmartContractKey(deKey string) (string, string) {
 }
 
 func DoContractStateData(src []byte) ([]byte, error) {
+	if len(src) == 0 {
+		return nil, nil
+	}
+
 	buf := bytes.NewBuffer(src)
 	tp, err := buf.ReadByte()
 	if err != nil {

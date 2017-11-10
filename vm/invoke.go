@@ -116,7 +116,7 @@ func (p *VMProc) CCallSetGlobalState(key string, value []byte) error {
 		return err
 	}
 
-	if err := p.ccall("SetGlobalState", nil); err != nil {
+	if err := p.ccall("SetGlobalState", nil, key, value); err != nil {
 		return err
 	}
 
@@ -129,7 +129,7 @@ func (p *VMProc) CCallDelGlobalState(key string) error {
 		return err
 	}
 
-	if err := p.ccall("DelGlobalState", nil); err != nil {
+	if err := p.ccall("DelGlobalState", nil, key); err != nil {
 		return err
 	}
 

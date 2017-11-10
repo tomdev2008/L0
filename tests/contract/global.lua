@@ -24,9 +24,9 @@ function L0Invoke(funcName, args)
         if not(value) then
             return false
         end
-        L0.SetGlobalState(key, value)
+        L0.SetGlobalState(key, L0.jsonEncode(value))
         return true
-    else if funcName == "DelGlobalState" then
+    elseif funcName == "DelGlobalState" then
         L0.DelGlobalState(key)
         return true
     end
