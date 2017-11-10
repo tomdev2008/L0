@@ -13,31 +13,33 @@
 
 local L0 = require("L0")
 
+local ZeroAddr = "0x0000000000000000000000000000000000000000"
+
 function L0Init(args)
     return true
 end
 
 function L0Invoke(funcName, args)
-    if funcName ~= "verify" then
-        return false
-    end
+    local accountInfo = L0.Account()
 
     -- sender
-    local sender = L0.Account().Sender
+    local sender = accountInfo.Sender
     local senderAccount = L0.GetGlobalState("account." .. sender)
     if not(senderAccount) then
         return false
     end
 
     -- receiver
-    local receiver = L0.Account().Recipient
-    local receiverAccount = L0.GetGlobalState("account." .. receiver)
-    if not(receiverAccount) then
-        return false
+    local receiver = accountInfo.Recipient
+    if receiver ~= ZeroAddr then
+        local receiverAccount = L0.GetGlobalState("account." .. receiver)
+        if not(receiverAccount) then
+            return false
+        end
     end
 
     -- amount
-    local amount = L0.Account().Amount
+    local amount = accountInfo.Amount
 
     local singleAmountLimit = tonumber(L0.GetGlobalState("singleTransactionLimit")) or 0
     if singleAmountLimit > 0 and amount > singleAmountLimit then
