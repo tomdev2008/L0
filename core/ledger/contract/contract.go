@@ -20,13 +20,11 @@ package contract
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
-
-	"fmt"
-
-	_ "encoding/json"
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
@@ -115,6 +113,7 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 		log.Errorf("State can be changed only in context of a block.")
 	}
 
+	log.Debugf("GetGlobalState key=[%s]", key)
 	return sctx.GetStateInOneAddr(params.GlobalStateKey, key)
 }
 
@@ -147,9 +146,20 @@ func (sctx *SmartConstract) verifyPermission(key string) error {
 	}
 
 	sender := sctx.currentTx.Sender().Bytes()
-	if len(dataAdmin) > 0 && !bytes.Equal(sender, dataAdmin) {
-		return fmt.Errorf("change global state, permission denied")
+	if len(dataAdmin) > 0 {
+		var dataAdminAddr accounts.Address
+		err = json.Unmarshal(dataAdmin, &dataAdminAddr)
+		if err != nil {
+			return nil
+		}
+
+		if !bytes.Equal(sender, dataAdminAddr[:]) {
+			log.Errorf("change global state, permission denied, \n%#v\n%#v\n",
+				sender, dataAdminAddr[:])
+			return fmt.Errorf("change global state, permission denied")
+		}
 	}
+
 	return nil
 }
 
