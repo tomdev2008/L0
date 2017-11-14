@@ -164,6 +164,8 @@ func (tx *Transaction) Verfiy() (accounts.Address, error) {
 		fallthrough
 	case TypeContractInvoke:
 		fallthrough
+	case TypeIssueUpdate:
+		fallthrough
 	case TypeIssue:
 		if tx.Data.Signature != nil {
 			if sender := tx.sender.Load(); sender != nil {
