@@ -22,8 +22,6 @@ import (
 	"bytes"
 	"strings"
 
-	"encoding/json"
-
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -104,17 +102,35 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 		}
 
 		if len(tx.Payload) > 0 {
-			asset := &state.Asset{
-				ID:     tx.AssetID(),
-				Issuer: tx.Sender(),
-				Owner:  tx.Recipient(),
-			}
-			if _, err := asset.Update(string(tx.Payload)); err != nil {
-				log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
-				isOK = false
+			if tp := tx.GetType(); tp == types.TypeIssue {
+				asset := &state.Asset{
+					ID:     tx.AssetID(),
+					Issuer: tx.Sender(),
+					Owner:  tx.Recipient(),
+				}
+				if _, err := asset.Update(string(tx.Payload)); err != nil {
+					log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
+					isOK = false
+				}
+			} else if tp == types.TypeIssueUpdate {
+				asset := &state.Asset{
+					ID:     tx.AssetID(),
+					Issuer: tx.Sender(),
+					Owner:  tx.Recipient(),
+				}
+				if _, err := asset.Update(string(tx.Payload)); err != nil {
+					asset := &state.Asset{
+						ID:     tx.AssetID(),
+						Issuer: tx.Recipient(),
+						Owner:  tx.Sender(),
+					}
+					if _, err := asset.Update(string(tx.Payload)); err != nil {
+						log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
+						isOK = false
+					}
+				}
 			}
 		}
-
 	}
 	return isOK
 }
@@ -172,29 +188,29 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 	//handle contract
-	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
-	if err != nil {
-		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
-		return false
-	}
+	// securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	// if err != nil {
+	// 	log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+	// 	return false
+	// }
 
-	var f interface{}
-	err = json.Unmarshal(securityAddr, &f)
-	if err != nil {
-		log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
-		return false
-	}
+	// var f interface{}
+	// err = json.Unmarshal(securityAddr, &f)
+	// if err != nil {
+	// 	log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
+	// 	return false
+	// }
 
-	addr := f.(string)
+	// addr := f.(string)
 
-	bh, _ := v.ledger.Height()
-	v.sctx.StartConstract(bh)
-	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
-	v.sctx.StopContract(bh)
-	if ok != true || err != nil {
-		log.Errorf("Security contract fail, err: %+v", err)
-		return false
-	}
+	// bh, _ := v.ledger.Height()
+	// v.sctx.StartConstract(bh)
+	// ok, err := v.sctx.ExecuteRequireContract(tx, addr)
+	// v.sctx.StopContract(bh)
+	// if ok != true || err != nil {
+	// 	log.Errorf("Security contract fail, err: %+v", err)
+	// 	return false
+	// }
 
 	return true
 }

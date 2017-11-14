@@ -383,9 +383,16 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 }
 
 func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {
-	if tp := tx.GetType(); tp == types.TypeIssue || tp == types.TypeIssueUpdate {
+	tp := tx.GetType()
+	if tp == types.TypeIssue {
 		if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Sender(), tx.Recipient(), string(tx.Payload)); err != nil {
 			return err
+		}
+	} else if tp == types.TypeIssueUpdate {
+		if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Sender(), tx.Recipient(), string(tx.Payload)); err != nil {
+			if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Recipient(), tx.Sender(), string(tx.Payload)); err != nil {
+				return err
+			}
 		}
 	}
 	plusAmount := big.NewInt(tx.Amount().Int64())
@@ -407,7 +414,7 @@ func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) e
 			}
 		}
 		if err := ledger.state.UpdateBalance(sender, assetID, subFee, tx.Nonce()); err != nil {
-			if (tx.GetType() == types.TypeIssue ||tx.GetType() ==types.TypeIssueUpdate) && err == state.ErrNegativeBalance {
+			if (tx.GetType() == types.TypeIssue || tx.GetType() == types.TypeIssueUpdate) && err == state.ErrNegativeBalance {
 
 			} else {
 				ledger.state.UpdateBalance(sender, assetID, plusAmount, tx.Nonce())
