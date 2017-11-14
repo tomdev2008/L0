@@ -150,6 +150,15 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 	return hash, nil
 }
 
+// GetAsset returns asset
+func (bc *Blockchain) GetAsset(id uint32) *state.Asset {
+	if bc.validator == nil {
+		b, _ := bc.ledger.GetAssetFromDB(id)
+		return b
+	}
+	return bc.validator.GetAsset(id)
+}
+
 // GetBalance returns balance
 func (bc *Blockchain) GetBalance(addr accounts.Address) *state.Balance {
 	if bc.validator == nil {

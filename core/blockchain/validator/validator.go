@@ -45,6 +45,7 @@ type Validator interface {
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
+	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
 }
 
@@ -417,4 +418,11 @@ func (v *Verification) GetBalance(addr accounts.Address) *state.Balance {
 	defer v.rwAccount.Unlock()
 	acconut := v.fetchAccount(addr)
 	return acconut
+}
+
+func (v *Verification) GetAsset(id uint32) *state.Asset {
+	v.rwAccount.Lock()
+	defer v.rwAccount.Unlock()
+	asset, _ := v.assets[id]
+	return asset
 }

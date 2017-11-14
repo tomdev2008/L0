@@ -19,6 +19,8 @@
 package rpc
 
 import (
+	"fmt"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -29,6 +31,7 @@ import (
 //LedgerInterface ledger interface
 type LedgerInterface interface {
 	Height() (uint32, error)
+	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
 	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
@@ -76,6 +79,17 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 		return err
 	}
 	*reply = height
+	return nil
+}
+
+//GetAsset returns asset by id
+func (l *Ledger) GetAsset(id uint32, reply *state.Asset) error {
+	fmt.Println("ssss", id)
+	b := l.ledger.GetAsset(id)
+	if b == nil {
+		b = &state.Asset{}
+	}
+	*reply = *b
 	return nil
 }
 
