@@ -20,11 +20,13 @@ package validator
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -188,29 +190,32 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 	//handle contract
-	// securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
-	// if err != nil {
-	// 	log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
-	// 	return false
-	// }
+	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	if err != nil {
+		if err == contract.ErrNoFoundStateData {
+			log.Debugf("not found security contract,default does security contract not take effect ,GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+			return true
+		}
+		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+		return false
+	}
 
-	// var f interface{}
-	// err = json.Unmarshal(securityAddr, &f)
-	// if err != nil {
-	// 	log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
-	// 	return false
-	// }
+	var f interface{}
+	err = json.Unmarshal(securityAddr, &f)
+	if err != nil {
+		log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
+		return false
+	}
 
-	// addr := f.(string)
+	addr := f.(string)
 
-	// bh, _ := v.ledger.Height()
-	// v.sctx.StartConstract(bh)
-	// ok, err := v.sctx.ExecuteRequireContract(tx, addr)
-	// v.sctx.StopContract(bh)
-	// if ok != true || err != nil {
-	// 	log.Errorf("Security contract fail, err: %+v", err)
-	// 	return false
-	// }
-
+	bh, _ := v.ledger.Height()
+	v.sctx.StartConstract(bh)
+	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
+	v.sctx.StopContract(bh)
+	if ok != true || err != nil {
+		log.Errorf("Security contract fail, err: %+v", err)
+		return false
+	}
 	return true
 }
