@@ -152,13 +152,15 @@ func (state *State) GetTmpAsset(id uint32) (*Asset, error) {
 }
 
 // UpdateAsset updates asset
-func (state *State) UpdateAsset(id uint32, jsonStr string) error {
+func (state *State) UpdateAsset(id uint32, issur, owner accounts.Address, jsonStr string) error {
 	state.Lock()
 	defer state.Unlock()
 	asset, ok := state.tmpAsset[id]
 	if !ok {
 		asset = &Asset{
-			ID: id,
+			ID:     id,
+			Issuer: issur,
+			Owner:  owner,
 		}
 	}
 	newAsset, err := asset.Update(jsonStr)

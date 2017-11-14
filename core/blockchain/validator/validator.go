@@ -344,7 +344,7 @@ func (v *Verification) updateAccount(tx *types.Transaction) bool {
 			senderAccont.Add(assetID, subAmount)
 			senderAccont.Add(assetID, subFee)
 			//	log.Debugln("[validator] updateAccount sender: ", tx.Sender(), "amount: ", senderAccont.amount)
-			if tx.GetType() != types.TypeIssue && senderAccont.Get(assetID).Sign() == -1 {
+			if (tx.GetType() != types.TypeIssue && tx.GetType() != types.TypeIssueUpdate) && senderAccont.Get(assetID).Sign() == -1 {
 				senderAccont.Add(assetID, plusAmount)
 				senderAccont.Add(assetID, plusFee)
 				return false
