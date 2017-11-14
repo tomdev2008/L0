@@ -44,6 +44,8 @@ const (
 	permissionPrefix = "permission."
 )
 
+var ErrNoFoundStateData = errors.New("no found state data from db.")
+
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*state.Balance, error)
 	Height() (uint32, error)
@@ -211,7 +213,7 @@ func (sctx *SmartConstract) GetStateInOneAddr(scAddr, key string) ([]byte, error
 		scAddrkey := EnSmartContractKey(scAddr, key)
 		log.Debugf("sctx.scAddr: %s,%s,%s", scAddr, key, scAddrkey)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
-		if err != nil {
+		if err != nil || len(value) == 0 {
 			return nil, fmt.Errorf("can't get date from db %s", err)
 		}
 	}
@@ -356,6 +358,10 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 
 func (sctx *SmartConstract) GetContractStateData(scAddr string, key string) ([]byte, error) {
 	srcValue, err := sctx.GetStateInOneAddr(scAddr, key)
+	if err != nil {
+		return nil, ErrNoFoundStateData
+	}
+
 	value, err := DoContractStateData(srcValue)
 	if err != nil {
 		log.Errorf("can't handle state data, err: %+v, value: %+v, src: %+v", err, srcValue, string(srcValue))
