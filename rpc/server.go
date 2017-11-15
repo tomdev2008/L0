@@ -22,12 +22,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"strings"
+
+	"github.com/bocheninc/L0/components/log"
 )
 
 type pmHandler interface {

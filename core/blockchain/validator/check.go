@@ -133,6 +133,11 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 			}
 		}
 	}
+
+	if !isOK {
+		v.notify(tx, " illegal transaction")
+	}
+
 	return isOK
 }
 

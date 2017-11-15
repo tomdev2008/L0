@@ -141,13 +141,6 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 	digest := request.Name()
 	if lbft.isPrimary() {
 		lbft.seqNo++
-		if request.ID != EMPTYREQUEST && lbft.cnt == 0 {
-			lbft.height++
-		}
-		lbft.cnt += len(request.Txs)
-		if lbft.cnt >= lbft.options.BlockSize || request.ID == EMPTYREQUEST {
-			lbft.cnt = 0
-		}
 
 		log.Debugf("Replica %s received Request for consensus %s", lbft.options.ID, digest)
 		request.Height = lbft.height
@@ -207,15 +200,8 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 	}
 
 	if !lbft.isPrimary() {
-		lbft.seqNo++
-		if preprepare.Request.ID != EMPTYREQUEST && lbft.cnt == 0 {
-			lbft.height++
-		}
-		lbft.cnt += len(preprepare.Request.Txs)
-		if lbft.cnt >= lbft.options.BlockSize || preprepare.Request.ID == EMPTYREQUEST {
-			lbft.cnt = 0
-		}
-		if preprepare.SeqNo != lbft.seqNo {
+
+		if preprepare.SeqNo != lbft.seqNo+1 {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong seqNo (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo, lbft.seqNo)
 			vc := &ViewChange{
 				ID:        digest,
@@ -260,6 +246,10 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("failed to verify"))
 			return nil
+		}
+		lbft.seqNo++
+		if preprepare.Request.ID == EMPTYREQUEST {
+			lbft.height++
 		}
 	}
 
@@ -462,14 +452,14 @@ func (lbft *Lbft) execute() {
 			delete(lbft.committedRequests, seqNo)
 		} else if seqNo == nextExec {
 			lbft.execSeqNo = nextExec
-			if lbft.execHeight+1 != request.Height {
-				if lbft.execHeight+2 != request.Height {
-					panic(fmt.Sprintf("noreachable(%d +2 == %d)", lbft.execHeight, request.Height))
-				}
-				lbft.execHeight = request.Height - 1
-				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("size %d", lbft.options.BlockSize))
-				lbft.outputTxs = nil
-				lbft.seqNos = nil
+			if lbft.seqNo < lbft.execSeqNo {
+				lbft.seqNo = lbft.execSeqNo
+			}
+			if lbft.height < request.Height {
+				lbft.height = request.Height
+			}
+			if lbft.execHeight != request.Height {
+				panic(fmt.Sprintf("noreachable(%d +2 == %d)", lbft.execHeight, request.Height))
 			}
 			if lbft.outputTxs.Len() == 0 && lbft.isPrimary() {
 				lbft.blockTimer.Reset(lbft.options.BlockTimeout)
@@ -479,9 +469,9 @@ func (lbft *Lbft) execute() {
 			if request.Func != nil {
 				request.Func(3, request.Txs)
 			}
-			if request.ID == EMPTYREQUEST && len(lbft.outputTxs) > 0 {
-				lbft.execHeight = request.Height
-				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s)", lbft.options.BlockTimeout))
+			if request.ID == EMPTYREQUEST {
+				lbft.execHeight = request.Height + 1
+				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s), block size(%d)", lbft.options.BlockTimeout, lbft.options.BlockSize))
 				lbft.outputTxs = nil
 				lbft.seqNos = nil
 			}

@@ -152,11 +152,7 @@ func (tc *Client) handleConn() {
 				tc.Disconnect()
 				return
 			}
-			if err := tc.handleMsg(tc.conn, tc.SendChannel(), msg); err != nil {
-				logger.Errorf("clinet %s failed to handle msg from server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), err)
-			} else {
-				logger.Debugf("clinet %s handle msg from server %s --- %v", tc.LocalAddr(), tc.RemoteAddr(), msg)
-			}
+			go tc.handleMsg(tc.conn, tc.SendChannel(), msg)
 		}
 	}(ctx)
 }

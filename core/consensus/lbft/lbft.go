@@ -149,20 +149,25 @@ func (lbft *Lbft) Start() {
 				msg = lbft.processConsensusMsg(msg)
 			}
 		case <-lbft.blockTimer.C:
-			if lbft.isPrimary() {
-				req := &Request{
-					ID:     EMPTYREQUEST,
-					Time:   uint32(time.Now().Unix()),
-					Height: lbft.height,
-					Txs:    nil,
-					Func:   nil,
-				}
-				lbft.recvConsensusMsgChan <- &Message{
-					Type:    MESSAGEREQUEST,
-					Payload: utils.Serialize(req),
-				}
-			}
+			lbft.sendEmptyRequest()
 		}
+	}
+}
+
+func (lbft *Lbft) sendEmptyRequest() {
+	if lbft.isPrimary() {
+		req := &Request{
+			ID:     EMPTYREQUEST,
+			Time:   uint32(time.Now().UnixNano()),
+			Height: lbft.height,
+			Txs:    nil,
+			Func:   nil,
+		}
+		// lbft.recvConsensusMsgChan <- &Message{
+		// 	Type:    MESSAGEREQUEST,
+		// 	Payload: utils.Serialize(req),
+		// }
+		lbft.recvRequest(req)
 	}
 }
 
@@ -419,13 +424,13 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 			}
 			if lbft.rvc == nil {
 				lbft.rvc = tvc
-				vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
-					lbft.rvc.ID += ":resend"
-					lbft.rvc.Chain = lbft.options.Chain
-					lbft.rvc.ReplicaID = lbft.options.ID
-					lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
-					lbft.rvc = nil
-				})
+				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
+				lbft.rvc.ID += ":resend"
+				lbft.rvc.Chain = lbft.options.Chain
+				lbft.rvc.ReplicaID = lbft.options.ID
+				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
+				lbft.rvc = nil
+				//})
 			}
 		} else {
 			log.Debugf("Replica %s ViewChange(%s) timeout %s : %d", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, len(vcl.vcs))
@@ -530,9 +535,6 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.execSeqNo = lbft.seqNo
 	lbft.execHeight = lbft.height
 	lbft.cnt = len(lbft.outputTxs)
-	if lbft.cnt > 0 {
-		lbft.height++
-	}
 	delete(lbft.primaryHistory, lbft.primaryID)
 	if lbft.primaryID == lbft.options.ID {
 		lbft.priority = time.Now().UnixNano()
