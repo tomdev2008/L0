@@ -287,6 +287,10 @@ func queryGlobalContract(key string) {
 }
 
 func testSecurityContract() {
+
+	// issue
+	issueTX()
+
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
 
@@ -307,6 +311,6 @@ func testSecurityContract() {
 	execSmartContractTX(globalLua)
 
 	// query
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Second)
 	queryGlobalContract("securityContract")
 }

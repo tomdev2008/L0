@@ -26,7 +26,6 @@ import (
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
-	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -192,12 +191,13 @@ func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 	//handle contract
 	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
 	if err != nil {
-		if err == contract.ErrNoFoundStateData {
-			log.Debugf("not found security contract,default does security contract not take effect ,GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
-			return true
-		}
 		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
 		return false
+	}
+
+	if securityAddr == nil {
+		log.Debugf("not found security contract,default does security contract not take effect ,GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+		return true
 	}
 
 	var f interface{}
