@@ -60,10 +60,13 @@ var (
 type contractLang string
 
 func (lang contractLang) ConvertInitTxType() uint32 {
-	if lang == langLua {
+	switch lang {
+	case langLua:
 		return types.TypeLuaContractInit
+	case langJS:
+		return types.TypeJSContractInit
 	}
-	return types.TypeJSContractInit
+	return 0
 }
 
 const (
@@ -119,12 +122,7 @@ var (
 		nil,
 		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
 
-	securityLua = newContractConf(
-		"./security.lua",
-		langLua,
-		false,
-		nil,
-		nil)
+	securityPath = "./security.so"
 )
 
 func main() {
@@ -286,10 +284,29 @@ func queryGlobalContract(key string) {
 	})
 }
 
-func testSecurityContract() {
+func deploySecurity() {
+	nonce := 3
+	tx := types.NewTransaction(
+		coordinate.NewChainCoordinate(fromChain),
+		coordinate.NewChainCoordinate(toChain),
+		types.TypeSecurity,
+		uint32(nonce),
+		sender,
+		accounts.Address{},
+		0,
+		big.NewInt(0),
+		big.NewInt(0),
+		uint32(time.Now().Unix()),
+	)
 
-	// issue
-	issueTX()
+	tx.Payload, _ = ioutil.ReadFile(securityPath)
+	sig, _ := privkey.Sign(tx.SignHash().Bytes())
+	tx.WithSignature(sig)
+
+	txChan <- tx
+}
+
+func testSecurityContract() {
 
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
@@ -299,14 +316,15 @@ func testSecurityContract() {
 
 	// security contract
 	time.Sleep(1 * time.Second)
-	addr := deploySmartContractTX(securityLua)
+	deploySecurity()
 
+	time.Sleep(1 * time.Second)
 	globalLua := newContractConf(
 		"./global.lua",
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)})
+		[]string{"SetGlobalState", "securityContract", "security.so"})
 	time.Sleep(1 * time.Second)
 	execSmartContractTX(globalLua)
 

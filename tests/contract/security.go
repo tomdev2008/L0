@@ -4,11 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/types"
 )
-
-var zeroAddr = accounts.Address{}
 
 /*
 Verify:
@@ -21,6 +18,9 @@ Verify:
 - 验证转入地址是否可转入
 - 验证转出金额是否超出单笔转账限额
 - 验证转出金额是否超出单日转出限额
+
+build:
+go build -buildmode=plugin -o security.so security.go
 */
 func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) error {
 	if tx == nil {
@@ -42,8 +42,10 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 	}
 
 	// recipient
-	recipient := tx.Recipient()
-	if recipient != zeroAddr {
+	if tx.GetType() != types.TypeJSContractInit && tx.GetType() != types.TypeLuaContractInit &&
+		tx.GetType() != types.TypeContractInvoke && tx.GetType() != types.TypeSecurity {
+
+		recipient := tx.Recipient()
 		recipientAccount, err := getter("account." + recipient.String())
 		if err != nil {
 			return err

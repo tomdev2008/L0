@@ -77,6 +77,7 @@ const (
 	TypeLuaContractInit               // lua contract_Init
 	TypeContractInvoke                // contract_Invoke
 	TypeContractQuery                 // contract_Query
+	TypeSecurity                      // security
 )
 
 // NewTransaction creates an new transaction with the parameters
@@ -165,6 +166,8 @@ func (tx *Transaction) Verfiy() (accounts.Address, error) {
 	case TypeContractInvoke:
 		fallthrough
 	case TypeIssueUpdate:
+		fallthrough
+	case TypeSecurity:
 		fallthrough
 	case TypeIssue:
 		if tx.Data.Signature != nil {

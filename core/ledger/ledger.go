@@ -20,7 +20,9 @@ package ledger
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -354,6 +356,37 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 			}
 			syncTxs = append(syncTxs, tx)
+		case types.TypeSecurity:
+			adminData, err := ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+
+			if len(adminData) == 0 {
+				log.Error("need admin address")
+				continue
+			}
+
+			var adminAddr accounts.Address
+			err = json.Unmarshal(adminData, &adminAddr)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+
+			if tx.Sender() != adminAddr {
+				log.Error("deploy security contract, permission denied")
+				continue
+			}
+
+			// TODO: use correct path.
+			const path = "./datadir/1/node/security.so"
+			err = ioutil.WriteFile(path, tx.Payload, 0644)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
 		default:
 			if err := ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)

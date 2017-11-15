@@ -21,6 +21,7 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"plugin"
 	"strings"
 
 	"github.com/bocheninc/L0/components/log"
@@ -193,34 +194,52 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 }
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
-	//handle contract
-	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
 	if err != nil {
-		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+		log.Errorf("get security contract path failed, %v", err)
 		return false
 	}
 
-	if securityAddr == nil {
-		log.Debugf("not found security contract,default does security contract not take effect ,GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
+	if len(securityPathData) == 0 {
+		log.Warning("there is no security contract yet")
 		return true
 	}
 
-	var f interface{}
-	err = json.Unmarshal(securityAddr, &f)
+	var securityPath string
+	err = json.Unmarshal(securityPathData, &securityPath)
 	if err != nil {
-		log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
+		log.Errorf("unmarshal security contract path failed, %v", err)
 		return false
 	}
 
-	addr := f.(string)
-
-	bh, _ := v.ledger.Height()
-	v.sctx.StartConstract(bh)
-	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
-	v.sctx.StopContract(bh)
-	if ok != true || err != nil {
-		log.Errorf("Security contract fail, err: %+v", err)
+	// TODO: use correct path.
+	security, err := plugin.Open("./datadir/1/node/" + securityPath)
+	if err != nil {
+		log.Errorf("load security contract failed, %v", err)
 		return false
 	}
-	return true
+
+	verifyFn, err := security.Lookup("Verify")
+	if err != nil {
+		log.Errorf("invalid security contract format, %v", err)
+		return false
+	}
+
+	if verifyFn, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error); ok {
+		err := verifyFn(tx, func(key string) ([]byte, error) {
+			data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
+			if err != nil {
+				return nil, err
+			}
+			return data, nil
+		})
+		if err != nil {
+			log.Error(err)
+			return false
+		}
+		return true
+	}
+
+	log.Error("invalid security contract format")
+	return false
 }
