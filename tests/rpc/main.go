@@ -21,6 +21,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -33,9 +34,12 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
+var atmoicPriKeyHex = "396c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
+
 func main() {
+	HttpSend(generateIssueTx())
 	for i := 0; i < 10; i++ {
-		time.Sleep(10)
+		time.Sleep(5 * time.Second)
 		go func() {
 			for j := 0; j < 5; j++ {
 				HttpSend(generateAtomicTx())
@@ -47,10 +51,10 @@ func main() {
 }
 
 func HttpSend(param string) {
-	paramStr := `{"id":1,"chainId":"00","method":"Transaction.Broadcast","params":["` + param + `"]}`
-	req, err := http.NewRequest("POST", "http://127.0.0.1:8989", bytes.NewBufferString(paramStr))
-	// paramStr := `{"id":1,"method":"Transaction.Broadcast","params":["` + param + `"]}`
-	// req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(paramStr))
+	// paramStr := `{"id":1,"chainId":"00","method":"Transaction.Broadcast","params":["` + param + `"]}`
+	// req, err := http.NewRequest("POST", "http://127.0.0.1:8989", bytes.NewBufferString(paramStr))
+	paramStr := `{"id":1,"method":"Transaction.Broadcast","params":["` + param + `"]}`
+	req, err := http.NewRequest("POST", "http://127.0.0.1:8881", bytes.NewBufferString(paramStr))
 	if err != nil {
 		panic(err)
 	}
@@ -74,11 +78,14 @@ func HttpSend(param string) {
 	}
 }
 
-func generateAtomicTx() string {
+func generateIssueTx() string {
 	issuePriKeyHex := "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privateKey, _ := crypto.HexToECDSA(issuePriKeyHex)
-	addr := accounts.HexToAddress("4ce1bb0858e71b50d603ebe4bec95b11d8833e6d")
 	sender := accounts.PublicKeyToAddress(*privateKey.Public())
+
+	atmoicPriKey, _ := crypto.HexToECDSA(atmoicPriKeyHex)
+	addr := accounts.PublicKeyToAddress(*atmoicPriKey.Public())
+
 	tx := types.NewTransaction(
 		coordinate.HexToChainCoordinate("00"),
 		coordinate.HexToChainCoordinate("00"),
@@ -86,11 +93,45 @@ func generateAtomicTx() string {
 		0,
 		sender,
 		addr,
-		big.NewInt(1000),
-		big.NewInt(1),
+		0,
+		big.NewInt(10e11),
+		big.NewInt(0),
 		uint32(time.Now().Nanosecond()),
 	)
+
+	issueCoin := make(map[string]interface{})
+	issueCoin["id"] = 0
+	tx.Payload, _ = json.Marshal(issueCoin)
+
 	sig, _ := privateKey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
+
+	log.Print(tx.Hash())
+	return hex.EncodeToString(tx.Serialize())
+}
+
+func generateAtomicTx() string {
+	atmoicPriKey, _ := crypto.HexToECDSA(atmoicPriKeyHex)
+	sender := accounts.PublicKeyToAddress(*atmoicPriKey.Public())
+
+	privateKey, _ := crypto.GenerateKey()
+	addr := accounts.PublicKeyToAddress(*privateKey.Public())
+	tx := types.NewTransaction(
+		coordinate.HexToChainCoordinate("00"),
+		coordinate.HexToChainCoordinate("00"),
+		uint32(0),
+		0,
+		sender,
+		addr,
+		0,
+		big.NewInt(1000),
+		big.NewInt(0),
+		uint32(time.Now().Nanosecond()),
+	)
+
+	sig, _ := atmoicPriKey.Sign(tx.SignHash().Bytes())
+	tx.WithSignature(sig)
+
+	log.Print(tx.Hash())
 	return hex.EncodeToString(tx.Serialize())
 }

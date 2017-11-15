@@ -151,12 +151,13 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		}
 	})
 
-	*reply = BroadcastReply{Result: &result, TransactionHash: tx.Hash()}
-
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
-		*reply.ContractAddr = utils.BytesToHex(contractSpec.ContractAddr)
+		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
+		*reply = BroadcastReply{Result: &result, ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
+	} else {
+		*reply = BroadcastReply{Result: &result, TransactionHash: tx.Hash()}
 	}
 
 	<-ch

@@ -52,7 +52,7 @@ var (
 
 // PreExecute execute contract but not commit change(balances and state)
 func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
-	ret, err := execute(tx, cs, handler, false)
+	ret, err := execute(tx, cs, handler, tx.GetType(), false)
 	if err != nil {
 		return false, err
 	}
@@ -61,16 +61,24 @@ func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartCon
 
 // RealExecute execute contract and commit change(balances and state)
 func RealExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
-	ret, err := execute(tx, cs, handler, true)
+	ret, err := execute(tx, cs, handler, tx.GetType(), true)
 	if err != nil {
 		return false, err
 	}
+	return ret.(bool), err
+}
 
+func RealExecuteRequire(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
+	ret, err := execute(tx, cs, handler, types.TypeContractInvoke, true)
+	if err != nil {
+		return false, err
+	}
 	return ret.(bool), err
 }
 
 func Query(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) ([]byte, error) {
-	ret, err := execute(tx, cs, handler, true)
+
+	ret, err := execute(tx, cs, handler, tx.GetType(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +86,9 @@ func Query(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstrac
 	return ret.([]byte), err
 }
 
-func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract, realExec bool) (interface{}, error) {
+func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract, executeAction uint32, realExec bool) (interface{}, error) {
 
-	contractCode, contractType, err := getContractCode(cs, tx.GetType(), handler)
+	contractCode, contractType, err := getContractCode(cs, executeAction, handler)
 	if err != nil {
 		return false, err
 	}
@@ -101,7 +109,7 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstr
 
 	cd := NewContractData(tx, cs, contractCode)
 
-	switch tx.GetType() {
+	switch executeAction {
 	case types.TypeJSContractInit:
 		if realExec {
 			if len(cs.ContractAddr) == 0 {
