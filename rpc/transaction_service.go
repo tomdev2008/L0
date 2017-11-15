@@ -26,6 +26,7 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/blockchain"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -112,6 +113,7 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 }
 
 type BroadcastReply struct {
+	Result          *string     `json:"result"`
 	ContractAddr    *string     `json:"contractAddr"`
 	TransactionHash crypto.Hash `json:"transactionHash"`
 }
@@ -129,7 +131,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	if tx.Fee() == nil || tx.Fee().Sign() < 0 {
-		return errors.New("Invalid Fee in Tx, Fee must be >0")
+		return errors.New("Invalid Fee in Tx, Fee must bigger than 0")
 	}
 
 	_, err := tx.Verfiy()
@@ -137,17 +139,27 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errors.New("Invalid Tx, varify the signature of Tx failed")
 	}
 
+	ch := make(chan struct{}, 1)
 	t.pmHander.Relay(tx)
+	result := "Success"
+	blockchain.Register(tx.Hash(), func(iTx interface{}) {
+		ch <- struct{}{}
+		if iTx != nil {
+			if s, ok := iTx.(string); ok {
+				result = s
+			}
+		}
+	})
+
+	*reply = BroadcastReply{Result: &result, TransactionHash: tx.Hash()}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
-		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
-		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
-		return nil
+		*reply.ContractAddr = utils.BytesToHex(contractSpec.ContractAddr)
 	}
-	*reply = BroadcastReply{TransactionHash: tx.Hash()}
 
+	<-ch
 	return nil
 }
 

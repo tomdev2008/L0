@@ -73,10 +73,10 @@ func (this *Options) Hash() string {
 	opt.Q = this.Q
 	opt.K = this.K
 
-	opt.BatchSize = this.BatchSize
-	opt.BatchTimeout = this.BatchTimeout
-	opt.BlockSize = this.BlockSize
-	opt.BlockTimeout = this.BlockTimeout
+	// opt.BatchSize = this.BatchSize
+	// opt.BatchTimeout = this.BatchTimeout
+	// opt.BlockSize = this.BlockSize
+	// opt.BlockTimeout = this.BlockTimeout
 	opt.Request = this.Request
 	opt.BufferSize = this.BufferSize
 

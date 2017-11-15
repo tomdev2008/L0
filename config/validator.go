@@ -20,6 +20,7 @@ package config
 
 import (
 	"github.com/bocheninc/L0/core/blockchain/validator"
+	"github.com/spf13/viper"
 )
 
 func ValidatorConfig() *validator.Config {
@@ -29,6 +30,8 @@ func ValidatorConfig() *validator.Config {
 	config.BlacklistDur = getDuration("validator.blacklisttimeout", config.BlacklistDur)
 	config.TxPoolCapacity = getInt("validator.txpool.capacity", config.TxPoolCapacity)
 	config.TxPoolTimeOut = getDuration("validator.txpool.timeout", config.TxPoolTimeOut)
-	config.TxPoolDelay = getInt("validator.txpool.txdelay", config.TxPoolDelay)
+	if value := viper.GetInt("validator.txpool.txdelay"); value >= 0 {
+		config.TxPoolDelay = value
+	}
 	return config
 }

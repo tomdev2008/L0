@@ -47,6 +47,7 @@ type Validator interface {
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
+	SetNotify(func(*types.Transaction, string))
 }
 
 type Verification struct {
@@ -63,6 +64,7 @@ type Verification struct {
 	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
+	notify             func(*types.Transaction, string)
 	sync.RWMutex
 	sctx *contract.SmartConstract
 }
@@ -97,7 +99,7 @@ func (v *Verification) makeRequestBatch() types.Transactions {
 		if to == "" {
 			to = tx.ToChain()
 		}
-		if tx.ToChain() == to && len(requestBatch) < v.consenter.BatchSize() {
+		if tx.ToChain() == to && len(requestBatch) <= v.consenter.BatchSize() {
 			requestBatch = append(requestBatch, tx)
 		} else {
 			return true
@@ -121,7 +123,7 @@ func (v *Verification) processLoop() {
 			}
 			v.rwBlacklist.Unlock()
 		case cnt := <-v.requestBatchSignal:
-			if cnt > (v.config.TxPoolDelay + v.consenter.BatchSize()) {
+			if cnt >= (v.config.TxPoolDelay + v.consenter.BatchSize()) {
 				requestBatch := v.makeRequestBatch()
 				log.Debugf("request Batch: %d ", len(requestBatch))
 				v.consenter.ProcessBatch(requestBatch, v.consensusFailed)
@@ -180,6 +182,7 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		for _, tx := range txs {
 			v.RollBackAccount(tx)
 			v.txpool.Add(tx)
+			v.notify(tx, "consensus failed & verified")
 		}
 	// consensus succeed
 	case 3:
@@ -205,6 +208,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
+				v.notify(tx, "illegal")
 				return false, nil
 			}
 			if !v.checkTransactionSecurity(tx) {
@@ -212,6 +216,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
+				v.notify(tx, "illegal")
 				return false, nil
 			}
 		}
@@ -294,6 +299,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
+			v.notify(tx, "balance is negative")
 			if primary {
 				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				delete(v.inTxs, tx.Hash())
@@ -425,4 +431,8 @@ func (v *Verification) GetAsset(id uint32) *state.Asset {
 	defer v.rwAccount.Unlock()
 	asset, _ := v.assets[id]
 	return asset
+}
+
+func (v *Verification) SetNotify(callback func(*types.Transaction, string)) {
+	v.notify = callback
 }

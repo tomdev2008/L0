@@ -16,18 +16,18 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package config
+package lcnd
 
-import (
-	"github.com/bocheninc/L0/rpc"
-	"github.com/spf13/viper"
-)
+import "time"
 
-func JrpcConfig() *rpc.Option {
-	option := rpc.NewDefaultOption()
-	option.Enabled = viper.GetBool("jrpc.enabled")
-	option.Port = getString("jrpc.port", option.Port)
-	option.User = getString("jrpc.user", option.User)
-	option.PassWord = getString("jrpc.password", option.PassWord)
-	return option
+var monitor *Lcnd
+
+func monitorStart() {
+	if monitor == nil {
+		return
+	}
+}
+
+func viewChangeTime() time.Duration {
+	return time.Nanosecond
 }
