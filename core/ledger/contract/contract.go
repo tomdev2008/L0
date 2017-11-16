@@ -79,6 +79,14 @@ func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) 
 	return sctx
 }
 
+func (sctx *SmartConstract) GetColumnFamily() string {
+	if params.Nvp {
+		return sctx.scAddr
+	}
+
+	return sctx.columnFamily
+}
+
 // StartConstract start constract
 func (sctx *SmartConstract) StartConstract(blockHeight uint32) {
 	log.Debugf("startConstract() for blockHeight [%d]", blockHeight)
@@ -105,6 +113,9 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
+	if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
+		//register column
+	}
 }
 
 // GetGlobalState returns the global state.
@@ -210,7 +221,7 @@ func (sctx *SmartConstract) GetStateInOneAddr(scAddr, key string) ([]byte, error
 		var err error
 		scAddrkey := EnSmartContractKey(scAddr, key)
 		log.Debugf("sctx.scAddr: %s,%s,%s", scAddr, key, scAddrkey)
-		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
+		value, err = sctx.dbHandler.Get(sctx.GetColumnFamily(), []byte(scAddrkey))
 		if err != nil {
 			return nil, fmt.Errorf("can't get data from db err: %v", err)
 		}
@@ -244,7 +255,7 @@ func (sctx *SmartConstract) GetByPrefix(prefix string) []*db.KeyValue {
 	}
 	scAddrkey := EnSmartContractKey(sctx.scAddr, prefix)
 	cacheValues := sctx.stateExtra.getByPrefix(sctx.scAddr, prefix)
-	dbValues := sctx.dbHandler.GetByPrefix(sctx.columnFamily, []byte(scAddrkey))
+	dbValues := sctx.dbHandler.GetByPrefix(sctx.GetColumnFamily(), []byte(scAddrkey))
 
 	return sctx.getKeyValues(cacheValues, dbValues)
 }
@@ -257,7 +268,7 @@ func (sctx *SmartConstract) GetByRange(startKey, limitKey string) []*db.KeyValue
 	scAddrStartKey := EnSmartContractKey(sctx.scAddr, startKey)
 	scAddrlimitKey := EnSmartContractKey(sctx.scAddr, limitKey)
 	cacheValues := sctx.stateExtra.getByRange(sctx.scAddr, startKey, limitKey)
-	dbValues := sctx.dbHandler.GetByRange(sctx.columnFamily, []byte(scAddrStartKey), []byte(scAddrlimitKey))
+	dbValues := sctx.dbHandler.GetByRange(sctx.GetColumnFamily(), []byte(scAddrStartKey), []byte(scAddrlimitKey))
 
 	return sctx.getKeyValues(cacheValues, dbValues)
 }
@@ -340,10 +351,10 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 			cv.deserialize(value)
 			if cv.Optype == db.OperationDelete {
 				log.Debugln("Contract Del: ", string(key), string(cv.Value))
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationDelete, key, cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.GetColumnFamily(), db.OperationDelete, key, cv.Value))
 			} else if cv.Optype == db.OperationPut {
 				log.Debugln("Contract Put: ", string(key), string(cv.Value))
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationPut, key, cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.GetColumnFamily(), db.OperationPut, key, cv.Value))
 			} else {
 				log.Errorf("invalid method ...")
 			}

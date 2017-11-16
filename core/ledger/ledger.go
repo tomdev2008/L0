@@ -28,6 +28,7 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -59,6 +60,8 @@ type Ledger struct {
 	storage   *merge.Storage
 	contract  *contract.SmartConstract
 	Validator ValidatorHandler
+	mdb       *mongodb.Mdb
+	mdbChan   chan []*db.WriteBatch
 }
 
 // NewLedger returns the ledger instance
@@ -77,11 +80,25 @@ func NewLedger(db *db.BlockchainDB) *Ledger {
 	}
 
 	ledgerInstance.contract = contract.NewSmartConstract(db, ledgerInstance)
+	if params.Nvp {
+		ledgerInstance.mdb = mongodb.MongDB()
+		go ledgerInstance.PutIntoMongoDB()
+	}
 	return ledgerInstance
 }
 
 func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
+}
+
+func (ledger *Ledger) PutIntoMongoDB() {
+	for {
+		select {
+		case batch := <-ledger.mdbChan:
+			batch = batch
+			//handler batch
+		}
+	}
 }
 
 // VerifyChain verifys the blockchain data
@@ -136,6 +153,9 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
 	if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
 		return err
+	}
+	if params.Nvp {
+		ledger.mdbChan <- writeBatchs
 	}
 
 	ledger.Validator.RemoveTxsInVerification(block.Transactions)
