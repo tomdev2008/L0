@@ -20,6 +20,7 @@ package validator
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sync"
 	"time"
@@ -229,6 +230,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 		if tx.GetType() != types.TypeIssue {
 			if asset == nil {
+				v.notify(tx, "asset id not exist")
 				if primary {
 					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
@@ -244,6 +246,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			} else if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
+					v.notify(tx, fmt.Sprintf("asset %s", err))
 					if primary {
 						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						delete(v.inTxs, tx.Hash())
@@ -254,6 +257,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 						for _, rollbackTx := range ttxs {
 							v.rollBackAccount(rollbackTx)
 						}
+
 						return false, nil
 					}
 				}
@@ -268,6 +272,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
+					v.notify(tx, fmt.Sprintf("asset %s", err))
 					if primary {
 						log.Warnf("[validator] issue asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						delete(v.inTxs, tx.Hash())
@@ -283,6 +288,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				v.assets[assetID] = newAsset
 			} else {
+				v.notify(tx, "asset id alreay exist")
 				if primary {
 					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
