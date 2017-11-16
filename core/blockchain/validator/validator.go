@@ -48,6 +48,7 @@ type Validator interface {
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
 	SetNotify(func(*types.Transaction, string))
+	SecurityPluginDir() string
 }
 
 type Verification struct {
@@ -208,6 +209,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
+				v.notify(tx, "illegal")
 				return false, nil
 			}
 			if !v.checkTransactionSecurity(tx) {
@@ -215,6 +217,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
+				v.notify(tx, "illegal")
 				return false, nil
 			}
 		}

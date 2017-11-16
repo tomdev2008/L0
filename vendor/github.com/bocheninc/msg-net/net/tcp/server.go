@@ -230,10 +230,7 @@ func (cc *ClientConn) handleConn(c context.Context) {
 
 			logger.Debugf("server %s receive msg success from client %s.", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String())
 
-			if err := cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg); err != nil {
-				logger.Errorf("server %s failed to handle msg from client %s --- %v", cc.conn.LocalAddr().String(), cc.conn.RemoteAddr().String(), err)
-			}
-
+			go cc.ts.handleMsg(cc.conn, cc.SendChannel(), msg)
 		}
 	}(ctx)
 }

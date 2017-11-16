@@ -21,12 +21,14 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
+	"plugin"
 	"strings"
+	"sync"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
-	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -193,34 +195,121 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 	return true
 }
 
+// SecurityPluginDir returns the directory of security plugin.
+func (v *Verification) SecurityPluginDir() string {
+	return v.config.SecurityPluginDir
+}
+
+// SecurityVerifier is the security plugin verifier.
+type SecurityVerifier func(*types.Transaction, func(key string) ([]byte, error)) error
+
+// SecurityVerifierManager managers the security plugin verifier.
+type SecurityVerifierManager struct {
+	sync.Mutex
+	securityPath string
+	verifier     SecurityVerifier
+}
+
+var securityVerifierMnger SecurityVerifierManager
+
+func (v *Verification) getSecurityVerifier() SecurityVerifier {
+	securityVerifierMnger.Lock()
+	defer securityVerifierMnger.Unlock()
+
+	securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	if err != nil {
+		log.Errorf("get security plugin path failed, %v", err)
+		return nil
+	}
+
+	if len(securityPathData) == 0 {
+		log.Info("there is no security plugin yet")
+		return nil
+	}
+
+	var securityPath string
+	err = json.Unmarshal(securityPathData, &securityPath)
+	if err != nil {
+		log.Errorf("unmarshal security plugin path failed, %v", err)
+		return nil
+	}
+
+	if securityPath == securityVerifierMnger.securityPath {
+		return securityVerifierMnger.verifier
+	}
+
+	security, err := plugin.Open(filepath.Join(v.SecurityPluginDir(), securityPath))
+	if err != nil {
+		log.Errorf("load security plugin failed, %v", err)
+		return nil
+	}
+
+	verifyFn, err := security.Lookup("Verify")
+	if err != nil {
+		log.Errorf("can't find security plugin verifier, %v", err)
+		return nil
+	}
+
+	verifier, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error)
+	if !ok {
+		log.Error("invalid security plugin verifier format")
+		return nil
+	}
+
+	securityVerifierMnger.verifier = SecurityVerifier(verifier)
+	securityVerifierMnger.securityPath = securityPath
+	return securityVerifierMnger.verifier
+}
+
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
-	//handle contract
-	securityAddr, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
-	if err != nil {
-		if err == contract.ErrNoFoundStateData {
-			log.Debugf("not found security contract,default does security contract not take effect ,GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
-			return true
+	verifier := v.getSecurityVerifier()
+	if verifier == nil {
+		return true
+	}
+
+	err := verifier(tx, func(key string) ([]byte, error) {
+		data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
+		if err != nil {
+			return nil, err
 		}
-		log.Errorf("unknown security contract, GlobalKey: %+v, SecurityKey: %+v, err: %+v", params.GlobalStateKey, params.SecurityContractKey, err)
-		return false
-	}
-
-	var f interface{}
-	err = json.Unmarshal(securityAddr, &f)
+		return data, nil
+	})
 	if err != nil {
-		log.Errorf("checkTransactionSecurity src data: %+v, json unmarshal err: %+v", securityAddr, err)
+		log.Error(err)
 		return false
 	}
 
-	addr := f.(string)
+	return true
+}
+
+func (v *Verification) checkTransactionSecurityByContract(tx *types.Transaction) bool {
+	securityAddrData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	if err != nil {
+		log.Errorf("get security contract address failed, %v", err)
+		return true
+	}
+
+	if len(securityAddrData) == 0 {
+		log.Info("there is no security contract yet")
+		return true
+	}
+
+	var addr string
+	err = json.Unmarshal(securityAddrData, &addr)
+	if err != nil {
+		log.Errorf("unmarshal security contract address failed, %v", err)
+		return true
+	}
 
 	bh, _ := v.ledger.Height()
 	v.sctx.StartConstract(bh)
 	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
 	v.sctx.StopContract(bh)
-	if ok != true || err != nil {
-		log.Errorf("Security contract fail, err: %+v", err)
-		return false
+
+	if err != nil {
+		log.Errorf("execute security contract failed, %v", err)
+		return true
 	}
-	return true
+
+	return ok
 }

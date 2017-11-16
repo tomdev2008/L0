@@ -21,13 +21,14 @@ package validator
 import "time"
 
 type Config struct {
-	IsValid        bool
-	TxPoolCapacity int
-	TxPoolDelay    int
-	MaxWorker      int
-	MaxQueue       int
-	TxPoolTimeOut  time.Duration
-	BlacklistDur   time.Duration
+	IsValid           bool
+	TxPoolCapacity    int
+	TxPoolDelay       int
+	MaxWorker         int
+	MaxQueue          int
+	TxPoolTimeOut     time.Duration
+	BlacklistDur      time.Duration
+	SecurityPluginDir string
 }
 
 func DefaultConfig() *Config {

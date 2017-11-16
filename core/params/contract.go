@@ -10,6 +10,6 @@ const (
 	// GlobalContractKey is the key of global contract.
 	GlobalContractKey = "globalContract"
 
-	// SecurityContractKey is the key of security contract address.
+	// SecurityContractKey is the key of security plugin name / security contract address.
 	SecurityContractKey = "securityContract"
 )

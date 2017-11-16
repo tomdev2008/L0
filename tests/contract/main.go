@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -60,10 +61,13 @@ var (
 type contractLang string
 
 func (lang contractLang) ConvertInitTxType() uint32 {
-	if lang == langLua {
+	switch lang {
+	case langLua:
 		return types.TypeLuaContractInit
+	case langJS:
+		return types.TypeJSContractInit
 	}
-	return types.TypeJSContractInit
+	return 0
 }
 
 const (
@@ -119,12 +123,7 @@ var (
 		nil,
 		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
 
-	securityLua = newContractConf(
-		"./security.lua",
-		langLua,
-		false,
-		nil,
-		nil)
+	securityPluginName = "security.so"
 )
 
 func main() {
@@ -286,7 +285,35 @@ func queryGlobalContract(key string) {
 	})
 }
 
+func deploySecurity() {
+	nonce := 3
+	tx := types.NewTransaction(
+		coordinate.NewChainCoordinate(fromChain),
+		coordinate.NewChainCoordinate(toChain),
+		types.TypeSecurity,
+		uint32(nonce),
+		sender,
+		accounts.Address{},
+		0,
+		big.NewInt(0),
+		big.NewInt(0),
+		uint32(time.Now().Unix()),
+	)
+
+	var pluginData plugins.Plugin
+	pluginData.Name = securityPluginName
+	pluginData.Code, _ = ioutil.ReadFile("./" + securityPluginName)
+	tx.Payload = pluginData.Bytes()
+
+	sig, _ := privkey.Sign(tx.SignHash().Bytes())
+	tx.WithSignature(sig)
+
+	txChan <- tx
+}
+
 func testSecurityContract() {
+	// issueTX()
+
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
 
@@ -295,18 +322,20 @@ func testSecurityContract() {
 
 	// security contract
 	time.Sleep(1 * time.Second)
-	addr := deploySmartContractTX(securityLua)
+	deploySecurity()
 
+	time.Sleep(1 * time.Second)
 	globalLua := newContractConf(
 		"./global.lua",
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "securityContract", utils.BytesToHex(addr)})
-	time.Sleep(1 * time.Second)
+		[]string{"SetGlobalState", "securityContract", "security.so"})
 	execSmartContractTX(globalLua)
 
 	// query
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	queryGlobalContract("securityContract")
+
+	time.Sleep(3 * time.Second)
 }

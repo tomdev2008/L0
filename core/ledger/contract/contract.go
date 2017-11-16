@@ -44,8 +44,6 @@ const (
 	permissionPrefix = "permission."
 )
 
-var ErrNoFoundStateData = errors.New("no found state data from db.")
-
 type ILedgerSmartContract interface {
 	GetTmpBalance(addr accounts.Address) (*state.Balance, error)
 	Height() (uint32, error)
@@ -213,8 +211,8 @@ func (sctx *SmartConstract) GetStateInOneAddr(scAddr, key string) ([]byte, error
 		scAddrkey := EnSmartContractKey(scAddr, key)
 		log.Debugf("sctx.scAddr: %s,%s,%s", scAddr, key, scAddrkey)
 		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
-		if err != nil || len(value) == 0 {
-			return nil, fmt.Errorf("can't get date from db %s", err)
+		if err != nil {
+			return nil, fmt.Errorf("can't get data from db err: %v", err)
 		}
 	}
 
@@ -359,7 +357,7 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 func (sctx *SmartConstract) GetContractStateData(scAddr string, key string) ([]byte, error) {
 	srcValue, err := sctx.GetStateInOneAddr(scAddr, key)
 	if err != nil {
-		return nil, ErrNoFoundStateData
+		return nil, err
 	}
 
 	value, err := DoContractStateData(srcValue)
@@ -375,7 +373,6 @@ func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
-
 	_, err := vm.RealExecute(tx, contractSpec, sctx)
 	if err != nil {
 		return nil, fmt.Errorf("contract execute failed : %v ", err)
@@ -395,7 +392,7 @@ func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr
 	contractSpec.ContractAddr = utils.HexToBytes(scAddr)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
 
-	ok, err := vm.RealExecute(tx, contractSpec, sctx)
+	ok, err := vm.RealExecuteRequire(tx, contractSpec, sctx)
 	if err != nil {
 		return ok, fmt.Errorf("contract execute failed : %v ", err)
 	}
@@ -410,7 +407,7 @@ func (sctx *SmartConstract) QueryContract(tx *types.Transaction) ([]byte, error)
 
 	result, err := vm.Query(tx, contractSpec, sctx)
 	if err != nil {
-		log.Error("contract query execute failed  ", err)
+		log.Errorf("contract query execute failed: %v ", err)
 		return nil, fmt.Errorf("contract query execute failed : %v ", err)
 	}
 	return result, nil
