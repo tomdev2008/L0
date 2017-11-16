@@ -232,6 +232,12 @@ func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
 		}
 		return vmproc.L0Handler.GetState(key)
 
+	case "ComplexQuery":
+		var key string
+		if err := req.DecodeParams(&key); err != nil {
+			return nil, err
+		}
+		return vmproc.L0Handler.ComplexQuery(key)
 	case "PutState":
 		var key string
 		var value []byte

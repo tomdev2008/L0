@@ -1,9 +1,10 @@
 package vm
 
 import (
+	"math/big"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/ledger/state"
-	"math/big"
 )
 
 type ISmartConstract interface {
@@ -11,6 +12,7 @@ type ISmartConstract interface {
 	SetGlobalState(key string, value []byte) error
 	DelGlobalState(key string) error
 
+	ComplexQuery(key string) ([]byte, error)
 	GetState(key string) ([]byte, error)
 	AddState(key string, value []byte)
 	DelState(key string)

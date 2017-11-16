@@ -206,6 +206,13 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 	return nil
 }
 
+func (sctx *SmartConstract) ComplexQuery(key string) ([]byte, error) {
+	if !params.Nvp {
+		return nil, errors.New("vp can't support complex qery")
+	}
+	return nil, nil
+}
+
 // GetState get value
 func (sctx *SmartConstract) GetState(key string) ([]byte, error) {
 	if !sctx.InProgress() {

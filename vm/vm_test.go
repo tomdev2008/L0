@@ -98,6 +98,11 @@ func (hd *L0Handler) GetState(key string) ([]byte, error) {
 	return nil, nil
 }
 
+func (hd *L0Handler) ComplexQuery(key string) ([]byte, error) {
+
+	return nil, nil
+}
+
 func (hd *L0Handler) AddState(key string, value []byte) {
 
 }
