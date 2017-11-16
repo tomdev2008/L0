@@ -200,10 +200,10 @@ func (v *Verification) SecurityPluginDir() string {
 	return v.config.SecurityPluginDir
 }
 
-// SecurityVerifier is the security contract verifier.
+// SecurityVerifier is the security plugin verifier.
 type SecurityVerifier func(*types.Transaction, func(key string) ([]byte, error)) error
 
-// SecurityVerifierManager managers the security contract verifier.
+// SecurityVerifierManager managers the security plugin verifier.
 type SecurityVerifierManager struct {
 	sync.Mutex
 	securityPath string
@@ -218,19 +218,19 @@ func (v *Verification) getSecurityVerifier() SecurityVerifier {
 
 	securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
 	if err != nil {
-		log.Errorf("get security contract path failed, %v", err)
+		log.Errorf("get security plugin path failed, %v", err)
 		return nil
 	}
 
 	if len(securityPathData) == 0 {
-		log.Warning("there is no security contract yet")
+		log.Info("there is no security plugin yet")
 		return nil
 	}
 
 	var securityPath string
 	err = json.Unmarshal(securityPathData, &securityPath)
 	if err != nil {
-		log.Errorf("unmarshal security contract path failed, %v", err)
+		log.Errorf("unmarshal security plugin path failed, %v", err)
 		return nil
 	}
 
@@ -240,19 +240,19 @@ func (v *Verification) getSecurityVerifier() SecurityVerifier {
 
 	security, err := plugin.Open(filepath.Join(v.SecurityPluginDir(), securityPath))
 	if err != nil {
-		log.Errorf("load security contract failed, %v", err)
+		log.Errorf("load security plugin failed, %v", err)
 		return nil
 	}
 
 	verifyFn, err := security.Lookup("Verify")
 	if err != nil {
-		log.Errorf("can't find security contract verifier, %v", err)
+		log.Errorf("can't find security plugin verifier, %v", err)
 		return nil
 	}
 
 	verifier, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error)
 	if !ok {
-		log.Error("invalid security contract verifier format")
+		log.Error("invalid security plugin verifier format")
 		return nil
 	}
 
@@ -280,4 +280,36 @@ func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 	}
 
 	return true
+}
+
+func (v *Verification) checkTransactionSecurityByContract(tx *types.Transaction) bool {
+	securityAddrData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	if err != nil {
+		log.Errorf("get security contract address failed, %v", err)
+		return true
+	}
+
+	if len(securityAddrData) == 0 {
+		log.Info("there is no security contract yet")
+		return true
+	}
+
+	var addr string
+	err = json.Unmarshal(securityAddrData, &addr)
+	if err != nil {
+		log.Errorf("unmarshal security contract address failed, %v", err)
+		return true
+	}
+
+	bh, _ := v.ledger.Height()
+	v.sctx.StartConstract(bh)
+	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
+	v.sctx.StopContract(bh)
+
+	if err != nil {
+		log.Errorf("execute security contract failed, %v", err)
+		return true
+	}
+
+	return ok
 }
