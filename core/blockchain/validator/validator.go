@@ -48,6 +48,7 @@ type Validator interface {
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
 	SetNotify(func(*types.Transaction, string))
+	SecurityPluginDir() string
 }
 
 type Verification struct {

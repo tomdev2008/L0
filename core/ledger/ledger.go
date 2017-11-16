@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"path/filepath"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
@@ -47,6 +48,7 @@ type ValidatorHandler interface {
 	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
+	SecurityPluginDir() string
 }
 
 // Ledger represents the ledger in blockchain
@@ -380,8 +382,13 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				continue
 			}
 
-			// TODO: use correct path.
-			const path = "./datadir/1/node/security.so"
+			pluginName := "security.so"
+			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginName)
+			if utils.FileExist(path) {
+				log.Errorf("security contract %s already existed", pluginName)
+				continue
+			}
+
 			err = ioutil.WriteFile(path, tx.Payload, 0644)
 			if err != nil {
 				log.Error(err)

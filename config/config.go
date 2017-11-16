@@ -41,6 +41,7 @@ const (
 	defaultKeyStoreDirname  = "keystore"
 	defaultNodeDirname      = "node"
 	defaultNodeKeyFilename  = "nodekey"
+	defaultPluginDirname    = "plugin"
 	defaultMaxPeers         = 8
 )
 
@@ -64,6 +65,7 @@ type Config struct {
 	LogDir      string
 	NodeDir     string
 	KeyStoreDir string
+	PluginDir   string
 
 	// file
 	PeersFile  string
@@ -135,6 +137,7 @@ func loadConfig(cfgFile string) (conf *Config, err error) {
 	cfg.LogDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultLogDirname))
 	cfg.KeyStoreDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultKeyStoreDirname))
 	cfg.NodeDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultNodeDirname))
+	cfg.PluginDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultPluginDirname))
 
 	/*set chainid from config file just for test*/
 	cfg.readParamConfig()

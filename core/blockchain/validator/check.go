@@ -21,8 +21,10 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"plugin"
 	"strings"
+	"sync"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
@@ -193,53 +195,89 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 	return true
 }
 
-func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
+// SecurityPluginDir returns the directory of security plugin.
+func (v *Verification) SecurityPluginDir() string {
+	return v.config.SecurityPluginDir
+}
+
+// SecurityVerifier is the security contract verifier.
+type SecurityVerifier func(*types.Transaction, func(key string) ([]byte, error)) error
+
+// SecurityVerifierManager managers the security contract verifier.
+type SecurityVerifierManager struct {
+	sync.Mutex
+	securityPath string
+	verifier     SecurityVerifier
+}
+
+var securityVerifierMnger SecurityVerifierManager
+
+func (v *Verification) getSecurityVerifier() SecurityVerifier {
+	securityVerifierMnger.Lock()
+	defer securityVerifierMnger.Unlock()
+
 	securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
 	if err != nil {
 		log.Errorf("get security contract path failed, %v", err)
-		return false
+		return nil
 	}
 
 	if len(securityPathData) == 0 {
 		log.Warning("there is no security contract yet")
-		return true
+		return nil
 	}
 
 	var securityPath string
 	err = json.Unmarshal(securityPathData, &securityPath)
 	if err != nil {
 		log.Errorf("unmarshal security contract path failed, %v", err)
-		return false
+		return nil
 	}
 
-	// TODO: use correct path.
-	security, err := plugin.Open("./datadir/1/node/" + securityPath)
+	if securityPath == securityVerifierMnger.securityPath {
+		return securityVerifierMnger.verifier
+	}
+
+	security, err := plugin.Open(filepath.Join(v.SecurityPluginDir(), securityPath))
 	if err != nil {
 		log.Errorf("load security contract failed, %v", err)
-		return false
+		return nil
 	}
 
 	verifyFn, err := security.Lookup("Verify")
 	if err != nil {
-		log.Errorf("invalid security contract format, %v", err)
-		return false
+		log.Errorf("can't find security contract verifier, %v", err)
+		return nil
 	}
 
-	if verifyFn, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error); ok {
-		err := verifyFn(tx, func(key string) ([]byte, error) {
-			data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
-			if err != nil {
-				return nil, err
-			}
-			return data, nil
-		})
-		if err != nil {
-			log.Error(err)
-			return false
-		}
+	verifier, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error)
+	if !ok {
+		log.Error("invalid security contract verifier format")
+		return nil
+	}
+
+	securityVerifierMnger.verifier = SecurityVerifier(verifier)
+	securityVerifierMnger.securityPath = securityPath
+	return securityVerifierMnger.verifier
+}
+
+func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
+	verifier := v.getSecurityVerifier()
+	if verifier == nil {
 		return true
 	}
 
-	log.Error("invalid security contract format")
-	return false
+	err := verifier(tx, func(key string) ([]byte, error) {
+		data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
+		if err != nil {
+			return nil, err
+		}
+		return data, nil
+	})
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	return true
 }

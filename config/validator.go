@@ -23,7 +23,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-func ValidatorConfig() *validator.Config {
+func ValidatorConfig(pluginDir string) *validator.Config {
 	var config = validator.DefaultConfig()
 
 	config.IsValid = getbool("validator.status", config.IsValid)
@@ -33,5 +33,6 @@ func ValidatorConfig() *validator.Config {
 	if value := viper.GetInt("validator.txpool.txdelay"); value >= 0 {
 		config.TxPoolDelay = value
 	}
+	config.SecurityPluginDir = pluginDir
 	return config
 }
