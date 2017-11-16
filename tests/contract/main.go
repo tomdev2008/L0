@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -122,7 +123,7 @@ var (
 		nil,
 		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
 
-	securityPath = "./security.so"
+	securityPluginName = "security.so"
 )
 
 func main() {
@@ -299,7 +300,11 @@ func deploySecurity() {
 		uint32(time.Now().Unix()),
 	)
 
-	tx.Payload, _ = ioutil.ReadFile(securityPath)
+	var pluginData plugins.Plugin
+	pluginData.Name = securityPluginName
+	pluginData.Code, _ = ioutil.ReadFile("./" + securityPluginName)
+	tx.Payload = pluginData.Bytes()
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 
@@ -307,6 +312,8 @@ func deploySecurity() {
 }
 
 func testSecurityContract() {
+	// issueTX()
+
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
 
@@ -327,7 +334,7 @@ func testSecurityContract() {
 	execSmartContractTX(globalLua)
 
 	// query
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	queryGlobalContract("securityContract")
 
 	time.Sleep(3 * time.Second)
