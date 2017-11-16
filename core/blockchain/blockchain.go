@@ -28,9 +28,8 @@ import (
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
-	"github.com/bocheninc/L0/core/ledger/state"
-
 	"github.com/bocheninc/L0/core/ledger"
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -111,6 +110,7 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
 	bc.validator = validator
 	bc.ledger.Validator = bc.validator
+	bc.validator.SetNotify(txNotify)
 }
 
 // SetBlockchainConsenter sets the consenter of the blockchain
@@ -242,6 +242,7 @@ func (bc *Blockchain) StartConsensusService() {
 func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 	blk := bc.GenerateBlock(output.Txs, output.Time)
 	if blk.Height() == output.Height {
+		blockNotify(blk)
 		bc.pm.Relay(blk)
 	}
 }
