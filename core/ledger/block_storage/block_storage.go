@@ -23,6 +23,7 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -223,6 +224,11 @@ func (blockchain *Blockchain) getTransactionsByHashList(txHashs []crypto.Hash, t
 	}
 
 	return txs, nil
+}
+
+func (blockchain *Blockchain) RegisterColumn(mdb *mongodb.Mdb) {
+	mdb.RegisterCollection(blockchain.columnFamily)
+	mdb.RegisterCollection(blockchain.indexColumnFamily)
 }
 
 func prependKeyPrefix(prefix []byte, key []byte) []byte {

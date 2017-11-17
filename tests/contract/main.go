@@ -129,7 +129,8 @@ func main() {
 	go sendTransaction()
 	time.Sleep(1 * time.Microsecond)
 
-	testSecurityContract()
+	issueTX()
+	//testSecurityContract()
 
 	time.Sleep(3 * time.Second)
 }

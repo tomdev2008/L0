@@ -39,6 +39,7 @@ import (
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var (
@@ -75,15 +76,15 @@ func NewLedger(db *db.BlockchainDB) *Ledger {
 		}
 		_, err := ledgerInstance.Height()
 		if err != nil {
+			if params.Nvp {
+				ledgerInstance.mdb = mongodb.MongDB()
+				go ledgerInstance.PutIntoMongoDB()
+			}
 			ledgerInstance.init()
 		}
 	}
 
 	ledgerInstance.contract = contract.NewSmartConstract(db, ledgerInstance)
-	if params.Nvp {
-		ledgerInstance.mdb = mongodb.MongDB()
-		go ledgerInstance.PutIntoMongoDB()
-	}
 	return ledgerInstance
 }
 
@@ -91,12 +92,43 @@ func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
 }
 
+func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.WriteBatch {
+	reBatches := make(map[string][]*db.WriteBatch)
+	for _, batch := range batches {
+		if _, ok := reBatches[batch.CfName]; !ok {
+			reBatches[batch.CfName] = make([]*db.WriteBatch, 0)
+		}
+
+		reBatches[batch.CfName] = append(reBatches[batch.CfName])
+	}
+
+	return reBatches
+}
+
 func (ledger *Ledger) PutIntoMongoDB() {
 	for {
 		select {
-		case batch := <-ledger.mdbChan:
-			batch = batch
-			//handler batch
+		case batches := <-ledger.mdbChan:
+			log.Infof("batch=>: %+v", batches)
+			reBatches := ledger.reOrgBatches(batches)
+			for colName, batches := range reBatches {
+				bulk := ledger.mdb.Coll(colName).Bulk()
+				for _, batch := range batches {
+					if batch.Operation == db.OperationPut {
+						var value interface{}
+						json.Unmarshal(batch.Value, &value)
+						value.(map[string]interface{})["_id"] = string(batch.Key)
+						bulk.Insert(value)
+					} else if batch.Operation == db.OperationDelete {
+						bulk.Remove(bson.M{"_id": string(batch.Key)})
+					}
+				}
+
+				_, err := bulk.Run()
+				if err != nil {
+					log.Errorf("bulk run err: %+v", err)
+				}
+			}
 		}
 	}
 }
@@ -298,6 +330,8 @@ func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 
 // init generates the genesis block
 func (ledger *Ledger) init() error {
+	// Register column
+	ledger.block.RegisterColumn(ledger.mdb)
 	// genesis block
 	blockHeader := new(types.BlockHeader)
 	blockHeader.TimeStamp = uint32(0)

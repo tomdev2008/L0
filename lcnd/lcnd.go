@@ -85,7 +85,8 @@ func NewLcnd(cfgFile string) *Lcnd {
 
 	chainDb = db.NewDB(cfg.DbConfig)
 	if params.Nvp {
-		_, err := mongodb.NewMdb(config.MDBConfig())
+
+		_, err := mongodb.NewMdb(mongodb.DefaultConfig())
 		if err != nil {
 			log.Errorf("init mongodb err: %+v", err)
 		}

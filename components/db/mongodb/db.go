@@ -1,8 +1,13 @@
 package mongodb
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/bocheninc/L0/components/log"
 	"gopkg.in/mgo.v2"
+	//"gopkg.in/mgo.v2/bson"
+	//"gopkg.in/mgo.v2/bson"
+	"gopkg.in/mgo.v2/bson"
 	"sync"
 	"time"
 )
@@ -32,13 +37,15 @@ func DefaultConfig() *Config {
 
 func NewMdb(cfg *Config) (*Mdb, error) {
 	var err error
+	log.Infof("mdb cfg: %+v", cfg)
 	once.Do(func() {
 		if cfg == nil {
 			panic("if nvp, please support mongodb")
 		}
 
 		db = &Mdb{
-			cfg: Config{Hosts: cfg.Hosts, DBName: cfg.DBName},
+			cfg:  Config{Hosts: cfg.Hosts, DBName: cfg.DBName},
+			cols: make(map[string]struct{}),
 		}
 		err = db.init()
 	})
@@ -99,9 +106,61 @@ func (db *Mdb) HaveCollection(col string) bool {
 	return ok
 }
 
-func test() {
-	//db := NewMdb(Config{Hosts: []string{"127.0.0.1"}, DBName: "test"})
-	db.RegisterCollection("transaction")
-	db.Coll("person").Insert(map[string]string{"hello": "world"})
-	db.Coll("bank").Insert(map[string]string{"hello": "world"})
+type MockPerson struct {
+	Id      bson.ObjectId `bson:"_id,omitempty" json:"_id"`
+	Name    string
+	Country string
+	Age     int
+}
+
+//Bulk Insert
+func testBulkInsert(col *mgo.Collection) {
+	fmt.Println("Test Bulk Insert into MongoDB")
+	bulk := col.Bulk()
+
+	var contentArray []interface{}
+	contentArray = append(contentArray, &MockPerson{
+		Id:      bson.ObjectId("5a0d8195b1fd"),
+		Name:    "aaaaaaaaaaaaaaaa",
+		Age:     1,
+		Country: "USA",
+	})
+
+	contentArray = append(contentArray, &MockPerson{
+		Name:    "this-is-good-content84344",
+		Age:     10,
+		Country: "USA2",
+	})
+
+	//contentArray = contentArray
+	//bulk.Insert(contentArray...)
+	bulk.Remove(bson.M{"_id": bson.ObjectId("5a0d8195b1fd")})
+	_, err := bulk.Run()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func main() {
+	db, err := NewMdb(DefaultConfig())
+	if err != nil {
+		panic(err)
+	}
+	db.RegisterCollection("person")
+
+	mp := MockPerson{Name: "wang6", Country: "china9", Age: 19}
+	jmp, _ := json.Marshal(mp)
+	var jump interface{}
+	json.Unmarshal(jmp, &jump)
+	//jump.(map[string]interface{})["_id"] = "guess"
+
+	//err = db.Coll("person").Update(map[string]string{"Name": "wang"}, jump)
+	//err = db.Coll("person").UpdateId("guess", jump)
+	//_, err = db.Coll("person").UpsertId("sleep", jump)
+	//db.Coll("person").Insert(bson.M{"name": "dddd"})
+	testBulkInsert(db.Coll("person"))
+	if err != nil {
+		fmt.Println("insert err: ", err)
+	}
+	//db.Coll("person").Insert(map[string]string{"_id": "12345678", "hello": "world"})
 }

@@ -53,7 +53,7 @@ func sendTx() {
 	time.Sleep(time.Second * 20)
 	fmt.Println("start Send ...")
 	go generateIssueTx()
-	go generateAtomicTx()
+	//go generateAtomicTx()
 	for {
 		select {
 		case tx := <-txChan:

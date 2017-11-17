@@ -34,7 +34,7 @@ issueaddr:
 
 #consensus
 consensus:
-  plugin: "lbft"
+  plugin: "noops"
 
   noops:
     batchSize: 10000
