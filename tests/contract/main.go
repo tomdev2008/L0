@@ -132,7 +132,8 @@ func main() {
 
 	testSecurityContract()
 
-	time.Sleep(3 * time.Second)
+	ch := make(chan struct{})
+	<-ch
 }
 
 func httpPost(postForm string, resultHandler func(result map[string]interface{})) {
@@ -312,7 +313,7 @@ func deploySecurity() {
 }
 
 func testSecurityContract() {
-	// issueTX()
+	issueTX()
 
 	// global contract
 	deploySmartContractTX(globalSetAccountLua)
