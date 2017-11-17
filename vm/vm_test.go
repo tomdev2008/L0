@@ -98,7 +98,7 @@ func (hd *L0Handler) GetState(key string) ([]byte, error) {
 	return nil, nil
 }
 
-func (hd *L0Handler) ComplexQuery(key string) ([]byte, error) {
+func (hd *L0Handler) ComplexQuery(columnFamily, key string) ([]byte, error) {
 
 	return nil, nil
 }

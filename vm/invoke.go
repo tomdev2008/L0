@@ -151,17 +151,14 @@ func (p *VMProc) CCallGetState(key string) ([]byte, error) {
 	return result, err
 }
 
-func (p *VMProc) CCallComplexQuery(key string) ([]byte, error) {
+func (p *VMProc) CCallComplexQuery(columnFamily, key string) ([]byte, error) {
 	if err := CheckStateKey(key); err != nil {
 		return nil, err
-	}
-	if v, ok := p.StateChangeQueue.stateMap[key]; ok {
-		return v, nil
 	}
 
 	// call parent proc
 	var result []byte
-	err := p.ccall("ComplexQuery", &result, key)
+	err := p.ccall("ComplexQuery", &result, columnFamily, key)
 	return result, err
 }
 

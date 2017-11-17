@@ -297,6 +297,11 @@ func (ledger *Ledger) Height() (uint32, error) {
 	return ledger.block.GetBlockchainHeight()
 }
 
+//ComplexQuery com
+func (ledger *Ledger) ComplexQuery(columnFamily, key string) ([]byte, error) {
+	return ledger.contract.ComplexQuery(columnFamily, key)
+}
+
 //GetLastBlockHash returns last block hash
 func (ledger *Ledger) GetLastBlockHash() (crypto.Hash, error) {
 	height, err := ledger.block.GetBlockchainHeight()

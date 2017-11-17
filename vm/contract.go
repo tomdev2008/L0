@@ -12,7 +12,7 @@ type ISmartConstract interface {
 	SetGlobalState(key string, value []byte) error
 	DelGlobalState(key string) error
 
-	ComplexQuery(key string) ([]byte, error)
+	ComplexQuery(columnFamily, key string) ([]byte, error)
 	GetState(key string) ([]byte, error)
 	AddState(key string, value []byte)
 	DelState(key string)
