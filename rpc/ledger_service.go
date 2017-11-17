@@ -19,8 +19,6 @@
 package rpc
 
 import (
-	"fmt"
-
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -32,6 +30,7 @@ import (
 type LedgerInterface interface {
 	Height() (uint32, error)
 	GetAsset(id uint32) *state.Asset
+	ComplexQuery(columnFamily, Key string) ([]byte, error)
 	GetBalance(addr accounts.Address) *state.Balance
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
 	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
@@ -66,6 +65,12 @@ type GetTxsByBlockHashArgs struct {
 	TxType    uint32
 }
 
+//ComplexQueryArgs ComplexQuery arrgs
+type ComplexQueryArgs struct {
+	ColumnFamily string
+	Key          string
+}
+
 //Block json rpc return block
 type Block struct {
 	BlockHeader types.BlockHeader `json:"header"`
@@ -84,12 +89,22 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 
 //GetAsset returns asset by id
 func (l *Ledger) GetAsset(id uint32, reply *state.Asset) error {
-	fmt.Println("ssss", id)
 	b := l.ledger.GetAsset(id)
 	if b == nil {
 		b = &state.Asset{}
 	}
 	*reply = *b
+	return nil
+}
+
+//ComplexQuery complex query
+func (l *Ledger) ComplexQuery(args ComplexQueryArgs, reply *string) error {
+	result, err := l.ledger.ComplexQuery(args.ColumnFamily, args.Key)
+	if err != nil {
+		return err
+	}
+
+	*reply = string(result)
 	return nil
 }
 

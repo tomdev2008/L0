@@ -288,15 +288,17 @@ func getByRangeFunc(l *lua.LState) int {
 }
 
 func complexQueryFunc(l *lua.LState) int {
-	if l.GetTop() != 1 {
+	if l.GetTop() != 2 {
 		l.RaiseError("param illegality when invoke complexQuery")
 		return 1
 	}
 
-	key := l.CheckString(1)
-	data, err := vmproc.CCallComplexQuery(key)
+	columnFamily := l.CheckString(1)
+	key := l.CheckString(2)
+
+	data, err := vmproc.CCallComplexQuery(columnFamily, key)
 	if err != nil {
-		l.RaiseError("complexQuery error key:%s  err:%s", key, err)
+		l.RaiseError("complexQuery error columnFamily:%s key:%s  err:%s", columnFamily, key, err)
 		return 1
 	}
 	if data == nil {
