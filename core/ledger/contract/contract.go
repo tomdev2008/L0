@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -75,14 +76,18 @@ func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) 
 		ledgerHandler: ledgerHandler,
 		stateExtra:    NewStateExtra(),
 	}
+	if params.Nvp {
+		mdb := mongodb.MongDB()
+		mdb.RegisterCollection(sctx.columnFamily)
+	}
 
 	return sctx
 }
 
 func (sctx *SmartConstract) GetColumnFamily() string {
-	if params.Nvp {
-		return sctx.scAddr
-	}
+	//if params.Nvp {
+	//	return sctx.scAddr
+	//}
 
 	return sctx.columnFamily
 }
@@ -113,9 +118,9 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
-	if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
-		//register column
-	}
+	//if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
+	//	//register column
+	//}
 }
 
 // GetGlobalState returns the global state.

@@ -21,11 +21,11 @@ package ledger
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/big"
 	"path/filepath"
 
+	"fmt"
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -40,6 +40,7 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
+	"strings"
 )
 
 var (
@@ -66,25 +67,27 @@ type Ledger struct {
 }
 
 // NewLedger returns the ledger instance
-func NewLedger(db *db.BlockchainDB) *Ledger {
+func NewLedger(kvdb *db.BlockchainDB) *Ledger {
 	if ledgerInstance == nil {
 		ledgerInstance = &Ledger{
-			dbHandler: db,
-			block:     block_storage.NewBlockchain(db),
-			state:     state.NewState(db),
-			storage:   merge.NewStorage(db),
+			dbHandler: kvdb,
+			block:     block_storage.NewBlockchain(kvdb),
+			state:     state.NewState(kvdb),
+			storage:   merge.NewStorage(kvdb),
 		}
 		_, err := ledgerInstance.Height()
 		if err != nil {
 			if params.Nvp {
 				ledgerInstance.mdb = mongodb.MongDB()
+				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
+				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
 				go ledgerInstance.PutIntoMongoDB()
 			}
 			ledgerInstance.init()
 		}
 	}
 
-	ledgerInstance.contract = contract.NewSmartConstract(db, ledgerInstance)
+	ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 	return ledgerInstance
 }
 
@@ -99,26 +102,69 @@ func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.W
 			reBatches[batch.CfName] = make([]*db.WriteBatch, 0)
 		}
 
-		reBatches[batch.CfName] = append(reBatches[batch.CfName])
+		reBatches[batch.CfName] = append(reBatches[batch.CfName], batch)
 	}
 
 	return reBatches
 }
 
 func (ledger *Ledger) PutIntoMongoDB() {
+	contractCol := false
 	for {
 		select {
 		case batches := <-ledger.mdbChan:
-			log.Infof("batch=>: %+v", batches)
+			log.Infof("all data len: %+v", len(batches))
+
 			reBatches := ledger.reOrgBatches(batches)
 			for colName, batches := range reBatches {
 				bulk := ledger.mdb.Coll(colName).Bulk()
+				if 0 == strings.Compare(ledger.contract.GetColumnFamily(), colName) {
+					contractCol = true
+				}
+
+				log.Infof("colName: %+v, len(batches): %+v", colName, len(batches))
 				for _, batch := range batches {
+					log.Infof("colName: %+v, op: %+v", colName, batch.Operation)
 					if batch.Operation == db.OperationPut {
-						var value interface{}
-						json.Unmarshal(batch.Value, &value)
-						value.(map[string]interface{})["_id"] = string(batch.Key)
-						bulk.Insert(value)
+						if contractCol {
+							if ok := IsJson(batch.Value); ok {
+								var value interface{}
+								json.Unmarshal(batch.Value, &value)
+								bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+							} else {
+								log.Errorf("state data not json")
+							}
+						} else {
+							var value interface{}
+							switch colName {
+							case ledger.state.GetAssetCF():
+								var asset state.Asset
+								utils.Deserialize(batch.Value, &asset)
+								bal, _ := json.Marshal(asset)
+								json.Unmarshal(bal, &value)
+							case ledger.state.GetBalanceCF():
+								var balance state.Balance
+								utils.Deserialize(batch.Value, &balance)
+								bal, _ := json.Marshal(balance)
+								json.Unmarshal(bal, &value)
+								log.Infof("balance: %+v", balance)
+							case ledger.contract.GetColumnFamily():
+							case ledger.block.GetBlockCF():
+								var blockHeader types.BlockHeader
+								utils.Deserialize(batch.Value, &blockHeader)
+								bal, _ := json.Marshal(blockHeader)
+								json.Unmarshal(bal, &value)
+							case ledger.block.GetTransactionCF():
+								var tx types.Transaction
+								utils.Deserialize(batch.Value, &tx)
+								bal, _ := json.Marshal(tx)
+								json.Unmarshal(bal, &value)
+							//case ledger.block.GetIndexCF():
+							default:
+								continue
+							}
+							bulk.Upsert(bson.M{"_id": utils.BytesToHex(batch.Key)}, value)
+						}
 					} else if batch.Operation == db.OperationDelete {
 						bulk.Remove(bson.M{"_id": string(batch.Key)})
 					}
@@ -132,6 +178,20 @@ func (ledger *Ledger) PutIntoMongoDB() {
 		}
 	}
 }
+
+//func createJsonData(data []byte, value interface{}) interface{} {
+//	var dst interface{}
+//	log.Infof("type: %+v", reflect.TypeOf(value).Kind())
+//	log.Infof("value: %+v", reflect.ValueOf(value).Kind())
+//	rv := reflect.ValueOf(value)
+//	irv := rv.Interface()
+//	log.Infof("irv: %+v", irv)
+//	utils.Deserialize(data, &irv)
+//	bal, _ := json.Marshal(irv)
+//	json.Unmarshal(bal, &dst)
+//	log.Infof("dst: %+v", dst)
+//	return dst
+//}
 
 // VerifyChain verifys the blockchain data
 func (ledger *Ledger) VerifyChain() {
@@ -575,4 +635,9 @@ func merkleRootHash(txs []*types.Transaction) crypto.Hash {
 		return crypto.ComputeMerkleHash(hashs)[0]
 	}
 	return crypto.Hash{}
+}
+
+func IsJson(src []byte) bool {
+	var value interface{}
+	return json.Unmarshal(src, &value) == nil
 }

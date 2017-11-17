@@ -34,26 +34,28 @@ const (
 
 // Blockchain represents block
 type Blockchain struct {
-	dbHandler         *db.BlockchainDB
-	txPrefix          []byte
-	columnFamily      string
-	indexColumnFamily string
+	dbHandler               *db.BlockchainDB
+	txPrefix                []byte
+	blockColumnFamily       string
+	transactionColumnFamily string
+	indexColumnFamily       string
 }
 
 // NewBlockchain initialization
 func NewBlockchain(db *db.BlockchainDB) *Blockchain {
 	return &Blockchain{
-		dbHandler:         db,
-		txPrefix:          []byte("tx_"),
-		columnFamily:      "block",
-		indexColumnFamily: "index",
+		dbHandler:               db,
+		txPrefix:                []byte("tx_"),
+		blockColumnFamily:       "block",
+		transactionColumnFamily: "transaction",
+		indexColumnFamily:       "index",
 	}
 }
 
 // GetBlockByHash gets block by block hash
 func (blockchain *Blockchain) GetBlockByHash(blockHash []byte) (*types.BlockHeader, error) {
 
-	blockHeaderBytes, err := blockchain.dbHandler.Get(blockchain.columnFamily, blockHash)
+	blockHeaderBytes, err := blockchain.dbHandler.Get(blockchain.blockColumnFamily, blockHash)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +132,7 @@ func (blockchain *Blockchain) GetTransactionsByHash(blockHash []byte, transactio
 
 // GetTransactionByTxHash gets transaction by transaction hash
 func (blockchain *Blockchain) GetTransactionByTxHash(txHash []byte) (*types.Transaction, error) {
-	txBytes, err := blockchain.dbHandler.Get(blockchain.columnFamily, txHash)
+	txBytes, err := blockchain.dbHandler.Get(blockchain.transactionColumnFamily, txHash)
 	if err != nil {
 		return nil, err
 	}
@@ -168,14 +170,14 @@ func (blockchain *Blockchain) AppendBlock(block *types.Block) []*db.WriteBatch {
 		txHashs     []crypto.Hash
 	)
 
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.columnFamily, db.OperationPut, blockHashBytes, block.Header.Serialize())) // block hash => block
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, blockHeightBytes, blockHashBytes))    // height => block hash
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, []byte(heightKey), blockHeightBytes)) // update block height
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.blockColumnFamily, db.OperationPut, blockHashBytes, block.Header.Serialize())) // block hash => block
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, blockHeightBytes, blockHashBytes))         // height => block hash
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, []byte(heightKey), blockHeightBytes))      // update block height
 
 	//storage  tx hash
 	for _, tx := range block.Transactions {
 		txHashs = append(txHashs, tx.Hash())
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.columnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize())) // tx hash => tx detail
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.transactionColumnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize())) // tx hash => tx detail
 
 	}
 	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, prependKeyPrefix(blockchain.txPrefix, blockHeightBytes), utils.Serialize(txHashs))) // prefix + blockheight  => all tx hash
@@ -227,8 +229,21 @@ func (blockchain *Blockchain) getTransactionsByHashList(txHashs []crypto.Hash, t
 }
 
 func (blockchain *Blockchain) RegisterColumn(mdb *mongodb.Mdb) {
-	mdb.RegisterCollection(blockchain.columnFamily)
+	mdb.RegisterCollection(blockchain.blockColumnFamily)
+	mdb.RegisterCollection(blockchain.transactionColumnFamily)
 	mdb.RegisterCollection(blockchain.indexColumnFamily)
+}
+
+func (blockchain *Blockchain) GetBlockCF() string {
+	return blockchain.blockColumnFamily
+}
+
+func (blockchain *Blockchain) GetTransactionCF() string {
+	return blockchain.transactionColumnFamily
+}
+
+func (blockchain *Blockchain) GetIndexCF() string {
+	return blockchain.indexColumnFamily
 }
 
 func prependKeyPrefix(prefix []byte, key []byte) []byte {

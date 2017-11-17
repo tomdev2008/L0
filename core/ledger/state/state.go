@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 )
@@ -169,4 +170,17 @@ func (state *State) UpdateAsset(id uint32, issur, owner accounts.Address, jsonSt
 	}
 	state.tmpAsset[id] = newAsset
 	return nil
+}
+
+func (state *State) RegisterColumn(mdb *mongodb.Mdb) {
+	mdb.RegisterCollection(state.assetCF)
+	mdb.RegisterCollection(state.balanceCF)
+}
+
+func (state *State) GetAssetCF() string {
+	return state.assetCF
+}
+
+func (state *State) GetBalanceCF() string {
+	return state.balanceCF
 }
