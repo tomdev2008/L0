@@ -1,10 +1,13 @@
 package mongodb
 
 import (
-	"github.com/bocheninc/L0/components/log"
-	"gopkg.in/mgo.v2"
+	"errors"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/bocheninc/L0/components/log"
+	"gopkg.in/mgo.v2"
 )
 
 type Config struct {
@@ -99,6 +102,69 @@ func (db *Mdb) HaveCollection(col string) bool {
 	_, ok := db.cols[col]
 
 	return ok
+}
+
+func (db *Mdb) Query(key string) ([]byte, error) {
+
+	return nil, nil
+}
+
+func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
+	var params []map[string]interface{}
+
+	//check key if not nil
+	if len(key) == 0 {
+		return nil, errors.New("query key must not be nil ")
+	}
+
+	//delete space
+	key = strings.TrimSpace(key)
+
+	// check key is find method
+	if !isFind(key) {
+		return nil, errors.New("query key  must be find method")
+	}
+
+	paramsSlice := strings.Split(key, ".")
+
+	//check first params is db
+	if !isdb(paramsSlice[0]) {
+		return nil, errors.New("query key first param must be 'db'")
+	}
+
+	//check collection
+	if db.HaveCollection(paramsSlice[1]) {
+		return nil, errors.New("collection: " + paramsSlice[1] + " is not exist")
+	}
+
+	collectionParam := make(map[string]interface{})
+	collectionParam[paramsSlice[1]] = "collection"
+	params = append(params, collectionParam)
+
+	for k, v := range paramsSlice {
+		if k < 2 {
+			continue
+		}
+		if !isParenthesesExist(v) {
+			return nil, errors.New("params: " + v + " parentheses is wrong")
+		}
+		methodParamSlice := strings.Split(v, "(")
+		methodParam := make(map[string]interface{})
+
+		methodParam[methodParamSlice[0]] = parseParam(methodParamSlice[0], strings.Trim(methodParamSlice[1], ")"))
+
+		params = append(params, methodParam)
+	}
+	return params, nil
+}
+
+func parseParam(method, param string) map[string]interface{} {
+	switch method {
+	case "find":
+	case "pre":
+	}
+
+	return nil
 }
 
 //
