@@ -40,6 +40,11 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 		return fmt.Errorf("transaction is nil")
 	}
 
+	if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit ||
+		tx.GetType() == types.TypeContractInvoke || tx.GetType() == types.TypeSecurity {
+		return nil
+	}
+
 	if getter == nil {
 		return fmt.Errorf("global state getter is nil")
 	}
@@ -79,35 +84,30 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 	}
 
 	// recipient
-	if tx.GetType() != types.TypeJSContractInit && tx.GetType() != types.TypeLuaContractInit &&
-		tx.GetType() != types.TypeContractInvoke && tx.GetType() != types.TypeSecurity {
+	if len(mtData.Account.ToUser) == 0 {
+		return fmt.Errorf("invalid recipient account")
+	}
 
-		if len(mtData.Account.ToUser) == 0 {
-			return fmt.Errorf("invalid recipient account")
-		}
+	dbData, err = getter("account." + mtData.Account.ToUser)
+	if err != nil {
+		return err
+	}
 
-		dbData, err := getter("account." + mtData.Account.ToUser)
-		if err != nil {
-			return err
-		}
+	if len(dbData) == 0 {
+		return fmt.Errorf("can't find recipient account data")
+	}
 
-		if len(dbData) == 0 {
-			return fmt.Errorf("can't find recipient account data")
-		}
+	err = json.Unmarshal(dbData, &accData)
+	if err != nil {
+		return err
+	}
 
-		var accData accountData
-		err = json.Unmarshal(dbData, &accData)
-		if err != nil {
-			return err
-		}
+	if tx.Recipient().String() != accData.Address {
+		return fmt.Errorf("recipient address does not match")
+	}
 
-		if tx.Recipient().String() != accData.Address {
-			return fmt.Errorf("recipient address does not match")
-		}
-
-		if accData.Frozened {
-			return fmt.Errorf("recipient account is frozened")
-		}
+	if accData.Frozened {
+		return fmt.Errorf("recipient account is frozened")
 	}
 
 	// amount
