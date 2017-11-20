@@ -1,6 +1,7 @@
 package mongodb
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/bocheninc/L0/components/log"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type Config struct {
@@ -100,13 +102,95 @@ func (db *Mdb) HaveCollection(col string) bool {
 	db.Lock()
 	defer db.Unlock()
 	_, ok := db.cols[col]
-
 	return ok
 }
 
 func (db *Mdb) Query(key string) ([]byte, error) {
+	params, err := db.checkFormat(key)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		col     string
+		query   *mgo.Query
+		results []interface{}
+		result  interface{}
+	)
 
-	return nil, nil
+	for _, v := range params {
+		for method, param := range v {
+			if param == "collection" {
+				col = method
+				continue
+			}
+			if method == "findOne" {
+				var m bson.M
+				var err error
+				if param != nil {
+					m, err = convertBson(param)
+					if err != nil {
+						return nil, err
+					}
+
+				}
+				if err := db.Coll(col).Find(m).One(&result); err != nil {
+					return nil, err
+				}
+				data, err := json.Marshal(result)
+				if err != nil {
+					return nil, err
+				}
+				return data, nil
+			}
+
+			query, err = db.execQuery(col, method, param, query)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if err := query.All(&results); err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(results)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+
+}
+
+func (db *Mdb) execQuery(col, method string, param interface{}, query *mgo.Query) (*mgo.Query, error) {
+	var m bson.M
+	var err error
+
+	switch method {
+	case "find":
+		if param != nil {
+			m, err = convertBson(param)
+		}
+		query = db.Coll(col).Find(m)
+	case "limit":
+		query = query.Limit(int(param.(float64)))
+	case "skip":
+		query = query.Skip(int(param.(float64)))
+	case "sort":
+		var fields []string
+		for k, v := range param.(map[string]interface{}) {
+			if v.(float64) == -1 {
+				k = "-" + k
+			}
+			fields = append(fields, k)
+		}
+		query = query.Sort(fields...)
+	default:
+		return nil, errors.New("not supot sql method: " + method)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	return query, nil
 }
 
 func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
@@ -133,7 +217,7 @@ func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
 	}
 
 	//check collection
-	if db.HaveCollection(paramsSlice[1]) {
+	if !db.HaveCollection(paramsSlice[1]) {
 		return nil, errors.New("collection: " + paramsSlice[1] + " is not exist")
 	}
 
@@ -151,20 +235,45 @@ func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
 		methodParamSlice := strings.Split(v, "(")
 		methodParam := make(map[string]interface{})
 
-		methodParam[methodParamSlice[0]] = parseParam(methodParamSlice[0], strings.Trim(methodParamSlice[1], ")"))
+		result := parseParam(strings.Trim(methodParamSlice[1], ")"))
 
+		var m interface{}
+		if len(result) != 0 {
+			if err := json.Unmarshal([]byte(result), &m); err != nil {
+				return nil, err
+			}
+		}
+		methodParam[methodParamSlice[0]] = m
 		params = append(params, methodParam)
 	}
 	return params, nil
 }
 
-func parseParam(method, param string) map[string]interface{} {
-	switch method {
-	case "find":
-	case "pre":
+func parseParam(param string) string {
+	var result string
+	index := strings.IndexAny(param, "$")
+	if index != -1 {
+		result = param[:index] + `"`
+		colonIndex := strings.IndexAny(param[index:], ":")
+		if colonIndex != -1 {
+			result = result + param[index:][:colonIndex] + `"` + parseParam(param[index:][colonIndex:])
+		}
+	} else {
+		result = param
 	}
+	return result
+}
 
-	return nil
+func convertBson(src interface{}) (bson.M, error) {
+	data, err := bson.Marshal(src)
+	if err != nil {
+		return nil, err
+	}
+	m := bson.M{}
+	if err := bson.Unmarshal(data, m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 //
