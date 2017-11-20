@@ -243,9 +243,6 @@ func deploySmartContractTX(conf *contractConf) []byte {
 	)
 
 	tx.Payload = utils.Serialize(contractSpec)
-	tx.Meta, _ = json.Marshal(map[string]map[string]string{
-		"account": accountInfo,
-	})
 
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
@@ -286,9 +283,6 @@ func execSmartContractTX(conf *contractConf) {
 
 	fmt.Println("> exe ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
-	tx.Meta, _ = json.Marshal(map[string]map[string]string{
-		"account": accountInfo,
-	})
 
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
@@ -325,9 +319,6 @@ func deploySecurity() {
 	pluginData.Name = securityPluginName
 	pluginData.Code, _ = ioutil.ReadFile("./" + securityPluginName)
 	tx.Payload = pluginData.Bytes()
-	tx.Meta, _ = json.Marshal(map[string]map[string]string{
-		"account": accountInfo,
-	})
 
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
