@@ -46,6 +46,12 @@ var (
 	privkey, _     = crypto.HexToECDSA(privkeyHex)
 	sender         = accounts.PublicKeyToAddress(*privkey.Public())
 
+	senderAccount = "abc123"
+	accountInfo   = map[string]string{
+		"from_user": senderAccount,
+		"to_user":   senderAccount,
+	}
+
 	txChan = make(chan *types.Transaction, 5)
 
 	httpClient = &http.Client{
@@ -121,7 +127,11 @@ var (
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
+		[]string{
+			"SetGlobalState",
+			"account." + senderAccount,
+			fmt.Sprintf(`{"addr":"%s", "uid":"%s", "frozened":false}`, sender.String(), senderAccount),
+		})
 
 	securityPluginName = "security.so"
 )
@@ -193,6 +203,9 @@ func issueTX() {
 	issueCoin := make(map[string]interface{})
 	issueCoin["id"] = 0
 	tx.Payload, _ = json.Marshal(issueCoin)
+	tx.Meta, _ = json.Marshal(map[string]map[string]string{
+		"account": accountInfo,
+	})
 
 	fmt.Println("issueSender address: ", issueSender.String(), " receriver: ", sender.String())
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
@@ -230,6 +243,10 @@ func deploySmartContractTX(conf *contractConf) []byte {
 	)
 
 	tx.Payload = utils.Serialize(contractSpec)
+	tx.Meta, _ = json.Marshal(map[string]map[string]string{
+		"account": accountInfo,
+	})
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	fmt.Println("> deploy ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
@@ -269,6 +286,10 @@ func execSmartContractTX(conf *contractConf) {
 
 	fmt.Println("> exe ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
+	tx.Meta, _ = json.Marshal(map[string]map[string]string{
+		"account": accountInfo,
+	})
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txChan <- tx
@@ -304,6 +325,9 @@ func deploySecurity() {
 	pluginData.Name = securityPluginName
 	pluginData.Code, _ = ioutil.ReadFile("./" + securityPluginName)
 	tx.Payload = pluginData.Bytes()
+	tx.Meta, _ = json.Marshal(map[string]map[string]string{
+		"account": accountInfo,
+	})
 
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
@@ -330,11 +354,11 @@ func testSecurityContract() {
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "securityContract", "security.so"})
+		[]string{"SetGlobalState", "securityContract", `"security.so"`})
 	execSmartContractTX(globalLua)
 
 	// query
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 	queryGlobalContract("securityContract")
 
 	time.Sleep(3 * time.Second)

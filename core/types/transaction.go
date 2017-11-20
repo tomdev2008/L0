@@ -39,6 +39,7 @@ var (
 type Transaction struct {
 	Data    txdata `json:"data"`
 	Payload []byte `json:"payload"`
+	Meta    []byte `json:"meta"`
 
 	hash   atomic.Value
 	sender atomic.Value
@@ -130,6 +131,7 @@ func (tx *Transaction) SignHash() crypto.Hash {
 		tx.Data.CreateTime,
 	)
 	rawTx.Payload = tx.Payload
+	rawTx.Meta = tx.Meta
 	return rawTx.Hash()
 }
 
