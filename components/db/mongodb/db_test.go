@@ -84,12 +84,11 @@ func TestCheckFormat(t *testing.T) {
 	//key := `db.person.find().limit(1)`
 	//key := `db.person.find().skip(1)`
 	//key := `db.person.find().skip(1).limit(1)`
-	//key := `db.person.find().sort({"age":1})`
+	key := `db.person.find().sort({"age":1})`
 	//key := `db.person.find({"age":1})`
 	//key := `db.person.find({"age":{$gt:1}})`
 
-	key := `db.person.find({"age":{$lt:10,$gt:1}})`
-
+	//key := `db.person.find({"age":{$lt:10,$gt:1}})`
 	result, err := db.Query(key)
 	if err != nil {
 		t.Error("db query ", err)

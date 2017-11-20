@@ -26,6 +26,8 @@ import (
 	"path/filepath"
 
 	"fmt"
+	"strings"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -40,7 +42,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
-	"strings"
 )
 
 var (
@@ -298,8 +299,8 @@ func (ledger *Ledger) Height() (uint32, error) {
 }
 
 //ComplexQuery com
-func (ledger *Ledger) ComplexQuery(columnFamily, key string) ([]byte, error) {
-	return ledger.contract.ComplexQuery(columnFamily, key)
+func (ledger *Ledger) ComplexQuery(key string) ([]byte, error) {
+	return ledger.contract.ComplexQuery(key)
 }
 
 //GetLastBlockHash returns last block hash

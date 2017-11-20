@@ -342,15 +342,14 @@ func getByRangeFunc(fc otto.FunctionCall) otto.Value {
 }
 
 func complexQueryFunc(fc otto.FunctionCall) otto.Value {
-	if len(fc.ArgumentList) != 2 {
+	if len(fc.ArgumentList) != 1 {
 		log.Error("param illegality when invoke complexQuery")
 		return fc.Otto.MakeCustomError("complexQueryFunc", "param illegality when invoke complexQuery")
 	}
-	columnFamily, err := fc.Argument(0).ToString()
-	key, err := fc.Argument(1).ToString()
-	data, err := vmproc.CCallComplexQuery(columnFamily, key)
+	key, err := fc.Argument(0).ToString()
+	data, err := vmproc.CCallComplexQuery(key)
 	if err != nil {
-		log.Errorf("complexQuery error columnFamily:%s key:%s  err:%s", columnFamily, key, err)
+		log.Errorf("complexQuery error key:%s  err:%s", key, err)
 		return fc.Otto.MakeCustomError("complexQueryFunc", "complexQuery error:"+err.Error())
 	}
 	if data == nil {

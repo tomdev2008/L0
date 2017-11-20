@@ -211,30 +211,12 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 	return nil
 }
 
-func (sctx *SmartConstract) ComplexQuery(columnFamily, key string) ([]byte, error) {
+func (sctx *SmartConstract) ComplexQuery(key string) ([]byte, error) {
 	if !params.Nvp {
 		return nil, errors.New("vp can't support complex qery")
 	}
-
 	mdb := mongodb.MongDB()
-
-	if !mdb.HaveCollection(columnFamily) {
-		return nil, fmt.Errorf("columnFaily: %s does not in db", columnFamily)
-	}
-
-	if !json.Valid([]byte(key)) {
-		return nil, fmt.Errorf("key: %s does not meet the json format", key)
-	}
-
-	var result []interface{}
-	if err := mdb.Coll(columnFamily).Find(key).All(&result); err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(result)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return mdb.Query(key)
 }
 
 // GetState get value

@@ -3,6 +3,7 @@ package mongodb
 import (
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -171,13 +172,26 @@ func (db *Mdb) execQuery(col, method string, param interface{}, query *mgo.Query
 		}
 		query = db.Coll(col).Find(m)
 	case "limit":
-		query = query.Limit(int(param.(float64)))
+
+		limit, ok := param.(float64)
+		if !ok {
+			return nil, errors.New("limit number must be float64")
+		}
+		query = query.Limit(int(limit))
 	case "skip":
-		query = query.Skip(int(param.(float64)))
+		skip, ok := param.(float64)
+		if !ok {
+			return nil, errors.New("skip number must be float64")
+		}
+		query = query.Skip(int(skip))
 	case "sort":
 		var fields []string
 		for k, v := range param.(map[string]interface{}) {
-			if v.(float64) == -1 {
+			specification, ok := v.(float64)
+			if !ok || specification < -1 || specification > 1 {
+				return nil, errors.New("bad sort specification number must be float64 type , equal 1 or -1")
+			}
+			if specification == -1 {
 				k = "-" + k
 			}
 			fields = append(fields, k)
@@ -220,33 +234,46 @@ func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
 	if !db.HaveCollection(paramsSlice[1]) {
 		return nil, errors.New("collection: " + paramsSlice[1] + " is not exist")
 	}
-
 	collectionParam := make(map[string]interface{})
 	collectionParam[paramsSlice[1]] = "collection"
 	params = append(params, collectionParam)
 
-	for k, v := range paramsSlice {
-		if k < 2 {
-			continue
-		}
-		if !isParenthesesExist(v) {
-			return nil, errors.New("params: " + v + " parentheses is wrong")
-		}
-		methodParamSlice := strings.Split(v, "(")
-		methodParam := make(map[string]interface{})
+	methodAndParams := strings.Join(paramsSlice[2:], ".")
 
-		result := parseParam(strings.Trim(methodParamSlice[1], ")"))
+	results, err := parseMethodAndParams(methodAndParams)
+	if err != nil {
+		return nil, err
+	}
+
+	params = append(params, results...)
+
+	return params, nil
+}
+
+func parseMethodAndParams(methodAndParams string) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+
+	regMethod := regexp.MustCompile(`(\w+)\([\w:"\{\},\.\$ -]*\)`)
+	methodParams := regMethod.FindAllString(methodAndParams, -1)
+
+	for _, v := range methodParams {
+		methodParamsSlice := strings.Split(v, "(")
+		if len(methodParamsSlice) != 2 {
+			return nil, errors.New("not support query key")
+		}
+		result := make(map[string]interface{})
 
 		var m interface{}
-		if len(result) != 0 {
-			if err := json.Unmarshal([]byte(result), &m); err != nil {
+		param := strings.Trim(methodParamsSlice[1], ")")
+		if len(param) != 0 {
+			if err := json.Unmarshal([]byte(parseParam(param)), &m); err != nil {
 				return nil, err
 			}
 		}
-		methodParam[methodParamSlice[0]] = m
-		params = append(params, methodParam)
+		result[methodParamsSlice[0]] = m
+		results = append(results, result)
 	}
-	return params, nil
+	return results, nil
 }
 
 func parseParam(param string) string {
