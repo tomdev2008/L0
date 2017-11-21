@@ -92,7 +92,7 @@ func NewLcnd(cfgFile string) *Lcnd {
 		}
 	}
 
-	newLedger = ledger.NewLedger(chainDb)
+	newLedger = ledger.NewLedger(chainDb, &ledger.Config{ExceptBlockDir: cfg.WriteExceptionBlockDir})
 	bc = blockchain.NewBlockchain(newLedger)
 	consenter := consenter.NewConsenter(config.ConsenterOptions(), bc)
 	validator := validator.NewVerification(config.ValidatorConfig(cfg.PluginDir), newLedger, consenter)

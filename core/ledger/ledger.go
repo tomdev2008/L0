@@ -26,8 +26,8 @@ import (
 	"path/filepath"
 
 	"fmt"
-	"strings"
 
+	"errors"
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -42,6 +42,8 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
+	"strconv"
+	"strings"
 )
 
 var (
@@ -63,12 +65,13 @@ type Ledger struct {
 	storage   *merge.Storage
 	contract  *contract.SmartConstract
 	Validator ValidatorHandler
+	conf      *Config
 	mdb       *mongodb.Mdb
 	mdbChan   chan []*db.WriteBatch
 }
 
 // NewLedger returns the ledger instance
-func NewLedger(kvdb *db.BlockchainDB) *Ledger {
+func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 	if ledgerInstance == nil {
 		ledgerInstance = &Ledger{
 			dbHandler: kvdb,
@@ -82,6 +85,7 @@ func NewLedger(kvdb *db.BlockchainDB) *Ledger {
 				ledgerInstance.mdb = mongodb.MongDB()
 				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
 				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
+				ledgerInstance.conf = conf
 				go ledgerInstance.PutIntoMongoDB()
 			}
 			ledgerInstance.init()
@@ -111,6 +115,7 @@ func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.W
 
 func (ledger *Ledger) PutIntoMongoDB() {
 	contractCol := false
+
 	for {
 		select {
 		case batches := <-ledger.mdbChan:
@@ -123,7 +128,6 @@ func (ledger *Ledger) PutIntoMongoDB() {
 					contractCol = true
 				}
 
-				log.Infof("colName: %+v, len(batches): %+v", colName, len(batches))
 				for _, batch := range batches {
 					log.Infof("colName: %+v, op: %+v", colName, batch.Operation)
 					if batch.Operation == db.OperationPut {
@@ -173,26 +177,13 @@ func (ledger *Ledger) PutIntoMongoDB() {
 
 				_, err := bulk.Run()
 				if err != nil {
+					go ledger.writeBlock(batches)
 					log.Errorf("bulk run err: %+v", err)
 				}
 			}
 		}
 	}
 }
-
-//func createJsonData(data []byte, value interface{}) interface{} {
-//	var dst interface{}
-//	log.Infof("type: %+v", reflect.TypeOf(value).Kind())
-//	log.Infof("value: %+v", reflect.ValueOf(value).Kind())
-//	rv := reflect.ValueOf(value)
-//	irv := rv.Interface()
-//	log.Infof("irv: %+v", irv)
-//	utils.Deserialize(data, &irv)
-//	bal, _ := json.Marshal(irv)
-//	json.Unmarshal(bal, &dst)
-//	log.Infof("dst: %+v", dst)
-//	return dst
-//}
 
 // VerifyChain verifys the blockchain data
 func (ledger *Ledger) VerifyChain() {
@@ -421,7 +412,12 @@ func (ledger *Ledger) init() error {
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
 			buf.Bytes()))
 
-	return ledger.dbHandler.AtomicWrite(writeBatchs)
+	err = ledger.dbHandler.AtomicWrite(writeBatchs)
+	if err != nil {
+		ledger.mdbChan <- writeBatchs
+	}
+
+	return err
 }
 
 func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, types.Transactions) {
@@ -630,6 +626,33 @@ func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*state.Balance, erro
 	}
 
 	return balance, err
+}
+
+func (ledger *Ledger) writeBlock(data interface{}) error {
+	var bvalue []byte
+	switch data.(type) {
+	case []*db.WriteBatch:
+		orgData := data.([]*db.WriteBatch)
+		bvalue = utils.Serialize(orgData)
+	}
+
+	height, err := ledger.Height()
+	if err != nil {
+		log.Errorf("can't get blockchain height")
+	}
+
+	path := ledger.conf.ExceptBlockDir + string(filepath.Separator)
+	fileName := path + strconv.Itoa(int(height))
+	if utils.FileExist(fileName) {
+		log.Infof("BlockChan have error, please check ...")
+		return errors.New("except block have existed")
+	}
+
+	err = ioutil.WriteFile(fileName, bvalue, 0666)
+	if err != nil {
+		log.Errorf("write file: %s fail err: %+v", fileName, err)
+	}
+	return err
 }
 
 func merkleRootHash(txs []*types.Transaction) crypto.Hash {
