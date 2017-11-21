@@ -140,7 +140,6 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	ch := make(chan struct{}, 1)
-	t.pmHander.Relay(tx)
 	result := "Success"
 	blockchain.Register(tx.Hash(), func(iTx interface{}) {
 		ch <- struct{}{}
@@ -150,6 +149,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 			}
 		}
 	})
+	t.pmHander.Relay(tx)
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)

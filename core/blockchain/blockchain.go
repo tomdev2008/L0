@@ -20,6 +20,7 @@ package blockchain
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -265,6 +266,7 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 		return true
 	}
 
+	txNotify(tx, fmt.Sprintf("process transaction %v failed", tx.Hash()))
 	return false
 }
 
