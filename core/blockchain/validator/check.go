@@ -279,6 +279,7 @@ func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 		return false
 	}
 
+	log.Infof("security verify success of transaction %v", tx.Hash())
 	return true
 }
 
