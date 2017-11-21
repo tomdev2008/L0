@@ -302,6 +302,13 @@ func (ledger *Ledger) init() error {
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
 			buf.Bytes()))
 
+	// global contract
+	writeBatchs = append(writeBatchs,
+		db.NewWriteBatch(contract.ColumnFamily,
+			db.OperationPut,
+			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.GlobalContractKey)),
+			utils.Serialize(&contract.DefaultGlobalContract)))
+
 	return ledger.dbHandler.AtomicWrite(writeBatchs)
 }
 
