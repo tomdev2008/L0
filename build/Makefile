@@ -16,8 +16,8 @@ TESTS=${BUILD_BIN_PATH}/tests
 INSTALL_DIR=./bin/
 
 all:
-#	go build -tags=embed -o jsvm ../vm/jsvm/main/main.go
-#	go build -tags=embed -o luavm ../vm/luavm/main/main.go
+	go build -tags=embed -o jsvm ../vm/jsvm/main/main.go
+	go build -tags=embed -o luavm ../vm/luavm/main/main.go
 	go install -tags=embed ../cmd/...
 	
 	@mkdir -p bin

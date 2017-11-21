@@ -6,27 +6,30 @@ function L0Init(args)
     print("in L0Init")
     print("L0", type(L0))
 
+    local result = L0.ComplexQuery('db.transaction.find({"data.nonce":1})')
+
+    print("result:",result)
 
     local obj = L0.jsonEncode({name="Tim",number=12345})
     local deObj = L0.jsonEncode(obj)
     print("json", obj, deObj)
     L0.PutState("hello", L0.jsonEncode("world"))
-    L0.PutState("minter", L0.Account().Address)
-    L0.PutState("balances", {})
+    -- L0.PutState("minter", L0.Account().Address)
+    -- L0.PutState("balances", {})
 
     print("address: ",L0.Account().Address,"sender: ",L0.Account().Sender,"amont: ",L0.Account().Amount,"recipient: ",L0.Account().Recipient)
 
 -- 合约账户的余额
-    local accountBalance = L0.Account().Balances
-    for k, v in pairs(accountBalance) do
-        if (k == "Amounts") then
-            for id, value in pairs(v) do
-                print("L0 account balance amounts",id,value)
-            end 
-        else           
-        print("L0 account balance nonce",k,v)
-        end        
-    end
+    -- local accountBalance = L0.Account().Balances
+    -- for k, v in pairs(accountBalance) do
+    --     if (k == "Amounts") then
+    --         for id, value in pairs(v) do
+    --             print("L0 account balance amounts",id,value)
+    --         end 
+    --     else           
+    --     print("L0 account balance nonce",k,v)
+    --     end        
+    -- end
 
 
     return true

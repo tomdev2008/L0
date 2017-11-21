@@ -131,6 +131,7 @@ func main() {
 
 	issueTX()
 	//testSecurityContract()
+	deploySmartContractTX(coinLua)
 
 	time.Sleep(3 * time.Second)
 }

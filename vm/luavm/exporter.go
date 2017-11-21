@@ -303,6 +303,7 @@ func complexQueryFunc(l *lua.LState) int {
 		l.Push(lua.LNil)
 		return 1
 	}
+
 	lv := lua.LString(string(data))
 	l.Push(lv)
 	return 1

@@ -28,6 +28,9 @@ import (
 	"fmt"
 
 	"errors"
+	"strconv"
+	"strings"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -42,8 +45,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
-	"strconv"
-	"strings"
 )
 
 var (
@@ -132,12 +133,17 @@ func (ledger *Ledger) PutIntoMongoDB() {
 					log.Infof("colName: %+v, op: %+v", colName, batch.Operation)
 					if batch.Operation == db.OperationPut {
 						if contractCol {
-							if ok := IsJson(batch.Value); ok {
+							contractData, err := contract.DoContractStateData(batch.Value)
+							if err != nil || contractData == nil && err == nil {
+								log.Errorf("state data parse error, key: %+v, %+v", string(batch.Key), batch.Key)
+							}
+
+							if ok := IsJson(contractData); ok {
 								var value interface{}
-								json.Unmarshal(batch.Value, &value)
+								json.Unmarshal(contractData, &value)
 								bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
 							} else {
-								log.Errorf("state data not json")
+								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
 							}
 						} else {
 							var value interface{}
