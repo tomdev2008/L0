@@ -162,7 +162,7 @@ func (v *Verification) checkTransaction(tx *types.Transaction) bool {
 
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+		log.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
 		return false
 	}
 
@@ -188,7 +188,7 @@ func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
 
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
+		log.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
 		return false
 	}
 
