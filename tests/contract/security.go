@@ -40,8 +40,12 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 		return fmt.Errorf("transaction is nil")
 	}
 
-	if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit ||
-		tx.GetType() == types.TypeContractInvoke || tx.GetType() == types.TypeSecurity {
+	if tx.GetType() == types.TypeIssue ||
+		tx.GetType() == types.TypeIssueUpdate ||
+		tx.GetType() == types.TypeJSContractInit ||
+		tx.GetType() == types.TypeLuaContractInit ||
+		tx.GetType() == types.TypeContractInvoke ||
+		tx.GetType() == types.TypeSecurity {
 		return nil
 	}
 
@@ -76,7 +80,8 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 	}
 
 	if tx.Sender().String() != accData.Address {
-		return fmt.Errorf("sender address does not match")
+		return fmt.Errorf("sender address does not match, %s vs %s",
+			tx.Sender().String(), accData.Address)
 	}
 
 	if accData.Frozened {
@@ -103,7 +108,8 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 	}
 
 	if tx.Recipient().String() != accData.Address {
-		return fmt.Errorf("recipient address does not match")
+		return fmt.Errorf("recipient address does not match, %s vs %s",
+			tx.Recipient().String(), accData.Address)
 	}
 
 	if accData.Frozened {
