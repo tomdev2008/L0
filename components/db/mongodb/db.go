@@ -252,25 +252,20 @@ func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
 
 func parseMethodAndParams(methodAndParams string) ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
-
-	regMethod := regexp.MustCompile(`(\w+)\([\w:"\{\},\.\$ -]*\)`)
-	methodParams := regMethod.FindAllString(methodAndParams, -1)
-
+	regMethod := regexp.MustCompile(`(\w+)\(([\w:"\{\},\.\$ -]*)\)`)
+	methodParams := regMethod.FindAllStringSubmatch(methodAndParams, -1)
 	for _, v := range methodParams {
-		methodParamsSlice := strings.Split(v, "(")
-		if len(methodParamsSlice) != 2 {
+		if len(v) != 3 {
 			return nil, errors.New("not support query key")
 		}
 		result := make(map[string]interface{})
-
 		var m interface{}
-		param := strings.Trim(methodParamsSlice[1], ")")
-		if len(param) != 0 {
-			if err := json.Unmarshal([]byte(parseParam(param)), &m); err != nil {
+		if len(v[2]) != 0 {
+			if err := json.Unmarshal([]byte(parseParam(v[2])), &m); err != nil {
 				return nil, err
 			}
 		}
-		result[methodParamsSlice[0]] = m
+		result[v[1]] = m
 		results = append(results, result)
 	}
 	return results, nil
