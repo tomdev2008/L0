@@ -45,6 +45,7 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
+	"reflect"
 )
 
 var (
@@ -80,6 +81,7 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 			state:     state.NewState(kvdb),
 			storage:   merge.NewStorage(kvdb),
 		}
+		ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 		_, err := ledgerInstance.Height()
 		if err != nil {
 			if params.Nvp {
@@ -93,7 +95,6 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 		}
 	}
 
-	ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 	return ledgerInstance
 }
 
@@ -116,7 +117,10 @@ func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.W
 
 func (ledger *Ledger) PutIntoMongoDB() {
 	contractCol := false
+	var err error
+	batchesBlockChan := make(chan []*db.WriteBatch)
 
+Out:
 	for {
 		select {
 		case batches := <-ledger.mdbChan:
@@ -124,29 +128,41 @@ func (ledger *Ledger) PutIntoMongoDB() {
 
 			reBatches := ledger.reOrgBatches(batches)
 			for colName, batches := range reBatches {
+				contractCol = false
 				bulk := ledger.mdb.Coll(colName).Bulk()
 				if 0 == strings.Compare(ledger.contract.GetColumnFamily(), colName) {
 					contractCol = true
 				}
 
+				log.Infof("colName: %+v, start -----", colName)
 				for _, batch := range batches {
-					log.Infof("colName: %+v, op: %+v", colName, batch.Operation)
+					var value interface{}
 					if batch.Operation == db.OperationPut {
 						if contractCol {
+							log.Infof("pre start store key:: %+v", string(batch.Key))
 							contractData, err := contract.DoContractStateData(batch.Value)
 							if err != nil || contractData == nil && err == nil {
-								log.Errorf("state data parse error, key: %+v, %+v", string(batch.Key), batch.Key)
+								log.Warnf("state data parse error, key: %+v, value: %+v", string(batch.Key), batch.Value)
 							}
 
 							if ok := IsJson(contractData); ok {
-								var value interface{}
-								json.Unmarshal(contractData, &value)
-								bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+								err := json.Unmarshal(contractData, &value)
+								if err != nil {
+									log.Errorf("state data not unmarshal json, key: %+v, value: %+v", string(batch.Key), string(batch.Value))
+								}
+								log.Infof("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
+
+								switch value.(type) {
+								case map[string]interface{}:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+								default:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
+								}
 							} else {
 								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
+								break Out
 							}
 						} else {
-							var value interface{}
 							switch colName {
 							case ledger.state.GetAssetCF():
 								var asset state.Asset
@@ -181,12 +197,24 @@ func (ledger *Ledger) PutIntoMongoDB() {
 					}
 				}
 
-				_, err := bulk.Run()
+				_, err = bulk.Run()
 				if err != nil {
-					go ledger.writeBlock(batches)
-					log.Errorf("bulk run err: %+v", err)
+					log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
+					batchesBlockChan <- batches
+					break Out
 				}
 			}
+		}
+	}
+
+	//in case not to block the main process
+	for {
+		select {
+		case batches := <-ledger.mdbChan:
+			_ = batches
+			log.Infof("recv new batches, but no handle")
+		case batches := <-batchesBlockChan:
+			go ledger.writeBlock(batches)
 		}
 	}
 }
@@ -420,9 +448,10 @@ func (ledger *Ledger) init() error {
 
 	err = ledger.dbHandler.AtomicWrite(writeBatchs)
 	if err != nil {
-		ledger.mdbChan <- writeBatchs
+		return err
 	}
 
+	ledger.mdbChan <- writeBatchs
 	return err
 }
 

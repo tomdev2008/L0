@@ -16,15 +16,15 @@ function L0Init(args) {
 
     console.log("address: ",account.Address,"sender: ",account.Sender,"amont: ",account.Amount,"recipient: ",account.Recipient)
 
-    for(var i in accountBalance){//用javascript的for/in循环遍历对象的属性 
+    for(var i in accountBalance){//用javascript的for/in循环遍历对象的属性
         if (typeof(accountBalance[i])=="object"){
             for(var key in accountBalance[i]){
                 console.log("amount key:",key,",amount value:",accountBalance[i][key]);
                 }
             }else{
-                console.log("key:",i," value:",accountBalance[i]);        
+                console.log("key:",i," value:",accountBalance[i]);
             }
-    } 
+    }
     return true;
 }
 
@@ -40,6 +40,8 @@ function L0Invoke(func, args) {
         return send(receiver, amount);
     } else if("transfer" == func) {
         return transfer(receiver, amount);
+    } else if("testwrite" == func) {
+        return testwrite();
     }
 
     return false;
@@ -49,6 +51,24 @@ function L0Query(args) {
     console.log("call L0Query");
     return "query ok"
 }
+
+
+function testwrite() {
+    console.log("start testwrite ...");
+    L0.PutState("a1", JSON.stringify("a1"));
+    L0.PutState("a2", JSON.stringify(true));
+    var m = new Object();
+    m["key1"] = "Comtop0";
+    m["key2"] = "Comtop1";
+    m["key3"] = "Comtop2";
+    L0.PutState("a3", JSON.stringify(m));
+    return true
+}
+
+function testread() {
+
+}
+
 
 function mint(receiver, amount) {
     var sender = L0.Account().Address;

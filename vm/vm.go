@@ -26,8 +26,9 @@ import (
 
 	"errors"
 
+	"encoding/json"
+	"fmt"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
@@ -112,20 +113,31 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstr
 	switch executeAction {
 	case types.TypeJSContractInit:
 		if realExec {
+			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})
+			if err != nil {
+				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
+				return nil, nil
+			}
+
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(params.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"}))
+				handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
 			} else {
-				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})) // add js contract code into state
+				handler.AddState(contractCodeKey, code.Bytes()) // add js contract code into state
 			}
 			return vm.PCallRealInitContract(cd, handler)
 		}
 		return vm.PCallPreInitContract(cd, handler)
 	case types.TypeLuaContractInit:
 		if realExec {
+			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "luavm"})
+			if err != nil {
+				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
+				return nil, nil
+			}
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(params.GlobalContractKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"}))
+				handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
 			} else {
-				handler.AddState(contractCodeKey, utils.Serialize(&ContractCode{Code: cs.ContractCode, Type: "luavm"})) // add lua contract code into state
+				handler.AddState(contractCodeKey, code.Bytes()) // add lua contract code into state
 			}
 			return vm.PCallRealInitContract(cd, handler)
 		}
@@ -195,7 +207,14 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler ISmartConstr
 	}
 
 	if len(code) != 0 && err == nil {
-		utils.Deserialize(code, cc)
+		contractCode, err := DoContractStateData(code)
+		if err != nil {
+			return "", "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+		}
+		err = json.Unmarshal(contractCode, cc)
+		if err != nil {
+			return "", "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+		}
 		return string(cc.Code), cc.Type, nil
 	} else if len(code) == 0 && err == nil {
 		return "", "", errors.New("cat't find contract code in db")

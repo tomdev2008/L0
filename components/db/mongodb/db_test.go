@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"encoding/json"
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -97,4 +98,32 @@ func TestCheckFormat(t *testing.T) {
 
 	remove(db.Coll("person"))
 
+}
+
+func TestMdb_Upsert(t *testing.T) {
+	db, err := NewMdb(DefaultConfig())
+	if err != nil {
+		t.Error(err)
+	}
+
+	db.RegisterCollection("person")
+	db.RegisterCollection("transaction")
+	db.RegisterCollection("block")
+	db.RegisterCollection("balance")
+
+	//person := &MockPerson{Name: "Chain"}
+	per, err := json.Marshal("history")
+	var iper interface{}
+	json.Unmarshal(per, &iper)
+	switch iper.(type) {
+	case string:
+		_, err = db.Coll("person").Upsert(bson.M{"_id": "00010010101"}, bson.M{"data": iper})
+	case map[string]interface{}:
+		_, err = db.Coll("person").Upsert(bson.M{"_id": "00010010101"}, iper)
+	}
+
+	if err != nil {
+		fmt.Println("TestMdb_Upsert err: ", err)
+	}
+	fmt.Println("TestMdb_Upsert ok...")
 }

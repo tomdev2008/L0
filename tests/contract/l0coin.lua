@@ -47,6 +47,10 @@ function L0Invoke(func, args)
         send(receiver, amount)
     elseif("transfer" == func) then
         transfer(receiver, amount)
+    elseif("testwrite" == func) then
+        testwrite()
+    elseif("testread" == func) then
+        testread()
     end
 
     return true
@@ -57,6 +61,23 @@ function L0Query(args)
     print("in L0Query")
     return "L0query ok"
 end
+
+
+function testwrite()
+    L0.PutState("a1", L0.jsonEncode("a1"))
+    L0.PutState("a2", L0.jsonEncode(true))
+    tabs={name="hello", value="world"}
+    L0.PutState("a3", L0.jsonEncode(tabs))
+end
+
+function testread()
+    local a1 = L0.GetState("a1")
+    local a2 = L0.GetState("a2")
+    local a3 = L0.GetState("a3")
+    local a3Value = L0.jsonDecode(a3)
+    print(a1, a2, a3Value)
+end
+
 
 function mint(receiver, amount)
     local sender = L0.Account().Address

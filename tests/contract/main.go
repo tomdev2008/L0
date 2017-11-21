@@ -107,6 +107,7 @@ var (
 		false,
 		nil,
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+	//[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	coinJS = newContractConf(
 		"./l0coin.js",
@@ -114,6 +115,7 @@ var (
 		false,
 		[]string{"hello", "world"},
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+	//[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalSetAccountLua = newContractConf(
 		"./global.lua",
@@ -131,9 +133,11 @@ func main() {
 
 	issueTX()
 	//testSecurityContract()
-	deploySmartContractTX(coinLua)
+	deploySmartContractTX(coinJS)
+	time.Sleep(10 * time.Second)
+	execSmartContractTX(coinJS)
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(5 * time.Second)
 }
 
 func httpPost(postForm string, resultHandler func(result map[string]interface{})) {
