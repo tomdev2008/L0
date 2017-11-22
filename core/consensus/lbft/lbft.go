@@ -479,7 +479,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
 	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcl.vcs)+1)
-	
+
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
 		if len(vcl.vcs) == lbft.Quorum() {
@@ -544,12 +544,12 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
-	lbft.rwVcStore.Lock()
+	//lbft.rwVcStore.Lock()
 	for _, vcl := range lbft.vcStore {
 		vcl.stop()
 	}
 	lbft.vcStore = make(map[string]*viewChangeList)
-	lbft.rwVcStore.Unlock()
+	//lbft.rwVcStore.Unlock()
 
 	for _, core := range lbft.coreStore {
 		lbft.stopNewViewTimerForCore(core)
