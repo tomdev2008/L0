@@ -521,6 +521,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			}
 			q++
 		}
+		log.Debugf("Replica %s received ViewChange(%s) vote size %d", lbft.options.ID, vc.ID, q)
 		if q >= lbft.Quorum() && lbft.primaryID == "" {
 			lbft.newView(tvc)
 		}
