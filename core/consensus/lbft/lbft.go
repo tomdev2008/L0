@@ -460,6 +460,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	}
 
 	lbft.rwVcStore.Lock()
+	defer lbft.rwVcStore.Unlock()
 	vcl, ok := lbft.vcStore[vc.ID]
 	if !ok {
 		vcl = &viewChangeList{}
@@ -473,12 +474,12 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			}
 		}
 	}
-	lbft.rwVcStore.Unlock()
+
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
 	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcl.vcs)+1)
-
+	
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
 		if len(vcl.vcs) == lbft.Quorum() {
@@ -521,7 +522,6 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			}
 			q++
 		}
-		log.Debugf("Replica %s received ViewChange(%s) vote size %d", lbft.options.ID, vc.ID, q)
 		if q >= lbft.Quorum() && lbft.primaryID == "" {
 			lbft.newView(tvc)
 		}
