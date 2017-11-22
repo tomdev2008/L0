@@ -84,7 +84,7 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 		ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 		_, err := ledgerInstance.Height()
 		if err != nil {
-			if params.Nvp {
+			if params.Nvp && params.Mongodb {
 				ledgerInstance.mdb = mongodb.MongDB()
 				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
 				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
@@ -272,7 +272,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
 		return err
 	}
-	if params.Nvp {
+	if params.Nvp && params.Mongodb {
 		ledger.mdbChan <- writeBatchs
 	}
 
@@ -450,8 +450,10 @@ func (ledger *Ledger) init() error {
 	if err != nil {
 		return err
 	}
+	if params.Nvp && params.Mongodb {
+		ledger.mdbChan <- writeBatchs
+	}
 
-	ledger.mdbChan <- writeBatchs
 	return err
 }
 

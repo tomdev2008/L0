@@ -36,5 +36,6 @@ var (
 	LocalIp       string
 	Validator     bool
 	Nvp           = true
+	Mongodb       = true
 	MaxOccurs     int
 )

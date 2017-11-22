@@ -84,7 +84,7 @@ func NewLcnd(cfgFile string) *Lcnd {
 	mergeConfig = cfg.MergeConfig
 
 	chainDb = db.NewDB(cfg.DbConfig)
-	if params.Nvp {
+	if params.Nvp && params.Mongodb {
 
 		_, err := mongodb.NewMdb(mongodb.DefaultConfig())
 		if err != nil {
