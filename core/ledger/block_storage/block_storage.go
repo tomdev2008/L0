@@ -20,7 +20,6 @@ package block_storage
 
 import (
 	"errors"
-
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -170,17 +169,17 @@ func (blockchain *Blockchain) AppendBlock(block *types.Block) []*db.WriteBatch {
 		txHashs     []crypto.Hash
 	)
 
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.blockColumnFamily, db.OperationPut, blockHashBytes, block.Header.Serialize())) // block hash => block
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, blockHeightBytes, blockHashBytes))         // height => block hash
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, []byte(heightKey), blockHeightBytes))      // update block height
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.blockColumnFamily, db.OperationPut, blockHashBytes, block.Header.Serialize(), blockchain.blockColumnFamily)) // block hash => block
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, blockHeightBytes, blockHashBytes, blockchain.indexColumnFamily))         // height => block hash
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, []byte(heightKey), blockHeightBytes, blockchain.indexColumnFamily))      // update block height
 
 	//storage  tx hash
 	for _, tx := range block.Transactions {
 		txHashs = append(txHashs, tx.Hash())
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.transactionColumnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize())) // tx hash => tx detail
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.transactionColumnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize(), blockchain.transactionColumnFamily)) // tx hash => tx detail
 
 	}
-	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, prependKeyPrefix(blockchain.txPrefix, blockHeightBytes), utils.Serialize(txHashs))) // prefix + blockheight  => all tx hash
+	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, prependKeyPrefix(blockchain.txPrefix, blockHeightBytes), utils.Serialize(txHashs), string(blockchain.txPrefix))) // prefix + blockheight  => all tx hash
 
 	return writeBatchs
 }
@@ -246,9 +245,30 @@ func (blockchain *Blockchain) GetIndexCF() string {
 	return blockchain.indexColumnFamily
 }
 
+func (blockchain *Blockchain) GetTransactionInBlock(data []byte, typ string) (map[string][]crypto.Hash, bool) {
+	var txHashes []crypto.Hash
+	txsMap := make(map[string][]crypto.Hash)
+	switch typ {
+	case string(blockchain.txPrefix):
+		if data != nil {
+			utils.Deserialize(data, &txHashes)
+		}
+		txsMap["txs"] = txHashes
+		return txsMap, true
+	}
+
+	return nil, false
+}
+
+func removeKeyPrefix(data []byte, prefix []byte) []byte {
+	prefixLen := len(prefix)
+	return data[prefixLen:]
+}
+
 func prependKeyPrefix(prefix []byte, key []byte) []byte {
 	modifiedKey := []byte{}
 	modifiedKey = append(modifiedKey, prefix...)
 	modifiedKey = append(modifiedKey, key...)
+
 	return modifiedKey
 }

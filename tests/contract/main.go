@@ -114,8 +114,8 @@ var (
 		langJS,
 		false,
 		[]string{"hello", "world"},
-		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
-	//[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+		//[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+		[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalSetAccountLua = newContractConf(
 		"./global.lua",

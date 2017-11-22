@@ -20,6 +20,10 @@ blockchain:
   maxOccurs: 1
   cpuprofile: "profile/prof_node1"
   profPort: "6061"
+  nodeType:
+    type: "nvp"
+    mongodb: true
+
 
 validator:
   status: true

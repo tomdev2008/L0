@@ -118,7 +118,7 @@ func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.W
 func (ledger *Ledger) PutIntoMongoDB() {
 	contractCol := false
 	var err error
-	batchesBlockChan := make(chan []*db.WriteBatch)
+	batchesBlockChan := make(chan []*db.WriteBatch, 1)
 
 Out:
 	for {
@@ -134,12 +134,11 @@ Out:
 					contractCol = true
 				}
 
-				log.Infof("colName: %+v, start -----", colName)
+				log.Debugf("colName: %+v, start -----", colName)
 				for _, batch := range batches {
 					var value interface{}
 					if batch.Operation == db.OperationPut {
 						if contractCol {
-							log.Infof("pre start store key:: %+v", string(batch.Key))
 							contractData, err := contract.DoContractStateData(batch.Value)
 							if err != nil || contractData == nil && err == nil {
 								log.Warnf("state data parse error, key: %+v, value: %+v", string(batch.Key), batch.Value)
@@ -152,12 +151,12 @@ Out:
 								}
 								log.Infof("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
 
-								switch value.(type) {
-								case map[string]interface{}:
-									bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
-								default:
-									bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
-								}
+								//switch value.(type) {
+								//case map[string]interface{}:
+								bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+								//default:
+								//	bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
+								//}
 							} else {
 								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
 								break Out
@@ -186,7 +185,13 @@ Out:
 								utils.Deserialize(batch.Value, &tx)
 								bal, _ := json.Marshal(tx)
 								json.Unmarshal(bal, &value)
-							//case ledger.block.GetIndexCF():
+							case ledger.block.GetIndexCF():
+								txs, ok := ledger.block.GetTransactionInBlock(batch.Value, batch.Typ)
+								if ok != true {
+									continue
+								}
+								bal, _ := json.Marshal(txs)
+								json.Unmarshal(bal, &value)
 							default:
 								continue
 							}
@@ -212,7 +217,7 @@ Out:
 		select {
 		case batches := <-ledger.mdbChan:
 			_ = batches
-			log.Infof("recv new batches, but no handle")
+			log.Warn("recv new batches, but no handle")
 		case batches := <-batchesBlockChan:
 			go ledger.writeBlock(batches)
 		}
@@ -444,7 +449,7 @@ func (ledger *Ledger) init() error {
 		db.NewWriteBatch(contract.ColumnFamily,
 			db.OperationPut,
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
-			buf.Bytes()))
+			buf.Bytes(), contract.ColumnFamily))
 
 	err = ledger.dbHandler.AtomicWrite(writeBatchs)
 	if err != nil {

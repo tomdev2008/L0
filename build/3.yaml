@@ -19,7 +19,9 @@ blockchain:
   datadir: "datadir/3"
   maxOccurs: 1
   cpuprofile: "profile/prof_node3"
-  profPort: "6063"
+  nodeType:
+    type: "vp"
+    mongodb: true
 
 validator:
   status: true
