@@ -156,6 +156,7 @@ func (lbft *Lbft) Start() {
 
 func (lbft *Lbft) sendEmptyRequest() {
 	if lbft.isPrimary() {
+		lbft.blockTimer.Stop()
 		req := &Request{
 			ID:     EMPTYREQUEST,
 			Time:   uint32(time.Now().UnixNano()),
