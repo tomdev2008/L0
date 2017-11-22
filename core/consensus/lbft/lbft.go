@@ -477,7 +477,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
-	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
+	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcl.vcs)+1)
 
 	vcl.vcs = append(vcl.vcs, vc)
 	if len(vcl.vcs) >= lbft.Quorum() {
