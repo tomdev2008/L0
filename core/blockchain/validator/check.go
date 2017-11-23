@@ -21,6 +21,7 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"plugin"
 	"strings"
@@ -50,59 +51,47 @@ func (v *Verification) isExist(tx *types.Transaction) bool {
 	return false
 }
 
-func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
+func (v *Verification) checkTransactionLegal(tx *types.Transaction) error {
 	if !(strings.Compare(tx.FromChain(), params.ChainID.String()) == 0 || (strings.Compare(tx.ToChain(), params.ChainID.String()) == 0)) {
-		log.Errorf("[validator] illegal transaction %s : fromCahin %s or toChain %s == params.ChainID %s", tx.Hash(), tx.FromChain(), tx.ToChain(), params.ChainID.String())
-		return false
+		return fmt.Errorf("[validator] illegal transaction %s : fromCahin %s or toChain %s == params.ChainID %s", tx.Hash(), tx.FromChain(), tx.ToChain(), params.ChainID.String())
 	}
 
-	isOK := true
 	switch tx.GetType() {
 	case types.TypeAtomic:
-		//TODO fromChain==toChain
 		if strings.Compare(tx.FromChain(), tx.ToChain()) != 0 {
-			log.Errorf("[validator] illegal transaction %s : fromchain %s == tochain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s : fromchain %s == tochain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
 		}
 	case types.TypeAcrossChain:
-		//TODO the len of fromchain == the len of tochain
 		if !(len(tx.FromChain()) == len(tx.ToChain()) && strings.Compare(tx.FromChain(), tx.ToChain()) != 0) {
-			log.Errorf("[validator] illegal transaction %s : wrong chain floor, fromchain %s ==  tochain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s : wrong chain floor, fromchain %s ==  tochain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
 		}
 	case types.TypeDistribut:
-		//TODO |fromChain - toChain| = 1 and sender_addr == receive_addr
 		address := tx.Sender()
 		fromChain := coordinate.HexToChainCoordinate(tx.FromChain())
 		toChainParent := coordinate.HexToChainCoordinate(tx.ToChain()).ParentCoorinate()
 		if !bytes.Equal(fromChain, toChainParent) || strings.Compare(address.String(), tx.Recipient().String()) != 0 {
-			log.Errorf("[validator] illegal transaction %s :wrong chain floor, fromChain %s - toChain %s = 1", tx.Hash(), tx.FromChain(), tx.ToChain())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s :wrong chain floor, fromChain %s - toChain %s = 1", tx.Hash(), tx.FromChain(), tx.ToChain())
 		}
 	case types.TypeBackfront:
 		address := tx.Sender()
 		fromChainParent := coordinate.HexToChainCoordinate(tx.FromChain()).ParentCoorinate()
 		toChain := coordinate.HexToChainCoordinate(tx.ToChain())
 		if !bytes.Equal(fromChainParent, toChain) || strings.Compare(address.String(), tx.Recipient().String()) != 0 {
-			log.Errorf("[validator] illegal transaction %s :wrong chain floor, fromChain %s - toChain %s = 1", tx.Hash(), tx.FromChain(), tx.ToChain())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s :wrong chain floor, fromChain %s - toChain %s = 1", tx.Hash(), tx.FromChain(), tx.ToChain())
 		}
 	case types.TypeMerged:
-	//TODO nothing to do
+	// nothing to do
 	case types.TypeIssue, types.TypeIssueUpdate:
-		//TODO the first floor and meet issue account
 		fromChain := coordinate.HexToChainCoordinate(tx.FromChain())
 		toChain := coordinate.HexToChainCoordinate(tx.FromChain())
 
 		// && strings.Compare(fromChain.String(), "00") == 0)
 		if len(fromChain) != len(toChain) {
-			log.Errorf("[validator] illegal transaction %s: should issue chain floor, fromChain %s or toChain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s: should issue chain floor, fromChain %s or toChain %s", tx.Hash(), tx.FromChain(), tx.ToChain())
 		}
 
 		if !v.isIssueTransaction(tx) {
-			log.Errorf("[validator] illegal transaction %s: valid issue tx public key fail", tx.Hash())
-			isOK = false
+			return fmt.Errorf("[validator] illegal transaction %s: valid issue tx public key fail", tx.Hash())
 		}
 
 		if len(tx.Payload) > 0 {
@@ -113,8 +102,7 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 					Owner:  tx.Recipient(),
 				}
 				if _, err := asset.Update(string(tx.Payload)); err != nil {
-					log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
-					isOK = false
+					return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
 				}
 			} else if tp == types.TypeIssueUpdate {
 				asset := &state.Asset{
@@ -129,19 +117,14 @@ func (v *Verification) isLegalTransaction(tx *types.Transaction) bool {
 						Owner:  tx.Sender(),
 					}
 					if _, err := asset.Update(string(tx.Payload)); err != nil {
-						log.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
-						isOK = false
+						return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
 					}
 				}
 			}
 		}
 	}
 
-	if !isOK {
-		v.notify(tx, " illegal transaction")
-	}
-
-	return isOK
+	return nil
 }
 
 func (v *Verification) isIssueTransaction(tx *types.Transaction) bool {
@@ -155,44 +138,42 @@ func (v *Verification) isIssueTransaction(tx *types.Transaction) bool {
 	return false
 }
 
-func (v *Verification) checkTransaction(tx *types.Transaction) bool {
-	if !v.isLegalTransaction(tx) {
-		return false
+func (v *Verification) checkTransaction(tx *types.Transaction) error {
+	if err := v.checkTransactionLegal(tx); err != nil {
+		return err
 	}
 
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
-		return false
+		return fmt.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
 	}
 
 	v.rwInTxs.Lock()
 	if v.isExist(tx) {
 		v.rwInTxs.Unlock()
-		return false
+		return fmt.Errorf("transaction %v already existed", tx.Hash())
 	}
 
 	if v.isOverCapacity() {
 		elem := v.txpool.RemoveFront()
 		delete(v.inTxs, elem.(*types.Transaction).Hash())
-		log.Warnf("[validator]  excess capacity, remove front transaction")
+		log.Warnf("[validator] excess capacity, remove front transaction")
 	}
 
-	return true
+	return nil
 }
 
-func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) bool {
-	if !v.isLegalTransaction(tx) {
-		return false
+func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) error {
+	if err := v.checkTransactionLegal(tx); err != nil {
+		return err
 	}
 
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		log.Debugf("[validator] illegal transaction %s: invalid signature", tx.Hash())
-		return false
+		return fmt.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
 	}
 
-	return true
+	return nil
 }
 
 // SecurityPluginDir returns the directory of security plugin.
@@ -261,10 +242,10 @@ func (v *Verification) getSecurityVerifier() SecurityVerifier {
 	return securityVerifierMnger.verifier
 }
 
-func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
+func (v *Verification) checkTransactionSecurity(tx *types.Transaction) error {
 	verifier := v.getSecurityVerifier()
 	if verifier == nil {
-		return true
+		return nil
 	}
 
 	err := verifier(tx, func(key string) ([]byte, error) {
@@ -275,11 +256,11 @@ func (v *Verification) checkTransactionSecurity(tx *types.Transaction) bool {
 		return data, nil
 	})
 	if err != nil {
-		log.Error(err)
-		return false
+		return err
 	}
 
-	return true
+	log.Infof("security verify success of transaction %v", tx.Hash())
+	return nil
 }
 
 func (v *Verification) checkTransactionSecurityByContract(tx *types.Transaction) bool {

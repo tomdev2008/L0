@@ -156,6 +156,7 @@ func (lbft *Lbft) Start() {
 
 func (lbft *Lbft) sendEmptyRequest() {
 	if lbft.isPrimary() {
+		lbft.blockTimer.Stop()
 		req := &Request{
 			ID:     EMPTYREQUEST,
 			Time:   uint32(time.Now().UnixNano()),
@@ -385,11 +386,13 @@ func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 
 func (lbft *Lbft) sendViewChange(vc *ViewChange, reason string) {
 	log.Infof("Replica %s send ViewChange(%s) for voter %s: %s", lbft.options.ID, vc.ID, vc.PrimaryID, reason)
-	lbft.recvViewChange(vc)
-	lbft.broadcast(lbft.options.Chain, &Message{
+	msg := &Message{
 		Type:    MESSAGEVIEWCHANGE,
 		Payload: utils.Serialize(vc),
-	})
+	}
+	lbft.recvConsensusMsgChan <- msg
+	//lbft.recvViewChange(vc)
+	lbft.broadcast(lbft.options.Chain, msg)
 }
 
 type viewChangeList struct {
@@ -400,9 +403,13 @@ type viewChangeList struct {
 
 func (vcl *viewChangeList) start(lbft *Lbft) {
 	vcl.timeoutTimer = time.AfterFunc(lbft.options.ViewChange, func() {
-		if len(vcl.vcs) >= lbft.Quorum() {
+		lbft.rwVcStore.Lock()
+		vcs := vcl.vcs
+		delete(lbft.vcStore, vcs[0].ID)
+		lbft.rwVcStore.Unlock()
+		if len(vcs) >= lbft.Quorum() {
 			var tvc *ViewChange
-			for _, v := range vcl.vcs {
+			for _, v := range vcs {
 				if v.PrimaryID == lbft.lastPrimaryID {
 					continue
 				}
@@ -418,11 +425,8 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 					tvc = v
 				}
 			}
-			log.Infof("Replica %s ViewChange(%s) timeout %s : voter %v", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, tvc)
-			if tvc == nil {
-				return
-			}
-			if lbft.rvc == nil {
+			log.Infof("Replica %s ViewChange(%s) timeout %s : voter %v", lbft.options.ID, vcs[0].ID, lbft.options.ViewChange, tvc)
+			if tvc != nil && lbft.rvc == nil {
 				lbft.rvc = tvc
 				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
 				lbft.rvc.ID += ":resend"
@@ -433,11 +437,8 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				//})
 			}
 		} else {
-			log.Debugf("Replica %s ViewChange(%s) timeout %s : %d", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, len(vcl.vcs))
+			log.Debugf("Replica %s ViewChange(%s) timeout %s : %d", lbft.options.ID, vcs[0].ID, lbft.options.ViewChange, len(vcs))
 		}
-		lbft.rwVcStore.Lock()
-		delete(lbft.vcStore, vcl.vcs[0].ID)
-		lbft.rwVcStore.Unlock()
 	})
 }
 
@@ -467,29 +468,31 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	} else {
 		for _, v := range vcl.vcs {
 			if v.Chain == vc.Chain && v.ReplicaID == vc.ReplicaID {
-				log.Warningf("Replica %s received ViewChange(%s) from %s: ingnore, duplicate", lbft.options.ID, vc.ID, vc.ReplicaID)
+				log.Warningf("Replica %s received ViewChange(%s) from %s: ingnore, duplicate, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, len(vcl.vcs))
 				return nil
 			}
 		}
 	}
+	vcl.vcs = append(vcl.vcs, vc)
+	vcs := vcl.vcs
 	lbft.rwVcStore.Unlock()
+
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
-	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash)
+	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcs))
 
-	vcl.vcs = append(vcl.vcs, vc)
-	if len(vcl.vcs) >= lbft.Quorum() {
-		if len(vcl.vcs) == lbft.Quorum() {
+	if len(vcs) >= lbft.Quorum() {
+		if len(vcs) == lbft.Quorum() {
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
 				lbft.primaryID = ""
-				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s", lbft.options.ID, vcl.vcs[0].ID, lbft.lastPrimaryID)
+				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID)
 			}
 		}
 		q := 0
 		var tvc *ViewChange
-		for _, v := range vcl.vcs {
+		for _, v := range vcs {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
@@ -505,7 +508,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 				tvc = v
 			}
 		}
-		for _, v := range vcl.vcs {
+		for _, v := range vcs {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
@@ -542,13 +545,10 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
-	lbft.rwVcStore.Lock()
 	for _, vcl := range lbft.vcStore {
 		vcl.stop()
 	}
 	lbft.vcStore = make(map[string]*viewChangeList)
-	lbft.rwVcStore.Unlock()
-
 	for _, core := range lbft.coreStore {
 		lbft.stopNewViewTimerForCore(core)
 		if core.prePrepare != nil {

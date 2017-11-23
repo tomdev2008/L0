@@ -140,27 +140,30 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	ch := make(chan struct{}, 1)
-	t.pmHander.Relay(tx)
-	result := "Success"
+	var errMsg string
 	blockchain.Register(tx.Hash(), func(iTx interface{}) {
 		ch <- struct{}{}
 		if iTx != nil {
 			if s, ok := iTx.(string); ok {
-				result = s
+				errMsg = s
 			}
 		}
 	})
+
+	t.pmHander.Relay(tx)
+	<-ch
+	if len(errMsg) > 0 {
+		return errors.New(errMsg)
+	}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
-		*reply = BroadcastReply{Result: &result, ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
+		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
 	} else {
-		*reply = BroadcastReply{Result: &result, TransactionHash: tx.Hash()}
+		*reply = BroadcastReply{TransactionHash: tx.Hash()}
 	}
-
-	<-ch
 	return nil
 }
 

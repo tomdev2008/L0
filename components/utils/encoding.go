@@ -39,8 +39,11 @@ func recursiveEncode(w io.Writer, s reflect.Value) {
 	switch s.Kind() {
 	case reflect.Struct:
 		numField := s.NumField()
+		tp := s.Type()
 		for i := 0; i < numField; i++ {
-			recursiveEncode(w, s.Field(i))
+			if IsExported(tp.Field(i)) {
+				recursiveEncode(w, s.Field(i))
+			}
 		}
 	case reflect.Ptr:
 		ptrEncode(w, s)
@@ -162,8 +165,12 @@ func recursiveDecode(r io.Reader, s reflect.Value) error {
 	case reflect.Ptr:
 		err = ptrDecode(r, s)
 	case reflect.Struct:
-		for i := 0; i < s.NumField(); i++ {
-			recursiveDecode(r, s.Field(i))
+		numField := s.NumField()
+		tp := s.Type()
+		for i := 0; i < numField; i++ {
+			if IsExported(tp.Field(i)) {
+				recursiveDecode(r, s.Field(i))
+			}
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if l, err = ReadVarInt(r); l > 0 {

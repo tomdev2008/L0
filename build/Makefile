@@ -1,39 +1,18 @@
-# Build path
-BUILD_BIN_PATH=../../../../../bin
-LUAVM=luavm
-JSVM=jsvm
-
-# Binary 
-LCND=${BUILD_BIN_PATH}/lcnd
-GOBIN_LCND=${GOBIN}/lcnd
-
-#CLI=${BUILD_BIN_PATH}/cli
-#GOBIN_CLI=${GOBIN}/cli
-
-TESTS=${BUILD_BIN_PATH}/tests
-
-# Install path
-INSTALL_DIR=./bin/
 
 all:
-	go build -tags=embed -o jsvm ../vm/jsvm/main/main.go
-	go build -tags=embed -o luavm ../vm/luavm/main/main.go
-	go install -tags=embed ../cmd/...
-	
-	@mkdir -p bin
-
-	@if test -f ${LCND}; then \
-		mv ${LCND} ${CLI} ${LUAVM} ${JSVM} ${INSTALL_DIR} ;  \
-		echo "make done, mv the lcnd cli to ${INSTALL_DIR}";  \
-	elif test -f ${GOBIN_LCND}; then \
-		mv ${GOBIN_LCND} ${GOBIN_CLI} ${LUAVM} ${JSVM} ${INSTALL_DIR} ; \
-		echo "make done, mv the ${GOBIN_LCND} to ${INSTALL_DIR}"; \
-	else \
-		echo "make fail, not mv lcnd to ${INSTALL_DIR}";\
-		fi
+	@go install -tags=embed ../vm/jsvm/main
+	go build -tags=embed -o ./bin/jsvm ../vm/jsvm/main
+	@go install -tags=embed ../vm/luavm/main
+	go build -tags=embed -o ./bin/luavm ../vm/luavm/main
+	@go install -tags=embed ../cmd/lcnd/
+	go build -tags=embed -o ./bin/lcnd ../cmd/lcnd/
 
 tests:
-	go install -tags=embed ../tests/...
-	mv ${TESTS} ${INSTALL_DIR}
+	@go install -tags=embed ../tests/client
+	go build -tags=embed -o ./bin/client ../tests/client
+	@go install -tags=embed ../tests/contract
+	go build -tags=embed -o ./bin/contract ../tests/contract
+	@go install -tags=embed ../tests/rpc
+	go build -tags=embed -o ./bin/rpc ../tests/rpc
 
-.PHONY:all tests
+.PHONY: all tests

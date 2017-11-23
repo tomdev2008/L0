@@ -162,6 +162,13 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 			Payload: utils.Serialize(preprepare),
 		})
 		lbft.recvPrePrepare(preprepare)
+
+		if request.ID == EMPTYREQUEST {
+			lbft.cnt = 0
+			lbft.height++
+		} else if lbft.cnt += len(request.Txs); lbft.cnt >= lbft.options.BlockSize {
+			lbft.sendEmptyRequest()
+		}
 	} else {
 		log.Debugf("Replica %s received Request for consensus %s: ignore, backup", lbft.options.ID, digest)
 	}

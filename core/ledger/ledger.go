@@ -37,6 +37,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -480,6 +481,18 @@ func (ledger *Ledger) init() error {
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
 			buf.Bytes(), contract.ColumnFamily))
 
+	// global contract
+	buf, err = contract.ConcrateStateJson(&contract.DefaultGlobalContract)
+	if err != nil {
+		return err
+	}
+
+	writeBatchs = append(writeBatchs,
+		db.NewWriteBatch(contract.ColumnFamily,
+			db.OperationPut,
+			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.GlobalContractKey)),
+			buf.Bytes(), contract.ColumnFamily))
+
 	err = ledger.dbHandler.AtomicWrite(writeBatchs)
 	if err != nil {
 		return err
@@ -490,6 +503,7 @@ func (ledger *Ledger) init() error {
 	}
 
 	return err
+
 }
 
 func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, types.Transactions) {
@@ -566,18 +580,28 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 			}
 
 			if tx.Sender() != adminAddr {
-				log.Error("deploy security contract, permission denied")
+				log.Error("deploy security plugin, permission denied")
 				continue
 			}
 
-			pluginName := "security.so"
-			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginName)
+			pluginData, err := plugins.Make(tx.Payload)
+			if err != nil {
+				log.Error("invalid security plugin data")
+				continue
+			}
+
+			if len(pluginData.Name) == 0 {
+				log.Error("name of security plugin is empty")
+				continue
+			}
+
+			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginData.Name)
 			if utils.FileExist(path) {
-				log.Errorf("security contract %s already existed", pluginName)
+				log.Errorf("security plugin %s already existed", pluginData.Name)
 				continue
 			}
 
-			err = ioutil.WriteFile(path, tx.Payload, 0644)
+			err = ioutil.WriteFile(path, pluginData.Code, 0644)
 			if err != nil {
 				log.Error(err)
 				continue

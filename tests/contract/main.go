@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
+	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
@@ -44,6 +45,12 @@ var (
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privkey, _     = crypto.HexToECDSA(privkeyHex)
 	sender         = accounts.PublicKeyToAddress(*privkey.Public())
+
+	senderAccount = "abc123"
+	accountInfo   = map[string]string{
+		"from_user": senderAccount,
+		"to_user":   senderAccount,
+	}
 
 	txChan = make(chan *types.Transaction, 5)
 
@@ -122,9 +129,13 @@ var (
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "account." + sender.String(), sender.String()})
+		[]string{
+			"SetGlobalState",
+			"account." + senderAccount,
+			fmt.Sprintf(`{"addr":"%s", "uid":"%s", "frozened":false}`, sender.String(), senderAccount),
+		})
 
-	securityPath = "./security.so"
+	securityPluginName = "security.so"
 )
 
 func main() {
@@ -137,7 +148,8 @@ func main() {
 	// time.Sleep(10 * time.Second)
 	// execSmartContractTX(coinJS)
 
-	time.Sleep(5 * time.Second)
+	ch := make(chan struct{})
+	<-ch
 }
 
 func httpPost(postForm string, resultHandler func(result map[string]interface{})) {
@@ -198,6 +210,9 @@ func issueTX() {
 	issueCoin := make(map[string]interface{})
 	issueCoin["id"] = 0
 	tx.Payload, _ = json.Marshal(issueCoin)
+	tx.Meta, _ = json.Marshal(map[string]map[string]string{
+		"account": accountInfo,
+	})
 
 	fmt.Println("issueSender address: ", issueSender.String(), " receriver: ", sender.String())
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
@@ -235,6 +250,7 @@ func deploySmartContractTX(conf *contractConf) []byte {
 	)
 
 	tx.Payload = utils.Serialize(contractSpec)
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	fmt.Println("> deploy ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
@@ -274,6 +290,7 @@ func execSmartContractTX(conf *contractConf) {
 
 	fmt.Println("> exe ContractAddr:", accounts.NewAddress(contractSpec.ContractAddr).String())
 	tx.Payload = utils.Serialize(contractSpec)
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txChan <- tx
@@ -305,7 +322,11 @@ func deploySecurity() {
 		uint32(time.Now().Unix()),
 	)
 
-	tx.Payload, _ = ioutil.ReadFile(securityPath)
+	var pluginData plugins.Plugin
+	pluginData.Name = securityPluginName
+	pluginData.Code, _ = ioutil.ReadFile("./" + securityPluginName)
+	tx.Payload = pluginData.Bytes()
+
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 
@@ -313,8 +334,10 @@ func deploySecurity() {
 }
 
 func testSecurityContract() {
+	issueTX()
+
 	// global contract
-	deploySmartContractTX(globalSetAccountLua)
+	// deploySmartContractTX(globalSetAccountLua)
 
 	time.Sleep(1 * time.Second)
 	execSmartContractTX(globalSetAccountLua)
@@ -329,11 +352,11 @@ func testSecurityContract() {
 		langLua,
 		true,
 		nil,
-		[]string{"SetGlobalState", "securityContract", "security.so"})
+		[]string{"SetGlobalState", "securityContract", `"security.so"`})
 	execSmartContractTX(globalLua)
 
 	// query
-	time.Sleep(2 * time.Second)
+	time.Sleep(6 * time.Second)
 	queryGlobalContract("securityContract")
 
 	time.Sleep(3 * time.Second)

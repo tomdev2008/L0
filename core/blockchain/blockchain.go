@@ -20,6 +20,7 @@ package blockchain
 
 import (
 	"container/list"
+	"fmt"
 	"sync"
 	"time"
 
@@ -261,11 +262,15 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	if bc.validator == nil {
 		return true
 	}
-	if ok := bc.validator.ProcessTransaction(tx); ok {
-		return true
+
+	err := bc.validator.ProcessTransaction(tx)
+	if err != nil {
+		log.Errorf("process transaction %v failed, %v", tx.Hash(), err)
+		txNotify(tx, fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
+		return false
 	}
 
-	return false
+	return true
 }
 
 // ProcessBlock processes new block from the network,flag = true pack up block ,flag = false sync block

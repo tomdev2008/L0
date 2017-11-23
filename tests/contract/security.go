@@ -1,11 +1,24 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/bocheninc/L0/core/types"
 )
+
+type accountData struct {
+	FromUser string `json:"from_user"`
+	ToUser   string `json:"to_user"`
+	Address  string `json:"addr"`
+	UID      string `json:"uid"`
+	Frozened bool   `json:"frozened"`
+}
+
+type metaData struct {
+	Account accountData `json:"account"`
+}
 
 /*
 Verify:
@@ -27,33 +40,80 @@ func Verify(tx *types.Transaction, getter func(key string) ([]byte, error)) erro
 		return fmt.Errorf("transaction is nil")
 	}
 
+	if tx.GetType() == types.TypeIssue ||
+		tx.GetType() == types.TypeIssueUpdate ||
+		tx.GetType() == types.TypeJSContractInit ||
+		tx.GetType() == types.TypeLuaContractInit ||
+		tx.GetType() == types.TypeContractInvoke ||
+		tx.GetType() == types.TypeSecurity {
+		return nil
+	}
+
 	if getter == nil {
 		return fmt.Errorf("global state getter is nil")
 	}
 
-	// sender
-	senderAccount, err := getter("account." + tx.Sender().String())
+	var mtData metaData
+	err := json.Unmarshal(tx.Meta, &mtData)
 	if err != nil {
 		return err
 	}
 
-	if len(senderAccount) == 0 {
-		return fmt.Errorf("invalid account")
+	// sender
+	if len(mtData.Account.FromUser) == 0 {
+		return fmt.Errorf("invalid sender account")
+	}
+
+	dbData, err := getter("account." + mtData.Account.FromUser)
+	if err != nil {
+		return err
+	}
+
+	if len(dbData) == 0 {
+		return fmt.Errorf("can't find sender account data")
+	}
+
+	var accData accountData
+	err = json.Unmarshal(dbData, &accData)
+	if err != nil {
+		return err
+	}
+
+	if tx.Sender().String() != accData.Address {
+		return fmt.Errorf("sender address does not match, %s vs %s",
+			tx.Sender().String(), accData.Address)
+	}
+
+	if accData.Frozened {
+		return fmt.Errorf("sender account is frozened")
 	}
 
 	// recipient
-	if tx.GetType() != types.TypeJSContractInit && tx.GetType() != types.TypeLuaContractInit &&
-		tx.GetType() != types.TypeContractInvoke && tx.GetType() != types.TypeSecurity {
+	if len(mtData.Account.ToUser) == 0 {
+		return fmt.Errorf("invalid recipient account")
+	}
 
-		recipient := tx.Recipient()
-		recipientAccount, err := getter("account." + recipient.String())
-		if err != nil {
-			return err
-		}
+	dbData, err = getter("account." + mtData.Account.ToUser)
+	if err != nil {
+		return err
+	}
 
-		if len(recipientAccount) == 0 {
-			return fmt.Errorf("invalid recipient")
-		}
+	if len(dbData) == 0 {
+		return fmt.Errorf("can't find recipient account data")
+	}
+
+	err = json.Unmarshal(dbData, &accData)
+	if err != nil {
+		return err
+	}
+
+	if tx.Recipient().String() != accData.Address {
+		return fmt.Errorf("recipient address does not match, %s vs %s",
+			tx.Recipient().String(), accData.Address)
+	}
+
+	if accData.Frozened {
+		return fmt.Errorf("recipient account is frozened")
 	}
 
 	// amount
