@@ -40,7 +40,7 @@ import (
 
 type Validator interface {
 	Start()
-	ProcessTransaction(tx *types.Transaction) bool
+	ProcessTransaction(tx *types.Transaction) error
 	VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions)
 	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
@@ -139,16 +139,14 @@ func (v *Verification) processLoop() {
 	}
 }
 
-func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
-	if !v.checkTransaction(tx) {
-		return false
+func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
+	if err := v.checkTransaction(tx); err != nil {
+		return err
 	}
 
-	//TODO handle global and security contract
-	if !v.checkTransactionSecurity(tx) {
-		return false
+	if err := v.checkTransactionSecurity(tx); err != nil {
+		return err
 	}
-	//TODO
 
 	v.txpool.Add(tx)
 	v.inTxs[tx.Hash()] = tx
@@ -159,7 +157,7 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) bool {
 	}
 	v.requestBatchSignal <- cnt
 	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), cnt)
-	return true
+	return nil
 }
 
 func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
@@ -205,20 +203,21 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	var ttxs types.Transactions
 	for _, tx := range txs {
 		if !v.isExist(tx) {
-			if !v.checkTransactionInConsensus(tx) {
+			if err := v.checkTransactionInConsensus(tx); err != nil {
 				log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
-				v.notify(tx, "illegal")
+				v.notify(tx, err.Error())
 				return false, nil
 			}
-			if !v.checkTransactionSecurity(tx) {
+
+			if err := v.checkTransactionSecurity(tx); err != nil {
 				log.Errorf("check transaction security fail, tx_hash: %+v", tx.Hash().String())
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
-				v.notify(tx, "illegal")
+				v.notify(tx, err.Error())
 				return false, nil
 			}
 		}

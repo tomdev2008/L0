@@ -151,6 +151,10 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	})
 
 	t.pmHander.Relay(tx)
+	<-ch
+	if len(errMsg) > 0 {
+		return errors.New(errMsg)
+	}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
@@ -159,12 +163,6 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
 	} else {
 		*reply = BroadcastReply{TransactionHash: tx.Hash()}
-	}
-
-	<-ch
-
-	if len(errMsg) > 0 {
-		return errors.New(errMsg)
 	}
 	return nil
 }
