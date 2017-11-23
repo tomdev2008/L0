@@ -254,7 +254,7 @@ func (bc *Blockchain) StartTxPoolService() {
 }
 
 // ProcessTransaction processes new transaction from the network
-func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
+func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool) bool {
 	// step 1: validate and mark transaction
 	// step 2: add transaction to txPool
 	// if atomic.LoadUint32(&bc.synced) == 0 {
@@ -266,10 +266,15 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction) bool {
 	err := bc.validator.ProcessTransaction(tx)
 	if err != nil {
 		log.Errorf("process transaction %v failed, %v", tx.Hash(), err)
-		txNotify(tx, fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
+		if needNotify {
+			txNotify(tx, fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
+		}
 		return false
 	}
 
+	if needNotify {
+		txNotify(tx, "")
+	}
 	return true
 }
 

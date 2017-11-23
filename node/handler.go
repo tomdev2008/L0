@@ -205,7 +205,7 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			break
 		}
 
-		if pm.Blockchain.ProcessTransaction(&tx) {
+		if pm.Blockchain.ProcessTransaction(&tx, true) {
 			//inventory.Type = InvTypeTx
 			//inventory.Hashes = []crypto.Hash{inv.Hash()}
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
@@ -309,13 +309,13 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 			In: tx,
 			Exec: func(in interface{}) {
 				tx := in.(*types.Transaction)
-				if pm.Blockchain.ProcessTransaction(tx) {
+				if pm.Blockchain.ProcessTransaction(tx, false) {
 					pm.msgCh <- &m
 				}
 			},
 		}
 	} else {
-		if pm.Blockchain.ProcessTransaction(tx) {
+		if pm.Blockchain.ProcessTransaction(tx, false) {
 			pm.msgCh <- &m
 		}
 	}
@@ -538,7 +538,7 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 	case msgnet.ChainTxMsg:
 		tx := &types.Transaction{}
 		tx.Deserialize(msg.Payload)
-		pm.Blockchain.ProcessTransaction(tx)
+		pm.Blockchain.ProcessTransaction(tx, false)
 		log.Debugln("recv transaction msg")
 	case msgnet.ChainMergeTxsMsg:
 		fallthrough

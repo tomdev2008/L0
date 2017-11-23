@@ -127,5 +127,5 @@ func (tp *TxParser) isChainCoordinatePoint(fromChain, toChain string) bool {
 
 func (tp *TxParser) processTransaction(tx *types.Transaction) {
 	log.Infoln("===> processTransaction", tx.Hash().String())
-	tp.bc.ProcessTransaction(tx)
+	tp.bc.ProcessTransaction(tx, false)
 }
