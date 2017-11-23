@@ -25,6 +25,7 @@ import (
 
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	"strconv"
 )
 
 type MockPerson struct {
@@ -144,4 +145,48 @@ func TestMdb_Upsert(t *testing.T) {
 		fmt.Println("TestMdb_Upsert err: ", err)
 	}
 	fmt.Println("TestMdb_Upsert ok...")
+}
+
+func TestMdb_Bulk(t *testing.T) {
+	db, err := NewMdb(DefaultConfig())
+	if err != nil {
+		t.Error(err)
+	}
+
+	db.RegisterCollection("person")
+	db.RegisterCollection("transaction")
+	db.RegisterCollection("block")
+	db.RegisterCollection("balance")
+
+	//person := &MockPerson{Name: "Chain"}
+	bulk := db.Coll("person").Bulk()
+	cnt := 0
+
+	fn := func(key, value string) {
+		per, _ := json.Marshal(value)
+		var iper interface{}
+		json.Unmarshal(per, &iper)
+		switch iper.(type) {
+		case string:
+			bulk.Upsert(bson.M{"_id": key}, bson.M{"data": iper})
+		case map[string]interface{}:
+			bulk.Upsert(bson.M{"_id": key}, iper)
+		}
+
+		cnt++
+		if cnt%1000 == 0 {
+			_, err = bulk.Run()
+			if err != nil {
+				fmt.Println("run err: ", err)
+			}
+			bulk = db.Coll("person").Bulk()
+		}
+	}
+
+	for i := 0; i < 2000; i++ {
+		key := strconv.Itoa(i)
+		fn(key, key)
+	}
+
+	fn("world", "world")
 }

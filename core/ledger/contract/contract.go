@@ -118,9 +118,12 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
-	//if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
-	//	//register column
-	//}
+	if params.Nvp && params.Mongodb {
+		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
+			mdb := mongodb.MongDB()
+			mdb.RegisterCollection(scAddr)
+		}
+	}
 }
 
 // GetGlobalState returns the global state.

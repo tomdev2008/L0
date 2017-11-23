@@ -104,14 +104,25 @@ func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
 }
 
-func (lerdger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.WriteBatch {
+func (ledger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.WriteBatch {
 	reBatches := make(map[string][]*db.WriteBatch)
 	for _, batch := range batches {
-		if _, ok := reBatches[batch.CfName]; !ok {
-			reBatches[batch.CfName] = make([]*db.WriteBatch, 0)
+		columnName := batch.CfName
+		batchKey := batch.Key
+		if 0 == strings.Compare(batch.CfName, ledger.contract.GetColumnFamily()) {
+			keys := strings.SplitN(string(batch.Key), "|", 2)
+			if len(keys) != 2 {
+				continue
+			}
+			columnName = "contract|" + keys[0]
+			batchKey = []byte(keys[1])
 		}
 
-		reBatches[batch.CfName] = append(reBatches[batch.CfName], batch)
+		if _, ok := reBatches[columnName]; !ok {
+			reBatches[columnName] = make([]*db.WriteBatch, 0)
+		}
+
+		reBatches[columnName] = append(reBatches[columnName], db.NewWriteBatch(columnName, batch.Operation, batchKey, batch.Value, batch.Typ))
 	}
 
 	return reBatches
@@ -129,15 +140,20 @@ Out:
 			log.Infof("all data len: %+v", len(batches))
 
 			reBatches := ledger.reOrgBatches(batches)
-			for colName, batches := range reBatches {
+			for colName, colBatches := range reBatches {
 				contractCol = false
-				bulk := ledger.mdb.Coll(colName).Bulk()
-				if 0 == strings.Compare(ledger.contract.GetColumnFamily(), colName) {
+				if strings.Contains(colName, "contract") {
 					contractCol = true
+					cols := strings.SplitN(colName, "|", 2)
+					if len(cols) == 2 {
+						colName = cols[1]
+					}
 				}
+				bulk := ledger.mdb.Coll(colName).Bulk()
 
-				log.Debugf("colName: %+v, start -----", colName)
-				for _, batch := range batches {
+				log.Infof("colName: %+v, start -----", colName)
+				writeBatchCnt := 0
+				for _, batch := range colBatches {
 					var value interface{}
 					if batch.Operation == db.OperationPut {
 						if contractCol {
@@ -151,7 +167,7 @@ Out:
 								if err != nil {
 									log.Errorf("state data not unmarshal json, key: %+v, value: %+v", string(batch.Key), string(batch.Value))
 								}
-								log.Infof("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
+								log.Debugf("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
 
 								switch value.(type) {
 								case map[string]interface{}:
@@ -201,6 +217,18 @@ Out:
 						}
 					} else if batch.Operation == db.OperationDelete {
 						bulk.Remove(bson.M{"_id": string(batch.Key)})
+					}
+
+					writeBatchCnt++
+					if writeBatchCnt > 800 {
+						_, err = bulk.Run()
+						if err != nil {
+							log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
+							batchesBlockChan <- batches
+							break Out
+						}
+						bulk = ledger.mdb.Coll(colName).Bulk()
+						writeBatchCnt = 0
 					}
 				}
 
@@ -457,6 +485,7 @@ func (ledger *Ledger) init() error {
 		return err
 	}
 	if params.Nvp && params.Mongodb {
+		ledger.mdb.RegisterCollection(params.GlobalStateKey)
 		ledger.mdbChan <- writeBatchs
 	}
 
