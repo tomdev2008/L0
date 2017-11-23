@@ -1,6 +1,6 @@
 net:
   maxPeers: 8
-  bootstrapNodes: ["encode://303030315f616263@127.0.0.1:20166"]
+  bootstrapNodes: ["encode://303030315f616263@127.0.0.1:20166|0"]
   listenAddr: "127.0.0.1:20168"
 
   msgnet:
@@ -21,7 +21,7 @@ blockchain:
   cpuprofile: "profile/prof_node3"
   nodeType:
     type: "vp"
-    mongodb: true
+    mongodb: false
 
 validator:
   status: true

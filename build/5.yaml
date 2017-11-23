@@ -1,7 +1,7 @@
 net:
   maxPeers: 8
   bootstrapNodes: ["encode://303030315f616263@127.0.0.1:20166|0"]
-  listenAddr: "127.0.0.1:20167"
+  listenAddr: "0.0.0.0:20170"
 
   msgnet:
     routeAddress: ["127.0.0.1:9999"]
@@ -11,18 +11,19 @@ log:
 
 jrpc:
   enabled: true
-  port: "8882"
+  port: "8885"
 
 blockchain:
   chainId: "00"
-  nodeId: "0002_abc"
-  datadir: "datadir/2"
+  nodeId: "0005_abc"  
+  datadir: "datadir/5"
   maxOccurs: 1
-  cpuprofile: "profile/prof_node2"
-  profPort: "6062"
+  cpuprofile: "profile/prof_node5"
+  profPort: "6065"
   nodeType:
-    type: "vp"
-    mongodb: false
+    type: "nvp"
+    mongodb: true
+
 
 validator:
   status: true
@@ -60,7 +61,6 @@ consensus:
 
 # vm
 vm:
-
   # vm maximum memory size (MB)
   maxMem: 800
   registrySize: 256
@@ -90,8 +90,10 @@ vm:
 
 ca:
   enabled: true
-
+  
   cert:
-    keyPath: ca_certificate/0002_abc/0002_abc.key
-    crtPath: ca_certificate/0002_abc/0002_abc.crt
-    caPath: ca_certificate/0002_abc/ca.crt
+    keyPath: ca_certificate/0005_abc/0005_abc.key
+    crtPath: ca_certificate/0005_abc/0005_abc.crt
+    caPath: ca_certificate/0005_abc/ca.crt
+
+

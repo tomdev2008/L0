@@ -19,3 +19,5 @@ tests/Transaction/*
 *.swp
 debug.test
 tests/client/client
+*.tgz
+build/mongodb/*

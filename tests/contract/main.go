@@ -133,9 +133,9 @@ func main() {
 
 	issueTX()
 	//testSecurityContract()
-	deploySmartContractTX(coinJS)
-	time.Sleep(10 * time.Second)
-	execSmartContractTX(coinJS)
+	// deploySmartContractTX(coinJS)
+	// time.Sleep(10 * time.Second)
+	// execSmartContractTX(coinJS)
 
 	time.Sleep(5 * time.Second)
 }

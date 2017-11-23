@@ -112,6 +112,7 @@ func processMsg(m *Msg, c net.Conn) {
 			Version:    "0.0.1",
 			ID:         []byte(nodeID),
 			SrvAddress: "",
+			Type:       p2p.TypeVp,
 		}
 		respMsg = NewMsg(handshakeMsg, utils.Serialize(*proto))
 		fmt.Println("handshakeMsg")

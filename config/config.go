@@ -30,7 +30,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/vm"
 	"github.com/spf13/viper"
-	"strings"
 )
 
 const (
@@ -183,17 +182,14 @@ func (cfg *Config) readParamConfig() {
 	params.ChainID = utils.HexToBytes(str)
 	params.PublicAddress = pk
 
-	viper.SetDefault("blockchain.maxOccurs", 1)
-	params.MaxOccurs = viper.GetInt("blockchain.maxOccurs")
+	params.MaxOccurs = getInt("blockchain.maxOccurs", 1)
 
-	viper.SetDefault("blockchain.nodeType.type", "vp")
-	nodeType := viper.GetString("blockchain.nodeType.type")
-	if 0 == strings.Compare(nodeType, "vp") {
+	nodeType := getString("blockchain.nodeType.type", "vp")
+	if nodeType == "vp" {
 		params.Nvp = false
 	} else {
 		params.Nvp = true
-		viper.SetDefault("blockchain.nodeType.mongodb", false)
-		params.Mongodb = viper.GetBool("blockchain.nodeType.mongodb")
+		params.Mongodb = getbool("blockchain.nodeType.mongodb", false)
 	}
 }
 

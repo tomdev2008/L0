@@ -31,6 +31,8 @@ import (
 	"strconv"
 	"strings"
 
+	"reflect"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -45,7 +47,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
-	"reflect"
 )
 
 var (
@@ -86,6 +87,7 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 		if err != nil {
 			if params.Nvp && params.Mongodb {
 				ledgerInstance.mdb = mongodb.MongDB()
+				ledgerInstance.block.RegisterColumn(ledgerInstance.mdb)
 				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
 				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
 				ledgerInstance.conf = conf
@@ -151,12 +153,12 @@ Out:
 								}
 								log.Infof("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
 
-								//switch value.(type) {
-								//case map[string]interface{}:
-								bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
-								//default:
-								//	bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
-								//}
+								switch value.(type) {
+								case map[string]interface{}:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+								default:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
+								}
 							} else {
 								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
 								break Out
@@ -426,8 +428,7 @@ func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 
 // init generates the genesis block
 func (ledger *Ledger) init() error {
-	// Register column
-	ledger.block.RegisterColumn(ledger.mdb)
+
 	// genesis block
 	blockHeader := new(types.BlockHeader)
 	blockHeader.TimeStamp = uint32(0)

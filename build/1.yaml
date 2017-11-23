@@ -21,8 +21,8 @@ blockchain:
   cpuprofile: "profile/prof_node1"
   profPort: "6061"
   nodeType:
-    type: "nvp"
-    mongodb: true
+    type: "vp"
+    mongodb: false
 
 
 validator:
@@ -38,7 +38,7 @@ issueaddr:
 
 #consensus
 consensus:
-  plugin: "noops"
+  plugin: "lbft"
 
   noops:
     batchSize: 10000

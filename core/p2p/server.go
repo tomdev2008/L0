@@ -295,7 +295,7 @@ func (srv Server) readProtoHandshake(c *Connection) error {
 		srv.onPeerClose(c)
 		return fmt.Errorf("peer[%v] is already connected", string(proto.ID))
 	}
-	peer := NewPeer(proto.ID, c.conn, proto.SrvAddress, srv.Protocols)
+	peer := NewPeer(proto.ID, c.conn, proto.SrvAddress, proto.Type, srv.Protocols)
 	if !bytes.Equal(proto.ID, peer.ID) {
 		log.Errorf("PeerID not match %v != %v", string(proto.ID), string(peer.ID))
 		return fmt.Errorf("PeerID not match %v != %v", string(proto.ID), string(peer.ID))
