@@ -424,10 +424,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				}
 			}
 			log.Infof("Replica %s ViewChange(%s) timeout %s : voter %v", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, tvc)
-			if tvc == nil {
-				return
-			}
-			if lbft.rvc == nil {
+			if tvc != nil && lbft.rvc == nil {
 				lbft.rvc = tvc
 				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
 				lbft.rvc.ID += ":resend"
