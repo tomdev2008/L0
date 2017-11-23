@@ -386,11 +386,13 @@ func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 
 func (lbft *Lbft) sendViewChange(vc *ViewChange, reason string) {
 	log.Infof("Replica %s send ViewChange(%s) for voter %s: %s", lbft.options.ID, vc.ID, vc.PrimaryID, reason)
-	lbft.recvViewChange(vc)
-	lbft.broadcast(lbft.options.Chain, &Message{
+	msg := &Message{
 		Type:    MESSAGEVIEWCHANGE,
 		Payload: utils.Serialize(vc),
-	})
+	}
+	lbft.recvConsensusMsgChan <- msg
+	//lbft.recvViewChange(vc)
+	lbft.broadcast(lbft.options.Chain, msg)
 }
 
 type viewChangeList struct {
@@ -401,6 +403,8 @@ type viewChangeList struct {
 
 func (vcl *viewChangeList) start(lbft *Lbft) {
 	vcl.timeoutTimer = time.AfterFunc(lbft.options.ViewChange, func() {
+		lbft.rwVcStore.Lock()
+		defer lbft.rwVcStore.Unlock()
 		if len(vcl.vcs) >= lbft.Quorum() {
 			var tvc *ViewChange
 			for _, v := range vcl.vcs {
@@ -420,10 +424,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				}
 			}
 			log.Infof("Replica %s ViewChange(%s) timeout %s : voter %v", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, tvc)
-			if tvc == nil {
-				return
-			}
-			if lbft.rvc == nil {
+			if tvc != nil && lbft.rvc == nil {
 				lbft.rvc = tvc
 				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
 				lbft.rvc.ID += ":resend"
@@ -436,9 +437,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 		} else {
 			log.Debugf("Replica %s ViewChange(%s) timeout %s : %d", lbft.options.ID, vcl.vcs[0].ID, lbft.options.ViewChange, len(vcl.vcs))
 		}
-		lbft.rwVcStore.Lock()
 		delete(lbft.vcStore, vcl.vcs[0].ID)
-		lbft.rwVcStore.Unlock()
 	})
 }
 
@@ -460,6 +459,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	}
 
 	lbft.rwVcStore.Lock()
+	defer lbft.rwVcStore.Unlock()
 	vcl, ok := lbft.vcStore[vc.ID]
 	if !ok {
 		vcl = &viewChangeList{}
@@ -474,12 +474,11 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		}
 	}
 	vcl.vcs = append(vcl.vcs, vc)
-	lbft.rwVcStore.Unlock()
 
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
-	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcl.vcs)+1)
+	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcl.vcs))
 
 	if len(vcl.vcs) >= lbft.Quorum() {
 		if len(vcl.vcs) == lbft.Quorum() {
@@ -544,13 +543,10 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.stopViewChangePeriodTimer()
 	lbft.startViewChangePeriodTimer()
 
-	lbft.rwVcStore.Lock()
 	for _, vcl := range lbft.vcStore {
 		vcl.stop()
 	}
 	lbft.vcStore = make(map[string]*viewChangeList)
-	lbft.rwVcStore.Unlock()
-
 	for _, core := range lbft.coreStore {
 		lbft.stopNewViewTimerForCore(core)
 		if core.prePrepare != nil {
