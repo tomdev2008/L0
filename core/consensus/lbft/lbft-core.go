@@ -507,7 +507,11 @@ func (lbft *Lbft) processBlock(txs types.Transactions, seqNos []uint32, reason s
 	lbft.blockTimer.Stop()
 	if len(seqNos) != 0 {
 		log.Infof("Replica %s write block %d (%d transactions)  %v : %s", lbft.options.ID, lbft.execHeight, len(txs), seqNos, reason)
-		lbft.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: txs[len(txs)-1].CreateTime(), Height: lbft.execHeight}
+		t := uint32(time.Now().Unix())
+		if n := len(txs); n > 0 {
+			t = txs[len(txs)-1].CreateTime()
+		}
+		lbft.outputTxsChan <- &consensus.OutputTxs{Txs: txs, SeqNos: seqNos, Time: t, Height: lbft.execHeight}
 	} else {
 		panic("unreachable")
 	}
