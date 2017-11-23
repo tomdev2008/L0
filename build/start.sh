@@ -1,6 +1,6 @@
 #/bin/bash
 killall lcnd
-for i in 1 2 3 4 5
+for i in 1 2 3 4 #5
 do
 	mkdir -p nohup
  	./bin/lcnd --config=$i.yaml > nohup/$i.file 2>&1 &
