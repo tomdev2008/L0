@@ -272,9 +272,6 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool)
 		return false
 	}
 
-	if needNotify {
-		txNotify(tx, "")
-	}
 	return true
 }
 
