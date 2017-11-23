@@ -89,6 +89,7 @@ func NewLcnd(cfgFile string) *Lcnd {
 		_, err := mongodb.NewMdb(mongodb.DefaultConfig())
 		if err != nil {
 			log.Errorf("init mongodb err: %+v", err)
+			return nil
 		}
 	}
 
