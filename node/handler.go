@@ -99,10 +99,8 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
 	manager.jrpcServer = jrpc.NewServer(manager)
-	if params.MaxOccurs > 1 {
-		manager.jobs = make(chan *job, 1000)
-		startJobs(params.MaxOccurs, manager.jobs)
-	}
+	manager.jobs = make(chan *job, 1000)
+	startJobs(params.MaxOccurs, manager.jobs)
 	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
@@ -304,22 +302,15 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 
 	//log.Debugln("OnTx Hash=", tx.Hash(), " Nonce=", tx.Nonce())
 
-	if params.MaxOccurs > 1 {
-		pm.jobs <- &job{
-			In: tx,
-			Exec: func(in interface{}) {
-				tx := in.(*types.Transaction)
-				if pm.Blockchain.ProcessTransaction(tx, false) {
-					pm.msgCh <- &m
-				}
-			},
-		}
-	} else {
-		if pm.Blockchain.ProcessTransaction(tx, false) {
-			pm.msgCh <- &m
-		}
+	pm.jobs <- &job{
+		In: tx,
+		Exec: func(in interface{}) {
+			tx := in.(*types.Transaction)
+			if pm.Blockchain.ProcessTransaction(tx, false) {
+				pm.msgCh <- &m
+			}
+		},
 	}
-
 }
 
 // OnGetBlocks processes getblocks message
