@@ -263,6 +263,7 @@ func (lbft *Lbft) hasPrimary() bool {
 }
 
 func (lbft *Lbft) processConsensusMsg(msg *Message) *Message {
+	log.Debugf(" consensus message type %v ", msg.Type)
 	switch tp := msg.Type; tp {
 	case MESSAGEREQUEST:
 		if request := msg.GetRequest(); request != nil {
