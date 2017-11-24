@@ -143,28 +143,7 @@ func (v *Verification) checkTransaction(tx *types.Transaction) error {
 		return err
 	}
 
-	address, err := tx.Verfiy()
-	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
-		return fmt.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
-	}
-
-	v.rwInTxs.Lock()
-	if v.isExist(tx) {
-		v.rwInTxs.Unlock()
-		return fmt.Errorf("transaction %v already existed", tx.Hash())
-	}
-
-	if v.isOverCapacity() {
-		elem := v.txpool.RemoveFront()
-		delete(v.inTxs, elem.(*types.Transaction).Hash())
-		log.Warnf("[validator] excess capacity, remove front transaction")
-	}
-
-	return nil
-}
-
-func (v *Verification) checkTransactionInConsensus(tx *types.Transaction) error {
-	if err := v.checkTransactionLegal(tx); err != nil {
+	if err := v.checkTransactionSecurity(tx); err != nil {
 		return err
 	}
 

@@ -144,8 +144,16 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
 		return err
 	}
 
-	if err := v.checkTransactionSecurity(tx); err != nil {
-		return err
+	v.rwInTxs.Lock()
+	if v.isExist(tx) {
+		v.rwInTxs.Unlock()
+		return fmt.Errorf("transaction %s already existed", tx.Hash())
+	}
+
+	if v.isOverCapacity() {
+		elem := v.txpool.RemoveFront()
+		delete(v.inTxs, elem.(*types.Transaction).Hash())
+		log.Warnf("[validator]  excess capacity, remove front transaction")
 	}
 
 	v.txpool.Add(tx)
@@ -203,7 +211,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 	var ttxs types.Transactions
 	for _, tx := range txs {
 		if !v.isExist(tx) {
-			if err := v.checkTransactionInConsensus(tx); err != nil {
+			if err := v.checkTransaction(tx); err != nil {
 				log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
