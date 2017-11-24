@@ -215,7 +215,7 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			inventory.Type = InvTypeBlock
 			inventory.Hashes = []crypto.Hash{inv.Hash()}
 			log.Debugf("Relay inventory %v", inventory)
-			msg = p2p.NewMsg(invMsg, utils.Serialize(inventory))
+			//msg = p2p.NewMsg(invMsg, utils.Serialize(inventory))
 		}
 	}
 	if msg != nil {
