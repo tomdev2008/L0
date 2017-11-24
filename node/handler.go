@@ -247,7 +247,7 @@ func (pm *ProtocolManager) broadcastLoop() {
 	for {
 		select {
 		case msg := <-pm.msgCh:
-			pm.Broadcast(msg)
+			go pm.Broadcast(msg)
 		}
 	}
 }
