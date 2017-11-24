@@ -99,7 +99,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
 	manager.jrpcServer = jrpc.NewServer(manager)
-	manager.jobs = make(chan *job, 1000)
+	manager.jobs = make(chan *job, 10)
 	startJobs(params.MaxOccurs, manager.jobs)
 	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
