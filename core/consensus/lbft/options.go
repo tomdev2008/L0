@@ -37,7 +37,7 @@ func NewDefaultOptions() *Options {
 	options.BlockSize = 2000
 	options.BlockTimeout = 10 * time.Second
 	options.Request = 20 * time.Second
-	options.BufferSize = 100
+	options.BufferSize = 1000
 
 	options.ViewChange = 2 * time.Second
 	options.ResendViewChange = 2 * time.Second

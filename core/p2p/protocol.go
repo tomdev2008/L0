@@ -52,7 +52,6 @@ type protoRW struct {
 func (rw *protoRW) ReadMsg() (Msg, error) {
 	select {
 	case msg := <-rw.in:
-		log.Debugf("in chan size : %d\n", len(rw.in))
 		return msg, nil
 	}
 }

@@ -232,7 +232,9 @@ func (lbft *Lbft) RecvConsensus(payload []byte) {
 		log.Errorf("Replica %s receive consensus message : unkown %v", lbft.options.ID, err)
 		return
 	}
+	log.Debugf("lbft recv consensus msg chan size : %d, writing\n", len(lbft.recvConsensusMsgChan))
 	lbft.recvConsensusMsgChan <- msg
+	log.Debugf("lbft recv consensus msg chan size : %d, writed\n", len(lbft.recvConsensusMsgChan))
 }
 
 //BroadcastConsensusChannel Broadcast consensus data
