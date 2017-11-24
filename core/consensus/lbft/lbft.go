@@ -472,6 +472,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		for _, v := range vcl.vcs {
 			if v.Chain == vc.Chain && v.ReplicaID == vc.ReplicaID {
 				log.Warningf("Replica %s received ViewChange(%s) from %s: ingnore, duplicate, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, len(vcl.vcs))
+				lbft.rwVcStore.Unlock()
 				return nil
 			}
 		}
