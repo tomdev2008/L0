@@ -99,10 +99,8 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
 	manager.jrpcServer = jrpc.NewServer(manager)
-	if params.MaxOccurs > 1 {
-		manager.jobs = make(chan *job, 1000)
-		startJobs(params.MaxOccurs, manager.jobs)
-	}
+	manager.jobs = make(chan *job, 1000)
+	startJobs(params.MaxOccurs, manager.jobs)
 	//manager.msgrpc = msgnet.NewRpcHelper(manager)
 	return manager
 }
@@ -205,7 +203,7 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			break
 		}
 
-		if pm.Blockchain.ProcessTransaction(&tx) {
+		if pm.Blockchain.ProcessTransaction(&tx, true) {
 			//inventory.Type = InvTypeTx
 			//inventory.Hashes = []crypto.Hash{inv.Hash()}
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
@@ -304,22 +302,15 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 
 	//log.Debugln("OnTx Hash=", tx.Hash(), " Nonce=", tx.Nonce())
 
-	if params.MaxOccurs > 1 {
-		pm.jobs <- &job{
-			In: tx,
-			Exec: func(in interface{}) {
-				tx := in.(*types.Transaction)
-				if pm.Blockchain.ProcessTransaction(tx) {
-					pm.msgCh <- &m
-				}
-			},
-		}
-	} else {
-		if pm.Blockchain.ProcessTransaction(tx) {
-			pm.msgCh <- &m
-		}
+	pm.jobs <- &job{
+		In: tx,
+		Exec: func(in interface{}) {
+			tx := in.(*types.Transaction)
+			if pm.Blockchain.ProcessTransaction(tx, false) {
+				pm.msgCh <- &m
+			}
+		},
 	}
-
 }
 
 // OnGetBlocks processes getblocks message
@@ -538,7 +529,7 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 	case msgnet.ChainTxMsg:
 		tx := &types.Transaction{}
 		tx.Deserialize(msg.Payload)
-		pm.Blockchain.ProcessTransaction(tx)
+		pm.Blockchain.ProcessTransaction(tx, false)
 		log.Debugln("recv transaction msg")
 	case msgnet.ChainMergeTxsMsg:
 		fallthrough
