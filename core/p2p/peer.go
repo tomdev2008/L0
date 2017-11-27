@@ -211,9 +211,8 @@ func (peer *Peer) run() {
 		}
 		//TODO: refactor this to synchronous
 		// doHandshake -> doHandleshakeAck after this ... allow [ping, pong, peers, getpeers]
-		if msgCmd, ok := msgMap[m.Cmd]; ok {
-			log.Debugf("handle message %s, server address:%s ...", msgCmd, peer.Address)
-		}
+		log.Debugf("handle message %s, server address:%s ...", m.Cmd, peer.Address)
+
 		// Update the ActiveTime when message reached
 		peerManager.alivePeer <- conn
 
@@ -244,7 +243,7 @@ func (peer *Peer) run() {
 				break
 			}
 		}
-		log.Debugf("handle message %s, server address:%s", msgCmd, peer.Address)
+		log.Debugf("handle message %s, server address:%s", m.Cmd, peer.Address)
 		// log.Debugf("handle message over type:%d raddr:%s", m.Cmd, c.conn.RemoteAddr().String())
 	}
 }
