@@ -247,7 +247,7 @@ func (pm *ProtocolManager) broadcastLoop() {
 	for {
 		select {
 		case msg := <-pm.msgCh:
-			go pm.Broadcast(msg)
+			pm.Broadcast(msg)
 		}
 	}
 }
@@ -316,7 +316,9 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 		}
 	} else {
 		if pm.Blockchain.ProcessTransaction(tx, false) {
+			log.Debugf("tx chan size: %d, ing", len(pm.msgCh))
 			pm.msgCh <- &m
+			log.Debugf("tx chan size: %d, ed", len(pm.msgCh))
 		}
 	}
 }
