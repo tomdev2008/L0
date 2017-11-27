@@ -1,5 +1,9 @@
 #/bin/bash
-killall lcnd
+
+# kill all lcnd and vm
+ps x | grep lcnd | awk '{print $1}' | xargs kill
+
+# start lcnd
 for i in 1 2 3 4
 do
 	mkdir -p nohup
