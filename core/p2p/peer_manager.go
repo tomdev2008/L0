@@ -65,9 +65,9 @@ func getPeerManager() *peerManager {
 			handshakings: newPeerMap(),
 			dialings:     make(map[string]bool),
 			quit:         make(chan struct{}, 1),
-			addPeer:      make(chan *Peer, 1),
-			delPeer:      make(chan net.Conn, 1),
-			alivePeer:    make(chan net.Conn, 1),
+			addPeer:      make(chan *Peer, 10),
+			delPeer:      make(chan net.Conn, 10),
+			alivePeer:    make(chan net.Conn, 10),
 			// banPeer:      make([]string, 1),
 			// addBlackList: make(chan net.Conn, 1),
 			broadcastCh:  make(chan *Msg, 100),
@@ -363,7 +363,7 @@ func (pm *peerManager) broadcast(msg *Msg) {
 		for _, peer := range pm.peers.getPeers() {
 			log.Debugf("Peer Manager broadcast message %d to peer %s ...", msg.Cmd, peer.Address)
 			// if msg.Cmd <= peersMsg || msg.Cmd == 23 || !peer.TestFilter(msg.CheckSum[:]) {
-			if n, err := msg.write(peer.Conn); err != nil {
+			if n, err := msg.write(peer.Conn); err != nil || n == 0 {
 				log.Errorf("broadcast message write error %d - %v", n, err)
 			}
 			log.Debugf("Peer Manager broadcast message %d to peer %s", msg.Cmd, peer.Address)
