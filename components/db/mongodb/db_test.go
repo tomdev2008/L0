@@ -23,9 +23,10 @@ import (
 
 	"encoding/json"
 
+	"strconv"
+
 	mgo "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"strconv"
 )
 
 type MockPerson struct {
@@ -73,7 +74,6 @@ func testBulkInsert(col *mgo.Collection) {
 }
 
 func remove(col *mgo.Collection) {
-
 	if _, err := col.RemoveAll(bson.M{"age": 1}); err != nil {
 		panic(err)
 	}
@@ -83,7 +83,6 @@ func remove(col *mgo.Collection) {
 	if _, err := col.RemoveAll(bson.M{"age": 10}); err != nil {
 		panic(err)
 	}
-
 }
 
 func TestCheckFormat(t *testing.T) {
