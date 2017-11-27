@@ -77,7 +77,7 @@ func getPeerManager() *peerManager {
 			alivePeer:    make(chan net.Conn, 1),
 			// banPeer:      make([]string, 1),
 			// addBlackList: make(chan net.Conn, 1),
-			broadcastCh:  make(chan *Msg, 10),
+			broadcastCh:  make(chan *Msg, 100),
 			clientConn:   make(chan net.Conn, 8),
 			dialTask:     make(chan *Peer, 8),
 			dialTaskDone: make(chan string),

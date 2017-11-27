@@ -152,7 +152,7 @@ type Peer struct {
 func NewPeer(id []byte, conn net.Conn, addr string, peerType uint32, protocols []Protocol) *Peer {
 	protoMap := make(map[string]*protoRW)
 	for _, proto := range protocols {
-		protoMap[proto.Name] = &protoRW{Protocol: proto, in: make(chan Msg, 1000), w: conn}
+		protoMap[proto.Name] = &protoRW{Protocol: proto, in: make(chan Msg, 100), w: conn}
 	}
 
 	return &Peer{
@@ -243,9 +243,9 @@ func (peer *Peer) run() {
 				// log.Debugf("connection %v, peer %v, message- %v, peers:%v, peer: %v, ok: %v", conn, p, m.Cmd, pm.peers, pp, ok)
 				proto := p.getProto(m.Cmd)
 				if proto != nil {
-					log.Debugf("proto in chan size : %d, writing\n", len(proto.in), 1000)
+					log.Debugf("proto in chan size : %d, ing", len(proto.in))
 					proto.in <- *m
-					log.Debugf("proto in chan size : %d, writed\n", len(proto.in), 1000)
+					log.Debugf("proto in chan size : %d, ed", len(proto.in))
 				}
 			} else {
 				log.Error("unknown message", p)

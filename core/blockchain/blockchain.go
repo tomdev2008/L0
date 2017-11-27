@@ -264,8 +264,8 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool)
 	}
 
 	err := bc.validator.ProcessTransaction(tx)
+	log.Debugf("[Blockchain] new tx, tx_hash: %v, tx_sender: %v, tx_nonce: %v, end", tx.Hash().String(), tx.Sender().String(), tx.Nonce())
 	if err != nil {
-		log.Errorf("process transaction %v failed, %v", tx.Hash(), err)
 		if needNotify {
 			txNotify(tx, fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
 		}
