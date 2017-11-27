@@ -247,7 +247,9 @@ func (pm *ProtocolManager) broadcastLoop() {
 	for {
 		select {
 		case msg := <-pm.msgCh:
+			log.Debugf("broadcast message %d, ing", msg.Cmd)
 			pm.Broadcast(msg)
+			log.Debugf("broadcast message %d, ed", msg.Cmd)
 		}
 	}
 }

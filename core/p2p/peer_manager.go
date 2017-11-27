@@ -361,11 +361,12 @@ func (pm *peerManager) savePeers() {
 func (pm *peerManager) broadcast(msg *Msg) {
 	if msg != nil {
 		for _, peer := range pm.peers.getPeers() {
-			log.Debugf("Peer Manager broadcast message %d to peer %s", msg.Cmd, peer.Address)
+			log.Debugf("Peer Manager broadcast message %d to peer %s ...", msg.Cmd, peer.Address)
 			// if msg.Cmd <= peersMsg || msg.Cmd == 23 || !peer.TestFilter(msg.CheckSum[:]) {
 			if n, err := msg.write(peer.Conn); err != nil {
 				log.Errorf("broadcast message write error %d - %v", n, err)
 			}
+			log.Debugf("Peer Manager broadcast message %d to peer %s", msg.Cmd, peer.Address)
 			// } else {
 			// 	log.Errorf("Peer Manager broadcast error %d %s", msg.Cmd, peer.Address)
 			// }
