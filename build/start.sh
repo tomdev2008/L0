@@ -1,7 +1,8 @@
-#/bin/bash
+#!/bin/bash
 
 # kill all lcnd and vm
-ps x | grep lcnd | awk '{print $1}' | xargs kill
+ps x | grep lcnd | awk '{print $1}' | xargs kill >null 2>&1
+rm -f null
 
 # start lcnd
 for i in 1 2 3 4
