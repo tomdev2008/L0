@@ -220,9 +220,8 @@ func (peer *Peer) run() {
 		}
 		//TODO: refactor this to synchronous
 		// doHandshake -> doHandleshakeAck after this ... allow [ping, pong, peers, getpeers]
-		if msgCmd, ok := msgMap[m.Cmd]; ok {
-			log.Debugf("handle message %s, server address:%s", msgCmd, peer.Address)
-		}
+		log.Debugf("handle message %d(%s), server address:%s ...", m.Cmd, msgMap[m.Cmd], peer.Address)
+
 		// Update the ActiveTime when message reached
 		peerManager.alivePeer <- conn
 
@@ -243,9 +242,7 @@ func (peer *Peer) run() {
 				// log.Debugf("connection %v, peer %v, message- %v, peers:%v, peer: %v, ok: %v", conn, p, m.Cmd, pm.peers, pp, ok)
 				proto := p.getProto(m.Cmd)
 				if proto != nil {
-					log.Debugf("proto in chan size : %d, ing", len(proto.in))
 					proto.in <- *m
-					log.Debugf("proto in chan size : %d, ed", len(proto.in))
 				}
 			} else {
 				log.Error("unknown message", p)
@@ -253,6 +250,7 @@ func (peer *Peer) run() {
 				break
 			}
 		}
+		log.Debugf("handle message %d(%s), server address:%s", m.Cmd, msgMap[m.Cmd], peer.Address)
 		// log.Debugf("handle message over type:%d raddr:%s", m.Cmd, c.conn.RemoteAddr().String())
 	}
 }

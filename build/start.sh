@@ -1,6 +1,10 @@
 #/bin/bash
-killall lcnd
-for i in 1 2 3 4 #5
+
+# kill all lcnd and vm
+ps x | grep lcnd | awk '{print $1}' | xargs kill
+
+# start lcnd
+for i in 1 2 3 4 5
 do
 	mkdir -p nohup
  	./bin/lcnd --config=$i.yaml > nohup/$i.file 2>&1 &
