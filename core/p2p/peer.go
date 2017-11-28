@@ -144,7 +144,7 @@ type Peer struct {
 func NewPeer(id []byte, conn net.Conn, addr string, protocols []Protocol) *Peer {
 	protoMap := make(map[string]*protoRW)
 	for _, proto := range protocols {
-		protoMap[proto.Name] = &protoRW{Protocol: proto, in: make(chan Msg, 100), w: conn}
+		protoMap[proto.Name] = &protoRW{Protocol: proto, in: make(chan Msg, 3000), w: conn}
 	}
 
 	return &Peer{
@@ -218,10 +218,8 @@ func (peer *Peer) run() {
 
 		switch m.Cmd {
 		case pingMsg:
-			go func() {
-				respMsg := NewMsg(pongMsg, nil)
-				respMsg.write(peer.Conn)
-			}()
+			respMsg := NewMsg(pongMsg, nil)
+			respMsg.write(peer.Conn)
 		case pongMsg:
 			log.Debug("Received Pong Message")
 		case peersMsg:
