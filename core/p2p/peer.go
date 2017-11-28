@@ -218,14 +218,16 @@ func (peer *Peer) run() {
 
 		switch m.Cmd {
 		case pingMsg:
-			respMsg := NewMsg(pongMsg, nil)
-			respMsg.write(peer.Conn)
+			go func() {
+				respMsg := NewMsg(pongMsg, nil)
+				respMsg.write(peer.Conn)
+			}()
 		case pongMsg:
 			log.Debug("Received Pong Message")
 		case peersMsg:
 			peer.onPeers(m, peerManager)
 		case getPeersMsg:
-			peer.onGetPeers(m, conn, peerManager)
+			go peer.onGetPeers(m, conn, peerManager)
 		default:
 			// TODO: refactor this
 			if p := peerManager.GetPeer(conn); p != nil {
