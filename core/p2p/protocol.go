@@ -52,7 +52,6 @@ type protoRW struct {
 func (rw *protoRW) ReadMsg() (Msg, error) {
 	select {
 	case msg := <-rw.in:
-		log.Debugf("proto out %d ...", msg.Cmd)
 		return msg, nil
 	}
 }

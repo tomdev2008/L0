@@ -233,9 +233,7 @@ func (peer *Peer) run() {
 				// log.Debugf("connection %v, peer %v, message- %v, peers:%v, peer: %v, ok: %v", conn, p, m.Cmd, pm.peers, pp, ok)
 				proto := p.getProto(m.Cmd)
 				if proto != nil {
-					log.Debugf("proto in chan size : %d, ing", len(proto.in))
 					proto.in <- *m
-					log.Debugf("proto in chan size : %d, ed", len(proto.in))
 				}
 			} else {
 				log.Error("unknown message", p)
