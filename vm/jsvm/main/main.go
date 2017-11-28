@@ -37,7 +37,7 @@ func main() {
 
 	var rlimit syscall.Rlimit
 	rlimit.Max = uint64(vm.VMConf.VMMaxMem) * 1024 * 1024
-	rlimit.Cur = uint64(rlimit.Max / 2)
+	rlimit.Cur = uint64(rlimit.Max / 5 * 4)
 	err := syscall.Setrlimit(syscall.RLIMIT_AS, &rlimit)
 	if err != nil {
 		log.Error("set rlimit error", err)
