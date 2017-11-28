@@ -83,7 +83,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 		Ledger:     ledger,
 		Blockchain: blockchain,
 		consenter:  consenter,
-		msgCh:      make(chan *p2p.Msg, 100),
+		msgCh:      make(chan *p2p.Msg, 1000),
 		Server:     p2p.NewServer(db, netConfig),
 		filter:     bloom.NewWithEstimates(filterN, falsePositive),
 	}
