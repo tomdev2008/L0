@@ -233,16 +233,16 @@ func (peer *Peer) run() {
 				// log.Debugf("connection %v, peer %v, message- %v, peers:%v, peer: %v, ok: %v", conn, p, m.Cmd, pm.peers, pp, ok)
 				proto := p.getProto(m.Cmd)
 				if proto != nil {
+					log.Debugf("handle message %d(%s), server address:%s %d + 1", m.Cmd, msgMap[m.Cmd], peer.Address, len(proto.in))
 					proto.in <- *m
 				}
-				log.Debugf("handle message %d(%s), server address:%s  in size: %d", m.Cmd, msgMap[m.Cmd], peer.Address, len(proto.in))
 			} else {
 				log.Error("unknown message", p)
 				peerManager.delPeer <- conn
 				break
 			}
 		}
-
+		log.Debugf("handle message %d(%s), server address:%s", m.Cmd, msgMap[m.Cmd], peer.Address)
 		// log.Debugf("handle message over type:%d raddr:%s", m.Cmd, c.conn.RemoteAddr().String())
 	}
 }
