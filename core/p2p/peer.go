@@ -214,7 +214,8 @@ func (peer *Peer) run() {
 		log.Debugf("handle message %d(%s), server address:%s ...", m.Cmd, msgMap[m.Cmd], peer.Address)
 
 		// Update the ActiveTime when message reached
-		peerManager.alivePeer <- conn
+		// peerManager.alivePeer <- conn
+		peer.LastActiveTime = time.Now()
 
 		switch m.Cmd {
 		case pingMsg:
