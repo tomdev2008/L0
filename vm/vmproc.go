@@ -69,12 +69,13 @@ func NewVMProc(name string) (*VMProc, error) {
 	attr := new(os.ProcAttr)
 	attr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr, pr, cw}
 	argv := []string{
-		"L0 contract vm proc",
+		"L0 contract " + name + " proc",
 		VMConf.LogFile,
 		VMConf.LogLevel,
 		strconv.Itoa(VMConf.VMMaxMem),
 		strconv.Itoa(VMConf.VMCallStackSize),
 		strconv.Itoa(VMConf.VMRegistrySize),
+		strconv.Itoa(VMConf.ExecLimitMaxRunTime),
 		strconv.Itoa(VMConf.ExecLimitMaxOpcodeCount),
 		strconv.Itoa(VMConf.ExecLimitStackDepth),
 		strconv.Itoa(VMConf.ExecLimitMaxScriptSize),
@@ -229,7 +230,7 @@ func doReceive(p *VMProc, receiveData *InvokeData) {
 			errmsg := ""
 			if err != nil {
 				errmsg = err.Error()
-				log.Error("call requestHandle error msg:", errmsg)
+				//log.Error("call requestHandle error msg:", errmsg)
 			}
 
 			data.SetParams(errmsg, result)

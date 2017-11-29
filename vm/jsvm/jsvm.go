@@ -20,6 +20,8 @@ package jsvm
 
 import (
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
@@ -107,15 +109,19 @@ func resetProc(cd *vm.ContractData) {
 }
 
 // execContract start a js vm and execute smart contract script
-func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
+func execContract(cd *vm.ContractData, funcName string) (result interface{}, err error) {
+
+	var val otto.Value
+
 	defer func() {
 		if e := recover(); e != nil {
-			log.Error("exec contract code error ", e)
+			result = false
+			err = fmt.Errorf("exec contract code error: %v", e)
 		}
 	}()
 
 	code := cd.ContractCode
-	if err := vm.CheckContractCode(code); err != nil {
+	if err = vm.CheckContractCode(code); err != nil {
 		return false, err
 	}
 
@@ -124,15 +130,25 @@ func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 	ottoVM.SetStackDepthLimit(vm.VMConf.ExecLimitStackDepth)
 	exporter(ottoVM) //export go func
 
-	_, err := ottoVM.Run(code)
+	ottoVM.Interrupt = make(chan func(), 1) // The buffer prevents blocking
+
+	go func() {
+		ottoVM.Interrupt <- func() {
+			time.Sleep(time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond)
+			panic(errors.New("code run time out"))
+		}
+	}()
+
+	_, err = ottoVM.Run(code)
 	if err != nil {
 		return false, err
 	}
 
-	val, err := callJSFunc(ottoVM, cd, funcName)
+	val, err = callJSFunc(ottoVM, cd, funcName)
 	if err != nil {
 		return false, err
 	}
+
 	if val.IsBoolean() {
 		return val.ToBoolean()
 	}

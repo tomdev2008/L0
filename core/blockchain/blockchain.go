@@ -279,7 +279,7 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool)
 func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
-	log.Debugf("block previoushash %s, currentblockhash %s", blk.PreviousHash(), bc.CurrentBlockHash())
+	log.Debugf("block previoushash %s, currentblockhash %s,len %d", blk.PreviousHash(), bc.CurrentBlockHash(), len(blk.Transactions))
 	if blk.PreviousHash() == bc.CurrentBlockHash() {
 		bc.ledger.AppendBlock(blk, flag)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))

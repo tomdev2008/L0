@@ -299,7 +299,9 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	ledger.contract.StartConstract(bh)
 
 	txWriteBatchs, block.Transactions, errTxs = ledger.executeTransactions(block.Transactions, flag)
-	_ = errTxs
+	if len(errTxs) != 0 {
+		ledger.Validator.RemoveTxsInVerification(errTxs)
+	}
 
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
 	writeBatchs := ledger.block.AppendBlock(block)
@@ -516,6 +518,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 	)
 
 	for _, tx := range txs {
+		log.Debugln("---tx>", tx.Hash().String())
 		switch tp := tx.GetType(); tp {
 		case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
 			if err := ledger.executeTransaction(tx, false); err != nil {
@@ -535,7 +538,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				if ledger.Validator != nil {
 					ledger.Validator.RollBackAccount(tx)
 				}
-				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
+				log.Errorf("execute contract Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 				continue
 			} else {
 				var tttxs types.Transactions

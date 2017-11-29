@@ -21,6 +21,7 @@ package vm
 
 import (
 	"sync"
+	"syscall"
 
 	"math/big"
 
@@ -28,6 +29,7 @@ import (
 
 	"encoding/json"
 	"fmt"
+
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/params"
@@ -164,6 +166,18 @@ func initVMProc(contractType string) error {
 				if jsvmProc, err = NewVMProc(VMConf.JSVMExeFilePath); err == nil {
 					jsvmProc.SetRequestHandle(requestHandle)
 					jsvmProc.Selector()
+					go func() {
+						pState, err := jsvmProc.Proc.Wait()
+						if err != nil {
+							log.Errorln(err)
+						}
+						state := pState.Sys().(syscall.WaitStatus)
+						if state.Signaled() || state.Exited() {
+							jsvmProc = nil
+							log.Debugln("jsvm is exited", pState.String())
+						}
+					}()
+
 				} else {
 					log.Error("create jsvm proc error", err)
 				}
@@ -178,6 +192,19 @@ func initVMProc(contractType string) error {
 				if luavmProc, err = NewVMProc(VMConf.LuaVMExeFilePath); err == nil {
 					luavmProc.SetRequestHandle(requestHandle)
 					luavmProc.Selector()
+
+					go func() {
+						pState, err := luavmProc.Proc.Wait()
+						if err != nil {
+							log.Errorln(err)
+						}
+						state := pState.Sys().(syscall.WaitStatus)
+						if state.Signaled() || state.Exited() {
+							luavmProc = nil
+							log.Debugln("lua vm is exited", pState.String())
+						}
+					}()
+
 				} else {
 					log.Error("create luavm proc error", err)
 				}
