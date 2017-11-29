@@ -430,7 +430,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 			if tvc != nil && lbft.rvc == nil {
 				lbft.rvc = tvc
 				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
-				lbft.rvc.ID += ":resend"
+				lbft.rvc.ID += ":resend-" + tvc.PrimaryID
 				lbft.rvc.Chain = lbft.options.Chain
 				lbft.rvc.ReplicaID = lbft.options.ID
 				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
