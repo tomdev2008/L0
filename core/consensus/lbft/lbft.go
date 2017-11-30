@@ -576,7 +576,5 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 			}
 		}
 	}
-	if !lbft.isPrimary() {
-		lbft.stopNewViewTimer()
-	}
+	lbft.stopNewViewTimer()
 }
