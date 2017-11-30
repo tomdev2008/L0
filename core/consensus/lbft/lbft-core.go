@@ -63,7 +63,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 	core.Lock()
 	defer core.Unlock()
 	if core.newViewTimer == nil {
-		core.newViewTimer = time.AfterFunc(lbft.options.Request*3, func() {
+		core.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
 			core.Lock()
 			defer core.Unlock()
 			vc := &ViewChange{

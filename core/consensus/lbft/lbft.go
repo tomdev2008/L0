@@ -307,7 +307,11 @@ func (lbft *Lbft) startNewViewTimer() {
 	lbft.Lock()
 	defer lbft.Unlock()
 	if lbft.newViewTimer == nil {
-		lbft.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
+		t := lbft.options.Request
+		if lbft.hasPrimary() && !lbft.isPrimary() {
+			t = lbft.options.Request * 2 / 3
+		}
+		lbft.newViewTimer = time.AfterFunc(t, func() {
 			lbft.Lock()
 			defer lbft.Unlock()
 			vc := &ViewChange{
@@ -320,7 +324,7 @@ func (lbft *Lbft) startNewViewTimer() {
 				ReplicaID: lbft.options.ID,
 				Chain:     lbft.options.Chain,
 			}
-			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
+			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s-%s)", lbft.options.Request, t))
 			lbft.newViewTimer = nil
 		})
 	}
