@@ -489,6 +489,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcs))
 
 	if len(vcs) >= lbft.Quorum() {
+		lbft.stopNewViewTimer()
 		if len(vcs) == lbft.Quorum() {
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
@@ -576,5 +577,4 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 			}
 		}
 	}
-	lbft.stopNewViewTimer()
 }
