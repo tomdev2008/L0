@@ -437,7 +437,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				lbft.rvc.ID += ":resend-" + tvc.PrimaryID
 				lbft.rvc.Chain = lbft.options.Chain
 				lbft.rvc.ReplicaID = lbft.options.ID
-				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
+				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s) - %s", lbft.options.ResendViewChange, tvc.ID))
 				lbft.rvc = nil
 				//})
 			}
@@ -493,7 +493,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
 				lbft.primaryID = ""
-				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID)
+				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s - %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID, vcs[0].ID)
 			}
 		}
 		q := 0
