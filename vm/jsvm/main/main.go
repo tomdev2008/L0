@@ -34,6 +34,9 @@ func main() {
 
 	vmConfig()
 
+	if err := vm.CheckVmMem(vm.VMConf.VMMaxMem); err != nil {
+		log.Warning(err)
+	}
 	var rlimit syscall.Rlimit
 	rlimit.Max = uint64(vm.VMConf.VMMaxMem) * 1024 * 1024
 	rlimit.Cur = uint64(rlimit.Max / 5 * 4)
