@@ -288,6 +288,9 @@ func (ledger *Ledger) init() error {
 	genesisBlock := new(types.Block)
 	genesisBlock.Header = blockHeader
 	writeBatchs := ledger.block.AppendBlock(genesisBlock)
+	if err := ledger.state.UpdateAsset(0, accounts.Address{}, accounts.Address{}, "{}"); err != nil {
+		panic(err)
+	}
 	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
 
 	// admin address
