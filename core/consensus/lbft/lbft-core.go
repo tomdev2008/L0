@@ -60,6 +60,7 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 
 func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 	lbft.stopNewViewTimer()
+	lbft.stopNewViewTimerForCore(core)
 	core.Lock()
 	defer core.Unlock()
 	if core.newViewTimer == nil {
