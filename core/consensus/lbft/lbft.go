@@ -132,7 +132,7 @@ func (lbft *Lbft) Options() consensus.IOptions {
 //Start Start consenter serverice
 func (lbft *Lbft) Start() {
 	if lbft.exit != nil {
-		log.Warnf("Replica %s consenter alreay started", lbft.options.ID)
+		log.Warnf("Replica %s consenter already started", lbft.options.ID)
 		return
 	}
 	log.Infof("lbft : %s", lbft)
@@ -175,7 +175,7 @@ func (lbft *Lbft) sendEmptyRequest() {
 //Stop Stop consenter serverice
 func (lbft *Lbft) Stop() {
 	if lbft.exit == nil {
-		log.Warnf("Replica %s consenter alreay stopped", lbft.options.ID)
+		log.Warnf("Replica %s consenter already stopped", lbft.options.ID)
 		return
 	}
 	close(lbft.exit)

@@ -192,7 +192,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 
 	core := lbft.getlbftCore(digest)
 	if core.prePrepare != nil {
-		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: alreay exist ", lbft.options.ID, preprepare.ReplicaID, digest)
+		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: already exist ", lbft.options.ID, preprepare.ReplicaID, digest)
 		vc := &ViewChange{
 			ID:        digest,
 			Priority:  lbft.priority,
@@ -203,7 +203,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			ReplicaID: lbft.options.ID,
 			Chain:     lbft.options.Chain,
 		}
-		lbft.sendViewChange(vc, fmt.Sprintf("alreay exist"))
+		lbft.sendViewChange(vc, fmt.Sprintf("already exist"))
 		return nil
 	}
 

@@ -295,7 +295,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				v.assets[assetID] = newAsset
 			} else {
-				v.notify(tx, "asset id alreay exist")
+				v.notify(tx, "asset id already exist")
 				if primary {
 					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
