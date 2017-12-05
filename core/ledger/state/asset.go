@@ -22,9 +22,12 @@ type Asset struct {
 
 //Update
 func (asset *Asset) Update(jsonStr string) (*Asset, error) {
+	if len(jsonStr) == 0 {
+		return asset, nil
+	}
 	tAsset := &Asset{}
 	if err := json.Unmarshal([]byte(jsonStr), tAsset); err != nil {
-		return nil, fmt.Errorf("invalid json string for asset")
+		return nil, fmt.Errorf("invalid json string for asset - %s", err)
 	}
 
 	var newVal map[string]interface{}

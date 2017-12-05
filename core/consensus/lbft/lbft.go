@@ -311,7 +311,7 @@ func (lbft *Lbft) startNewViewTimer() {
 			lbft.Lock()
 			defer lbft.Unlock()
 			vc := &ViewChange{
-				ID:        "lbft",
+				ID:        "lbft-" + time.Now().Truncate(lbft.options.Request).Format("2006-01-02 15:04:05"),
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
 				SeqNo:     lbft.execSeqNo,
