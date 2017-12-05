@@ -443,7 +443,10 @@ func (v *Verification) GetBalance(addr accounts.Address) *state.Balance {
 func (v *Verification) GetAsset(id uint32) *state.Asset {
 	v.rwAccount.Lock()
 	defer v.rwAccount.Unlock()
-	asset, _ := v.assets[id]
+	asset, ok := v.assets[id]
+	if !ok {
+		asset, _ = v.ledger.GetAssetFromDB(id)
+	}
 	return asset
 }
 

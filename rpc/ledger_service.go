@@ -84,10 +84,9 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 
 //GetAsset returns asset by id
 func (l *Ledger) GetAsset(id uint32, reply *state.Asset) error {
-	fmt.Println("ssss", id)
 	b := l.ledger.GetAsset(id)
 	if b == nil {
-		b = &state.Asset{}
+		return fmt.Errorf("asset %d not found", id)
 	}
 	*reply = *b
 	return nil
@@ -105,6 +104,9 @@ func (l *Ledger) GetTxByHash(txHashBytes string, reply *types.Transaction) error
 	tx, err := l.ledger.GetTransaction(crypto.HexToHash(txHashBytes))
 	if err != nil {
 		return err
+	}
+	if tx == nil {
+		return fmt.Errorf("tx %s not found", txHashBytes)
 	}
 	*reply = *tx
 	return nil
