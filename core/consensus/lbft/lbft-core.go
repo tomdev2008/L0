@@ -58,7 +58,7 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 	return core
 }
 
-func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
+func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, tag string) {
 	lbft.stopNewViewTimer()
 	lbft.stopNewViewTimerForCore(core)
 	core.Lock()
@@ -68,7 +68,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
 			core.Lock()
 			defer core.Unlock()
 			vc := &ViewChange{
-				ID:        core.digest,
+				ID:        core.digest + "-" + tag,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
 				SeqNo:     lbft.execSeqNo,
@@ -263,7 +263,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 
 	log.Debugf("Replica %s received PrePrepare from %s for consensus %s, seqNo %d", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo)
 
-	lbft.startNewViewTimerForCore(core)
+	lbft.startNewViewTimerForCore(core, "prepare")
 	core.prePrepare = preprepare
 	prepare := &Prepare{
 		PrimaryID: lbft.primaryID,
@@ -296,7 +296,7 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 
 	log.Debugf("Replica %s received Prepare from %s for consensus %s", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
 
-	lbft.startNewViewTimerForCore(core)
+	lbft.startNewViewTimerForCore(core, "commit")
 	core.prepare = append(core.prepare, prepare)
 	if core.prePrepare == nil {
 		log.Debugf("Replica %s received Prepare for consensus %s, voted: %d", lbft.options.ID, prepare.Digest, len(core.prepare))
@@ -408,6 +408,20 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
 	}
+	//remove invalid ViewChange
+	lbft.rwVcStore.Lock()
+	keys := []string{}
+	for key, vcl := range lbft.vcStore {
+		if vcl.vcs[0].SeqNo > committed.SeqNo {
+			continue
+		}
+		vcl.stop()
+		keys = append(keys, key)
+	}
+	for _, key := range keys {
+		delete(lbft.vcStore, key)
+	}
+	lbft.rwVcStore.Unlock()
 	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
 	lbft.execute()
 
