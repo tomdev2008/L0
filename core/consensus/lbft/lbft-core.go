@@ -384,7 +384,7 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	// 		}
 	// 	}
 	// }
-	lbft.rwVcStore.Unlock()
+	//lbft.rwVcStore.Unlock()
 	lbft.stopNewViewTimerForCore(core)
 	core.commit = append(core.commit, commit)
 	if core.prePrepare == nil {
