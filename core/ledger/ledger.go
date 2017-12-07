@@ -50,6 +50,7 @@ type ValidatorHandler interface {
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	SecurityPluginDir() string
+	Notify(*types.Transaction, interface{})
 }
 
 // Ledger represents the ledger in blockchain
@@ -334,7 +335,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 					ledger.Validator.RollBackAccount(tx)
 				}
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				continue
+				goto ctu
 			}
 
 			ttxs, err := ledger.executeSmartContractTx(tx)
@@ -345,7 +346,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 					ledger.Validator.RollBackAccount(tx)
 				}
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				continue
+				goto ctu
 			} else {
 				var tttxs types.Transactions
 				for _, tt := range ttxs {
@@ -364,7 +365,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 						ledger.Validator.RollBackAccount(tx)
 					}
 					log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-					continue
+					goto ctu
 				}
 				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 			}
@@ -373,47 +374,47 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 			adminData, err := ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {
 				log.Error(err)
-				continue
+				goto ctu
 			}
 
 			if len(adminData) == 0 {
 				log.Error("need admin address")
-				continue
+				goto ctu
 			}
 
 			var adminAddr accounts.Address
 			err = json.Unmarshal(adminData, &adminAddr)
 			if err != nil {
 				log.Error(err)
-				continue
+				goto ctu
 			}
 
 			if tx.Sender() != adminAddr {
 				log.Error("deploy security plugin, permission denied")
-				continue
+				goto ctu
 			}
 
 			pluginData, err := plugins.Make(tx.Payload)
 			if err != nil {
 				log.Error("invalid security plugin data")
-				continue
+				goto ctu
 			}
 
 			if len(pluginData.Name) == 0 {
 				log.Error("name of security plugin is empty")
-				continue
+				goto ctu
 			}
 
 			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginData.Name)
 			if utils.FileExist(path) {
 				log.Errorf("security plugin %s already existed", pluginData.Name)
-				continue
+				goto ctu
 			}
 
 			err = ioutil.WriteFile(path, pluginData.Code, 0644)
 			if err != nil {
 				log.Error(err)
-				continue
+				goto ctu
 			}
 		default:
 			if err := ledger.executeTransaction(tx, false); err != nil {
@@ -423,10 +424,13 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 					ledger.Validator.RollBackAccount(tx)
 				}
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				continue
+				goto ctu
 			}
 			syncTxs = append(syncTxs, tx)
 		}
+
+	ctu:
+		ledger.Validator.Notify(tx, "execute Tx error:"+err.Error())
 	}
 	for _, tx := range syncContractGenTxs {
 		if ledger.Validator != nil {

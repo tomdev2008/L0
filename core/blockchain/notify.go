@@ -25,7 +25,9 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-var callbacks sync.Map
+var (
+	callbacks sync.Map
+)
 
 // Register receive transaction hash and callback function
 // When the transaction is submitted execute callback function
@@ -55,10 +57,10 @@ func blockNotify(block *types.Block) {
 	}(block.Transactions)
 }
 
-func txNotify(tx *types.Transaction, msg string) {
+func txNotify(tx *types.Transaction, i interface{}) {
 	if cb, ok := callbacks.Load(tx.Hash()); ok {
 		if call, b := cb.(func(interface{})); b {
-			call(msg)
+			call(i)
 		}
 		callbacks.Delete(tx)
 	}
