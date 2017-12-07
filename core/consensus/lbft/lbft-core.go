@@ -58,9 +58,27 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 	return core
 }
 
-func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, tag string) {
+func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, replica string) {
 	lbft.stopNewViewTimer()
 	lbft.stopNewViewTimerForCore(core)
+	lbft.rwVcStore.Lock()
+	defer lbft.rwVcStore.Unlock()
+	if vcl, ok := lbft.vcStore[core.digest]; ok {
+		vcs := []*ViewChange{}
+		for _, vc := range vcl.vcs {
+			if vc.ReplicaID == replica {
+				continue
+			}
+			vcs = append(vcs, vc)
+		}
+		if len(vcs) == 0 {
+			vcl.stop()
+			delete(lbft.vcStore, core.digest)
+		} else {
+			vcl.vcs = vcs
+		}
+	}
+
 	core.Lock()
 	defer core.Unlock()
 	if core.newViewTimer == nil && lbft.hasPrimary() {
@@ -68,7 +86,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, tag string) {
 			core.Lock()
 			defer core.Unlock()
 			vc := &ViewChange{
-				ID:        core.digest + "-" + tag,
+				ID:        core.digest,
 				Priority:  lbft.priority,
 				PrimaryID: lbft.options.ID,
 				SeqNo:     lbft.execSeqNo,
@@ -263,7 +281,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 
 	log.Debugf("Replica %s received PrePrepare from %s for consensus %s, seqNo %d", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo)
 
-	lbft.startNewViewTimerForCore(core, "prepare")
+	lbft.startNewViewTimerForCore(core, preprepare.ReplicaID)
 	core.prePrepare = preprepare
 	prepare := &Prepare{
 		PrimaryID: lbft.primaryID,
@@ -295,32 +313,8 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 	}
 
 	log.Debugf("Replica %s received Prepare from %s for consensus %s", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
-	// lbft.rwVcStore.Lock()
-	// for k, vcl := range lbft.vcStore {
-	// 	if vcl.vcs[0].SeqNo != prepare.SeqNo {
-	// 		continue
-	// 	}
-	// 	if strings.Contains(k, "resend") {
-	// 		continue
-	// 	}
-	// 	if strings.Contains(k, prepare.Digest) || strings.Contains(k, "lbft") {
-	// 		vcs := []*ViewChange{}
-	// 		for _, vc := range vcl.vcs {
-	// 			if vc.ReplicaID == prepare.ReplicaID {
-	// 				continue
-	// 			}
-	// 			vcs = append(vcs, vc)
-	// 		}
-	// 		if len(vcs) == 0 {
-	// 			vcl.stop()
-	// 			delete(lbft.vcStore, k)
-	// 		} else {
-	// 			vcl.vcs = vcs
-	// 		}
-	// 	}
-	// }
-	// lbft.rwVcStore.Unlock()
-	lbft.startNewViewTimerForCore(core, "commit")
+
+	lbft.startNewViewTimerForCore(core, prepare.ReplicaID)
 	core.prepare = append(core.prepare, prepare)
 	if core.prePrepare == nil {
 		log.Debugf("Replica %s received Prepare for consensus %s, voted: %d", lbft.options.ID, prepare.Digest, len(core.prepare))
@@ -360,32 +354,8 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	}
 
 	log.Debugf("Replica %s received Commit from %s for consensus %s", lbft.options.ID, commit.ReplicaID, commit.Digest)
-	// lbft.rwVcStore.Lock()
-	// for k, vcl := range lbft.vcStore {
-	// 	if vcl.vcs[0].SeqNo != commit.SeqNo {
-	// 		continue
-	// 	}
-	// 	if strings.Contains(k, "resend") {
-	// 		continue
-	// 	}
-	// 	if strings.Contains(k, commit.Digest) || strings.Contains(k, "lbft") {
-	// 		vcs := []*ViewChange{}
-	// 		for _, vc := range vcl.vcs {
-	// 			if vc.ReplicaID == commit.ReplicaID {
-	// 				continue
-	// 			}
-	// 			vcs = append(vcs, vc)
-	// 		}
-	// 		if len(vcs) == 0 {
-	// 			vcl.stop()
-	// 			delete(lbft.vcStore, k)
-	// 		} else {
-	// 			vcl.vcs = vcs
-	// 		}
-	// 	}
-	// }
-	//lbft.rwVcStore.Unlock()
-	lbft.stopNewViewTimerForCore(core)
+
+	lbft.startNewViewTimerForCore(core, commit.ReplicaID)
 	core.commit = append(core.commit, commit)
 	if core.prePrepare == nil {
 		log.Debugf("Replica %s received Commit for consensus %s, voted: %d", lbft.options.ID, commit.Digest, len(core.commit))
