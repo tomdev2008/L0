@@ -107,14 +107,15 @@ type FetchCommitted struct {
 
 //ViewChange Define struct
 type ViewChange struct {
-	ID        string
-	Priority  int64
-	PrimaryID string
-	SeqNo     uint32
-	Height    uint32
-	OptHash   string
-	ReplicaID string
-	Chain     string
+	ID            string
+	Priority      int64
+	PrimaryID     string
+	SeqNo         uint32
+	Height        uint32
+	OptHash       string
+	LastPrimaryID string
+	ReplicaID     string
+	Chain         string
 }
 
 //MessageType
