@@ -21,6 +21,7 @@ package lbft
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -295,7 +296,31 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 	}
 
 	log.Debugf("Replica %s received Prepare from %s for consensus %s", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
-
+	lbft.rwVcStore.Lock()
+	for k, vcl := range lbft.vcStore {
+		if vcl.vcs[0].SeqNo != prepare.SeqNo {
+			continue
+		}
+		if strings.Contains(k, "resend") {
+			continue
+		}
+		if strings.Contains(k, prepare.Digest) || strings.Contains(k, "lbft") {
+			vcs := []*ViewChange{}
+			for _, vc := range vcl.vcs {
+				if vc.ReplicaID == prepare.ReplicaID {
+					continue
+				}
+				vcs = append(vcs, vc)
+			}
+			if len(vcs) == 0 {
+				vcl.stop()
+				delete(lbft.vcStore, k)
+			} else {
+				vcl.vcs = vcs
+			}
+		}
+	}
+	lbft.rwVcStore.Unlock()
 	lbft.startNewViewTimerForCore(core, "commit")
 	core.prepare = append(core.prepare, prepare)
 	if core.prePrepare == nil {
@@ -336,7 +361,31 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	}
 
 	log.Debugf("Replica %s received Commit from %s for consensus %s", lbft.options.ID, commit.ReplicaID, commit.Digest)
-
+	lbft.rwVcStore.Lock()
+	for k, vcl := range lbft.vcStore {
+		if vcl.vcs[0].SeqNo != commit.SeqNo {
+			continue
+		}
+		if strings.Contains(k, "resend") {
+			continue
+		}
+		if strings.Contains(k, commit.Digest) || strings.Contains(k, "lbft") {
+			vcs := []*ViewChange{}
+			for _, vc := range vcl.vcs {
+				if vc.ReplicaID == commit.ReplicaID {
+					continue
+				}
+				vcs = append(vcs, vc)
+			}
+			if len(vcs) == 0 {
+				vcl.stop()
+				delete(lbft.vcStore, k)
+			} else {
+				vcl.vcs = vcs
+			}
+		}
+	}
+	lbft.rwVcStore.Unlock()
 	lbft.stopNewViewTimerForCore(core)
 	core.commit = append(core.commit, commit)
 	if core.prePrepare == nil {
