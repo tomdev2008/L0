@@ -132,7 +132,7 @@ func (lbft *Lbft) Options() consensus.IOptions {
 //Start Start consenter serverice
 func (lbft *Lbft) Start() {
 	if lbft.exit != nil {
-		log.Warnf("Replica %s consenter alreay started", lbft.options.ID)
+		log.Warnf("Replica %s consenter already started", lbft.options.ID)
 		return
 	}
 	log.Infof("lbft : %s", lbft)
@@ -175,7 +175,7 @@ func (lbft *Lbft) sendEmptyRequest() {
 //Stop Stop consenter serverice
 func (lbft *Lbft) Stop() {
 	if lbft.exit == nil {
-		log.Warnf("Replica %s consenter alreay stopped", lbft.options.ID)
+		log.Warnf("Replica %s consenter already stopped", lbft.options.ID)
 		return
 	}
 	close(lbft.exit)
@@ -307,18 +307,20 @@ func (lbft *Lbft) startNewViewTimer() {
 	lbft.Lock()
 	defer lbft.Unlock()
 	if lbft.newViewTimer == nil {
+		id := time.Now().Truncate(lbft.options.Request).Format("2006-01-02 15:04:05")
 		lbft.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
 			lbft.Lock()
 			defer lbft.Unlock()
 			vc := &ViewChange{
-				ID:        "lbft",
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            "lbft-" + id,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.primaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
 			lbft.newViewTimer = nil
@@ -339,14 +341,15 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 	if lbft.options.ViewChangePeriod > 0*time.Second && lbft.viewChangePeriodTimer == nil {
 		lbft.viewChangePeriodTimer = time.AfterFunc(lbft.options.ViewChangePeriod, func() {
 			vc := &ViewChange{
-				ID:        "lbft-period",
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            "lbft-period",
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.primaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("period timemout(%v)", lbft.options.ViewChangePeriod))
 		})
@@ -430,10 +433,10 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 			if tvc != nil && lbft.rvc == nil {
 				lbft.rvc = tvc
 				//vcl.resendTimer = time.AfterFunc(lbft.options.ResendViewChange, func() {
-				lbft.rvc.ID += ":resend"
+				lbft.rvc.ID += ":resend-" + tvc.PrimaryID
 				lbft.rvc.Chain = lbft.options.Chain
 				lbft.rvc.ReplicaID = lbft.options.ID
-				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s)", lbft.options.ResendViewChange))
+				lbft.sendViewChange(lbft.rvc, fmt.Sprintf("resend timeout(%s) - %s", lbft.options.ResendViewChange, tvc.ID))
 				lbft.rvc = nil
 				//})
 			}
@@ -457,6 +460,11 @@ func (vcl *viewChangeList) stop() {
 func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	if vc.Chain != lbft.options.Chain {
 		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
+		return nil
+	}
+
+	if vc.LastPrimaryID != lbft.primaryID {
+		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff primaryID (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.primaryID, vc.LastPrimaryID)
 		return nil
 	}
 
@@ -485,11 +493,12 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcs))
 
 	if len(vcs) >= lbft.Quorum() {
+		lbft.stopNewViewTimer()
 		if len(vcs) == lbft.Quorum() {
 			if lbft.primaryID != "" {
 				lbft.lastPrimaryID = lbft.primaryID
 				lbft.primaryID = ""
-				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID)
+				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s - %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID, vcs[0].ID)
 			}
 		}
 		q := 0
@@ -571,8 +580,5 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 				f(2, req.Txs)
 			}
 		}
-	}
-	if !lbft.isPrimary() {
-		lbft.stopNewViewTimer()
 	}
 }

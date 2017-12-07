@@ -21,6 +21,7 @@ package lbft
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -58,23 +59,48 @@ func (lbft *Lbft) getlbftCore(digest string) *lbftCore {
 	return core
 }
 
-func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore) {
+func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, replica string) {
 	lbft.stopNewViewTimer()
+	lbft.stopNewViewTimerForCore(core)
+	lbft.rwVcStore.Lock()
+	defer lbft.rwVcStore.Unlock()
+	for k, vcl := range lbft.vcStore {
+		if strings.Contains(k, "resend") {
+			continue
+		}
+		if strings.Contains(k, "lbft") || k == core.digest {
+			vcs := []*ViewChange{}
+			for _, vc := range vcl.vcs {
+				if vc.ReplicaID == replica {
+					continue
+				}
+				vcs = append(vcs, vc)
+			}
+			if len(vcs) == 0 {
+				vcl.stop()
+				delete(lbft.vcStore, core.digest)
+			} else {
+				vcl.vcs = vcs
+			}
+		}
+	}
+
 	core.Lock()
 	defer core.Unlock()
-	if core.newViewTimer == nil {
+	if core.newViewTimer == nil && lbft.hasPrimary() {
 		core.newViewTimer = time.AfterFunc(lbft.options.Request, func() {
 			core.Lock()
 			defer core.Unlock()
 			vc := &ViewChange{
-				ID:        core.digest,
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            core.digest,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.lastPrimaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("%s request timeout(%s)", core.digest, lbft.options.Request))
 			core.newViewTimer = nil
@@ -191,18 +217,19 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 
 	core := lbft.getlbftCore(digest)
 	if core.prePrepare != nil {
-		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: alreay exist ", lbft.options.ID, preprepare.ReplicaID, digest)
+		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: already exist ", lbft.options.ID, preprepare.ReplicaID, digest)
 		vc := &ViewChange{
-			ID:        digest,
-			Priority:  lbft.priority,
-			PrimaryID: lbft.options.ID,
-			SeqNo:     lbft.execSeqNo,
-			Height:    lbft.execHeight,
-			OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-			ReplicaID: lbft.options.ID,
-			Chain:     lbft.options.Chain,
+			ID:            digest,
+			Priority:      lbft.priority,
+			PrimaryID:     lbft.options.ID,
+			SeqNo:         lbft.execSeqNo,
+			Height:        lbft.execHeight,
+			OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+			LastPrimaryID: lbft.lastPrimaryID,
+			ReplicaID:     lbft.options.ID,
+			Chain:         lbft.options.Chain,
 		}
-		lbft.sendViewChange(vc, fmt.Sprintf("alreay exist"))
+		lbft.sendViewChange(vc, fmt.Sprintf("already exist"))
 		return nil
 	}
 
@@ -211,14 +238,15 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		if preprepare.SeqNo != lbft.seqNo+1 {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong seqNo (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo, lbft.seqNo)
 			vc := &ViewChange{
-				ID:        digest,
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            digest,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.lastPrimaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
 			return nil
@@ -226,14 +254,15 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		if preprepare.Height != lbft.height {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, wrong height (%d==%d)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.Height, lbft.height)
 			vc := &ViewChange{
-				ID:        digest,
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            digest,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.lastPrimaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
 			return nil
@@ -242,14 +271,15 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		if success, _ := lbft.stack.VerifyTxs(preprepare.Request.Txs, false); !success {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: failed to verify", lbft.options.ID, preprepare.ReplicaID, digest)
 			vc := &ViewChange{
-				ID:        digest,
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            digest,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.lastPrimaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("failed to verify"))
 			return nil
@@ -262,7 +292,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 
 	log.Debugf("Replica %s received PrePrepare from %s for consensus %s, seqNo %d", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo)
 
-	lbft.startNewViewTimerForCore(core)
+	lbft.startNewViewTimerForCore(core, preprepare.ReplicaID)
 	core.prePrepare = preprepare
 	prepare := &Prepare{
 		PrimaryID: lbft.primaryID,
@@ -295,7 +325,7 @@ func (lbft *Lbft) recvPrepare(prepare *Prepare) *Message {
 
 	log.Debugf("Replica %s received Prepare from %s for consensus %s", lbft.options.ID, prepare.ReplicaID, prepare.Digest)
 
-	lbft.startNewViewTimerForCore(core)
+	lbft.startNewViewTimerForCore(core, prepare.ReplicaID)
 	core.prepare = append(core.prepare, prepare)
 	if core.prePrepare == nil {
 		log.Debugf("Replica %s received Prepare for consensus %s, voted: %d", lbft.options.ID, prepare.Digest, len(core.prepare))
@@ -336,7 +366,7 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 
 	log.Debugf("Replica %s received Commit from %s for consensus %s", lbft.options.ID, commit.ReplicaID, commit.Digest)
 
-	lbft.stopNewViewTimerForCore(core)
+	lbft.startNewViewTimerForCore(core, commit.ReplicaID)
 	core.commit = append(core.commit, commit)
 	if core.prePrepare == nil {
 		log.Debugf("Replica %s received Commit for consensus %s, voted: %d", lbft.options.ID, commit.Digest, len(core.commit))
@@ -407,6 +437,20 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
 	}
+	//remove invalid ViewChange
+	lbft.rwVcStore.Lock()
+	keys := []string{}
+	for key, vcl := range lbft.vcStore {
+		if vcl.vcs[0].SeqNo > committed.SeqNo {
+			continue
+		}
+		vcl.stop()
+		keys = append(keys, key)
+	}
+	for _, key := range keys {
+		delete(lbft.vcStore, key)
+	}
+	lbft.rwVcStore.Unlock()
 	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
 	lbft.execute()
 

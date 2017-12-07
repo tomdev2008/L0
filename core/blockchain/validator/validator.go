@@ -48,7 +48,8 @@ type Validator interface {
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
-	SetNotify(func(*types.Transaction, string))
+	SetNotify(func(*types.Transaction, interface{}))
+	Notify(*types.Transaction, interface{})
 	SecurityPluginDir() string
 }
 
@@ -66,7 +67,7 @@ type Verification struct {
 	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
-	notify             func(*types.Transaction, string)
+	notify             func(*types.Transaction, interface{})
 	sync.RWMutex
 	sctx *contract.SmartConstract
 }
@@ -295,7 +296,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				v.assets[assetID] = newAsset
 			} else {
-				v.notify(tx, "asset id alreay exist")
+				v.notify(tx, "asset id already exist")
 				if primary {
 					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
@@ -443,10 +444,17 @@ func (v *Verification) GetBalance(addr accounts.Address) *state.Balance {
 func (v *Verification) GetAsset(id uint32) *state.Asset {
 	v.rwAccount.Lock()
 	defer v.rwAccount.Unlock()
-	asset, _ := v.assets[id]
+	asset, ok := v.assets[id]
+	if !ok {
+		asset, _ = v.ledger.GetAssetFromDB(id)
+	}
 	return asset
 }
 
-func (v *Verification) SetNotify(callback func(*types.Transaction, string)) {
+func (v *Verification) SetNotify(callback func(*types.Transaction, interface{})) {
 	v.notify = callback
+}
+
+func (v *Verification) Notify(tx *types.Transaction, i interface{}) {
+	v.notify(tx, i)
 }

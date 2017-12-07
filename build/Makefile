@@ -15,4 +15,13 @@ tests:
 	@go install -tags=embed ../tests/rpc
 	go build -tags=embed -o ./bin/rpc ../tests/rpc
 
-.PHONY: all tests
+run:
+	@./start.sh
+
+stop:
+	@./stop.sh
+
+clear:
+	@rm -rf ./datadir
+
+.PHONY: all tests run stop clear

@@ -124,7 +124,15 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	tx := new(types.Transaction)
-	tx.Deserialize(utils.HexToBytes(txHex))
+
+	err := tx.Deserialize(utils.HexToBytes(txHex))
+	if err != nil {
+		return err
+	}
+
+	if tx.Data.Amount == nil || tx.Data.Fee == nil || tx.Data.Signature == nil {
+		return errors.New("Invalid Hex")
+	}
 
 	if tx.Amount().Sign() < 0 {
 		return errors.New("Invalid Amount in Tx, Amount must be >0")
@@ -134,7 +142,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errors.New("Invalid Fee in Tx, Fee must bigger than 0")
 	}
 
-	_, err := tx.Verfiy()
+	_, err = tx.Verfiy()
 	if err != nil {
 		return errors.New("Invalid Tx, varify the signature of Tx failed")
 	}

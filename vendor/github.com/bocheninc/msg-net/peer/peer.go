@@ -86,7 +86,7 @@ func (p *Peer) Start() bool {
 //Send Send msg to Router
 func (p *Peer) Send(id string, payload []byte, signature []byte) bool {
 	if !p.IsRunning() {
-		logger.Warnf("peer %s is alreay stopped", p.id)
+		logger.Warnf("peer %s is already stopped", p.id)
 		return false
 	}
 	if !strings.Contains(id, ":") {
@@ -103,7 +103,7 @@ func (p *Peer) Send(id string, payload []byte, signature []byte) bool {
 //Stop Stop peer service
 func (p *Peer) Stop() {
 	if !p.IsRunning() {
-		logger.Warnf("peer %s is alreay stopped", p.id)
+		logger.Warnf("peer %s is already stopped", p.id)
 	}
 	p.cancel()
 

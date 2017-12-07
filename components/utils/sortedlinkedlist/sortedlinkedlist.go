@@ -270,5 +270,9 @@ func GetIElementByKey(key string) IElement { return sortedLinkedList.GetIElement
 func (sll *SortedLinkedList) GetIElementByKey(key string) IElement {
 	sll.RLock()
 	defer sll.RUnlock()
-	return sll.mapping[key].Value.(IElement)
+	elem, ok := sll.mapping[key]
+	if !ok {
+		return nil
+	}
+	return elem.Value.(IElement)
 }

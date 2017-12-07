@@ -223,7 +223,8 @@ func (peer *Peer) run() {
 		log.Debugf("handle message %d(%s), server address:%s ...", m.Cmd, msgMap[m.Cmd], peer.Address)
 
 		// Update the ActiveTime when message reached
-		peerManager.alivePeer <- conn
+		// peerManager.alivePeer <- conn
+		peer.LastActiveTime = time.Now()
 
 		switch m.Cmd {
 		case pingMsg:
@@ -234,7 +235,7 @@ func (peer *Peer) run() {
 		case peersMsg:
 			peer.onPeers(m, peerManager)
 		case getPeersMsg:
-			peer.onGetPeers(m, conn, peerManager)
+			go peer.onGetPeers(m, conn, peerManager)
 		default:
 			// TODO: refactor this
 			if p := peerManager.GetPeer(conn); p != nil {
@@ -242,6 +243,7 @@ func (peer *Peer) run() {
 				// log.Debugf("connection %v, peer %v, message- %v, peers:%v, peer: %v, ok: %v", conn, p, m.Cmd, pm.peers, pp, ok)
 				proto := p.getProto(m.Cmd)
 				if proto != nil {
+					log.Debugf("handle message %d(%s), server address:%s %d + 1", m.Cmd, msgMap[m.Cmd], peer.Address, len(proto.in))
 					proto.in <- *m
 				}
 			} else {

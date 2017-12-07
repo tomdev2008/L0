@@ -56,6 +56,10 @@ func (v *Verification) checkTransactionLegal(tx *types.Transaction) error {
 		return fmt.Errorf("[validator] illegal transaction %s : fromCahin %s or toChain %s == params.ChainID %s", tx.Hash(), tx.FromChain(), tx.ToChain(), params.ChainID.String())
 	}
 
+	if tx.Amount().Sign() < 0 || tx.Fee().Sign() < 0 {
+		return fmt.Errorf("[validator] illegal transaction %s : Amount must be >0 or Fee must bigger than 0", tx.Hash())
+	}
+
 	switch tx.GetType() {
 	case types.TypeAtomic:
 		if strings.Compare(tx.FromChain(), tx.ToChain()) != 0 {
@@ -102,7 +106,7 @@ func (v *Verification) checkTransactionLegal(tx *types.Transaction) error {
 					Owner:  tx.Recipient(),
 				}
 				if _, err := asset.Update(string(tx.Payload)); err != nil {
-					return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
+					return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s) - %s", tx.Hash(), string(tx.Payload), err)
 				}
 			} else if tp == types.TypeIssueUpdate {
 				asset := &state.Asset{
@@ -117,7 +121,7 @@ func (v *Verification) checkTransactionLegal(tx *types.Transaction) error {
 						Owner:  tx.Sender(),
 					}
 					if _, err := asset.Update(string(tx.Payload)); err != nil {
-						return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s)", tx.Hash(), string(tx.Payload))
+						return fmt.Errorf("[validator] illegal transaction %s: invalid issue coin(%s) - %s", tx.Hash(), string(tx.Payload), err)
 					}
 				}
 			}
