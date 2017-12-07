@@ -312,14 +312,15 @@ func (lbft *Lbft) startNewViewTimer() {
 			lbft.Lock()
 			defer lbft.Unlock()
 			vc := &ViewChange{
-				ID:        "lbft-" + id,
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            "lbft-" + id,
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.primaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("request timeout(%s)", lbft.options.Request))
 			lbft.newViewTimer = nil
@@ -340,14 +341,15 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 	if lbft.options.ViewChangePeriod > 0*time.Second && lbft.viewChangePeriodTimer == nil {
 		lbft.viewChangePeriodTimer = time.AfterFunc(lbft.options.ViewChangePeriod, func() {
 			vc := &ViewChange{
-				ID:        "lbft-period",
-				Priority:  lbft.priority,
-				PrimaryID: lbft.options.ID,
-				SeqNo:     lbft.execSeqNo,
-				Height:    lbft.execHeight,
-				OptHash:   lbft.options.Hash() + ":" + lbft.hash(),
-				ReplicaID: lbft.options.ID,
-				Chain:     lbft.options.Chain,
+				ID:            "lbft-period",
+				Priority:      lbft.priority,
+				PrimaryID:     lbft.options.ID,
+				SeqNo:         lbft.execSeqNo,
+				Height:        lbft.execHeight,
+				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				LastPrimaryID: lbft.primaryID,
+				ReplicaID:     lbft.options.ID,
+				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("period timemout(%v)", lbft.options.ViewChangePeriod))
 		})
@@ -458,6 +460,11 @@ func (vcl *viewChangeList) stop() {
 func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	if vc.Chain != lbft.options.Chain {
 		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff chain (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.options.Chain, vc.Chain)
+		return nil
+	}
+
+	if vc.LastPrimaryID != lbft.primaryID {
+		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff primaryID (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.primaryID, vc.LastPrimaryID)
 		return nil
 	}
 
