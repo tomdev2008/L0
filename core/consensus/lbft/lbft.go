@@ -474,6 +474,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	}
 
 	lbft.rwVcStore.Lock()
+	defer lbft.rwVcStore.Unlock()
 	vcl, ok := lbft.vcStore[vc.ID]
 	if !ok {
 		vcl = &viewChangeList{}
@@ -483,14 +484,14 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		for _, v := range vcl.vcs {
 			if v.Chain == vc.Chain && v.ReplicaID == vc.ReplicaID {
 				log.Warningf("Replica %s received ViewChange(%s) from %s: ingnore, duplicate, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, len(vcl.vcs))
-				lbft.rwVcStore.Unlock()
+				//lbft.rwVcStore.Unlock()
 				return nil
 			}
 		}
 	}
 	vcl.vcs = append(vcl.vcs, vc)
 	vcs := vcl.vcs
-	lbft.rwVcStore.Unlock()
+	//lbft.rwVcStore.Unlock()
 
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
