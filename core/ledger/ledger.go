@@ -524,7 +524,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 	for _, tx := range txs {
 		switch tp := tx.GetType(); tp {
 		case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
-			if err := ledger.executeTransaction(tx, false); err != nil {
+			if err = ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
 				//rollback Validator balance cache
 				if ledger.Validator != nil {
@@ -648,7 +648,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 func (ledger *Ledger) registerBalance(tx *types.Transaction) {
 	senderBalance, _ := ledger.state.GetTmpBalance(tx.Sender())
 	recipientBalance, _ := ledger.state.GetTmpBalance(tx.Recipient())
-	notify.Register(tx.Hash(), senderBalance.Get(tx.AssetID()), recipientBalance.Get(tx.AssetID()), func(...interface{}) {})
+	notify.Register(tx.Hash(), tx.AssetID(), senderBalance.Get(tx.AssetID()), recipientBalance.Get(tx.AssetID()), func(...interface{}) {})
 }
 
 func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {

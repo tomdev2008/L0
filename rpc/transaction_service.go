@@ -116,6 +116,7 @@ type BroadcastReply struct {
 	Result           *string     `json:"result"`
 	ContractAddr     *string     `json:"contractAddr"`
 	TransactionHash  crypto.Hash `json:"transactionHash"`
+	AssetID          int         `json:"assetID"`
 	SenderBalance    *big.Int    `json:"senderBalance"`
 	RecipientBalance *big.Int    `json:"recipientBalance"`
 }
@@ -151,21 +152,24 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 	ch := make(chan struct{}, 1)
 	var errMsg error
-	var sBalance *big.Int
-	var rBalance *big.Int
-	notify.Register(tx.Hash(), nil, nil, func(iTx ...interface{}) {
+	var sBalance, rBalance *big.Int
+	var assetID int
+	notify.Register(tx.Hash(), 0, nil, nil, func(iTx ...interface{}) {
 		ch <- struct{}{}
 		if len(iTx) == 1 {
 			if s, ok := iTx[0].(error); ok {
 				errMsg = s
 			}
 		}
-		if len(iTx) == 2 {
+		if len(iTx) == 3 {
 			if sb, ok := iTx[0].(*big.Int); ok {
 				sBalance = sb
 			}
 			if rb, ok := iTx[1].(*big.Int); ok {
 				rBalance = rb
+			}
+			if id, ok := iTx[2].(int); ok {
+				assetID = id
 			}
 		}
 	})
@@ -182,7 +186,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
 		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
 	} else {
-		*reply = BroadcastReply{TransactionHash: tx.Hash(), SenderBalance: sBalance, RecipientBalance: rBalance}
+		*reply = BroadcastReply{TransactionHash: tx.Hash(), SenderBalance: sBalance, RecipientBalance: rBalance, AssetID: assetID}
 	}
 	return nil
 }

@@ -32,19 +32,20 @@ var (
 
 // Register receive transaction hash and callback function
 // When the transaction is submitted execute callback function
-func Register(txHash interface{}, sender, recipient *big.Int, callback func(...interface{})) error {
+func Register(txHash interface{}, id uint32, sender, recipient *big.Int, callback func(...interface{})) error {
 	if callback == nil || txHash == nil {
 		return errors.New("txHash or callback function cannot be nil")
 
 	}
 	if cb, ok := callbacks.Load(txHash); ok {
 		if balance, ok := cb.(*types.Balance); ok {
+			balance.ID = id
 			balance.Sender = sender
 			balance.Recipient = recipient
 			callbacks.Store(txHash, balance)
 		}
 	} else {
-		callbacks.Store(txHash, &types.Balance{Sender: sender, Recipient: recipient, Callback: callback})
+		callbacks.Store(txHash, &types.Balance{ID: id, Sender: sender, Recipient: recipient, Callback: callback})
 	}
 	return nil
 }
@@ -58,7 +59,7 @@ func BlockNotify(block *types.Block) {
 		for _, tx := range block.Transactions {
 			if cb, ok := callbacks.Load(tx.Hash()); ok {
 				if balance, b := cb.(*types.Balance); b {
-					balance.Callback(balance.Sender, balance.Recipient)
+					balance.Callback(balance.Sender, balance.Recipient, balance.ID)
 				}
 				callbacks.Delete(tx)
 			}

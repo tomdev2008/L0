@@ -201,14 +201,14 @@ func issueTX() {
 		uint32(nonce),
 		issueSender,
 		sender,
-		0,
-		big.NewInt(10e11),
+		1,
+		big.NewInt(1000),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
 	)
 
 	issueCoin := make(map[string]interface{})
-	issueCoin["id"] = 0
+	issueCoin["id"] = 1
 	tx.Payload, _ = json.Marshal(issueCoin)
 	tx.Meta, _ = json.Marshal(map[string]map[string]string{
 		"account": accountInfo,
@@ -243,8 +243,8 @@ func deploySmartContractTX(conf *contractConf) []byte {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		0,
-		big.NewInt(1000),
+		1,
+		big.NewInt(100),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)
