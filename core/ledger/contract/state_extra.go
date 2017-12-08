@@ -108,7 +108,8 @@ func (csd *ContractStateDelta) set(key string, value []byte) {
 }
 
 func (csd *ContractStateDelta) remove(key string) {
-	csd.cache = csd.cache.Delete([]byte(key))
+	cv := newCacheKVs(db.OperationDelete, key, nil)
+	csd.cache = csd.cache.Put([]byte(key), cv.serialize())
 }
 
 func (csd *ContractStateDelta) getByPrefix(prefix string) []*db.KeyValue {
@@ -120,8 +121,9 @@ func (csd *ContractStateDelta) getByPrefix(prefix string) []*db.KeyValue {
 		}
 		cv := &CacheKVs{}
 		cv.deserialize(iter.Value())
-		values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
-
+		if cv.Optype != db.OperationDelete {
+			values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
+		}
 	}
 	return values
 }
@@ -135,9 +137,11 @@ func (csd *ContractStateDelta) getByRange(startKey string, limitkey string) []*d
 		// }
 		cv := &CacheKVs{}
 		cv.deserialize(iter.Value())
-		values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
-		if bytes.Equal(iter.Key(), []byte(limitkey)) {
-			break
+		if cv.Optype != db.OperationDelete {
+			values = append(values, &db.KeyValue{Key: []byte(cv.Key), Value: cv.Value})
+			if bytes.Equal(iter.Key(), []byte(limitkey)) {
+				break
+			}
 		}
 	}
 	return values
