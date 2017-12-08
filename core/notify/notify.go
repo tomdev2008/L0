@@ -24,6 +24,8 @@ import (
 	"sync"
 
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/core/params"
+	"fmt"
 )
 
 var (
@@ -60,7 +62,9 @@ func BlockNotify(block *types.Block) {
 				if balance, b := cb.(*types.Balance); b {
 					balance.Callback(balance.Sender, balance.Recipient)
 				}
-				callbacks.Delete(tx)
+				if !(params.Nvp && params.Mongodb) {
+					callbacks.Delete(tx.Hash())
+				}
 			}
 		}
 	}(block.Transactions)
@@ -73,4 +77,19 @@ func TxNotify(tx *types.Transaction, i interface{}) {
 		}
 		callbacks.Delete(tx)
 	}
+}
+
+func RemoveTxInCallbacks(tx *types.Transaction) {
+	callbacks.Delete(tx.Hash())
+}
+
+func GetBalanceByTxInCallbacks(tx *types.Transaction) (*types.Balance, error) {
+	txHash := tx.Hash()
+	if cb, ok := callbacks.Load(txHash); ok {
+		if balance, ok := cb.(*types.Balance); ok {
+			return balance, nil
+		}
+	}
+
+	return nil, errors.New(fmt.Sprintf("can't find this tx, txHash: %+v", txHash))
 }
