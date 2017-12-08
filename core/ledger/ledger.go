@@ -662,9 +662,15 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 }
 
 func (ledger *Ledger) registerBalance(tx *types.Transaction) {
+
 	senderBalance, _ := ledger.state.GetTmpBalance(tx.Sender())
 	recipientBalance, _ := ledger.state.GetTmpBalance(tx.Recipient())
-	notify.Register(tx.Hash(), tx.AssetID(), senderBalance.Get(tx.AssetID()), recipientBalance.Get(tx.AssetID()), func(...interface{}) {})
+
+	sb := big.NewInt(0)
+	rb := big.NewInt(0)
+	sb.Set(senderBalance.Get(tx.AssetID()))
+	rb.Set(recipientBalance.Get(tx.AssetID()))
+	notify.Register(tx.Hash(), tx.AssetID(), sb, rb, func(...interface{}) {})
 }
 
 func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {

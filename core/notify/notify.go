@@ -20,12 +20,12 @@ package notify
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 
-	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/core/params"
-	"fmt"
+	"github.com/bocheninc/L0/core/types"
 )
 
 var (
