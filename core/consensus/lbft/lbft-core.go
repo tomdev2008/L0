@@ -19,20 +19,35 @@
 package lbft
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/types"
 )
 
+func merkleRootHash(txs []*types.Transaction) crypto.Hash {
+	if len(txs) > 0 {
+		hashs := make([]crypto.Hash, 0)
+		for _, tx := range txs {
+			hashs = append(hashs, tx.Hash())
+		}
+		return crypto.ComputeMerkleHash(hashs)[0]
+	}
+	return crypto.Hash{}
+}
+
 type lbftCore struct {
 	digest       string
+	txs          types.Transactions
+	errTxs       types.Transactions
 	prePrepare   *PrePrepare
 	prepare      []*Prepare
 	passPrepare  bool
@@ -68,7 +83,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, replica string) {
 		if strings.Contains(k, "resend") {
 			continue
 		}
-		if (lbft.hasPrimary() && strings.Contains(k, "lbft")) || k == core.digest {
+		if k == core.digest {
 			vcs := []*ViewChange{}
 			for _, vc := range vcl.vcs {
 				if vc.ReplicaID == replica {
@@ -166,15 +181,23 @@ func (lbft *Lbft) maybePassCommit(core *lbftCore) bool {
 func (lbft *Lbft) recvRequest(request *Request) *Message {
 	digest := request.Name()
 	if lbft.isPrimary() {
+		if _, ok := lbft.vcStore[digest]; ok {
+			return nil
+		}
+		core := lbft.getlbftCore(digest)
+		txs, etxs := lbft.stack.VerifyTxs(request.Txs)
+		core.txs = txs
+		core.errTxs = etxs
 		lbft.seqNo++
 
 		log.Debugf("Replica %s received Request for consensus %s", lbft.options.ID, digest)
 		request.Height = lbft.height
 		preprepare := &PrePrepare{
-			PrimaryID: lbft.primaryID,
-			SeqNo:     lbft.seqNo,
-			Height:    lbft.height,
-			OptHash:   lbft.options.Hash(),
+			PrimaryID:  lbft.primaryID,
+			SeqNo:      lbft.seqNo,
+			Height:     lbft.height,
+			OptHash:    lbft.options.Hash(),
+			MerkleRoot: string(merkleRootHash(core.errTxs).Bytes()),
 			//Digest:    digest,
 			Quorum:    lbft.Quorum(),
 			Request:   request,
@@ -267,8 +290,8 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
 			return nil
 		}
-
-		if success, _ := lbft.stack.VerifyTxs(preprepare.Request.Txs, false); !success {
+		txs, etxs := lbft.stack.VerifyTxs(preprepare.Request.Txs)
+		if !bytes.Equal(merkleRootHash(etxs).Bytes(), []byte(preprepare.MerkleRoot)) {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: failed to verify", lbft.options.ID, preprepare.ReplicaID, digest)
 			vc := &ViewChange{
 				ID:            digest,
@@ -282,8 +305,11 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				Chain:         lbft.options.Chain,
 			}
 			lbft.sendViewChange(vc, fmt.Sprintf("failed to verify"))
+			lbft.function(5, txs)
 			return nil
 		}
+		core.txs = txs
+		core.errTxs = etxs
 		lbft.seqNo++
 		if preprepare.Request.ID == EMPTYREQUEST {
 			lbft.height++
@@ -379,7 +405,10 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	core.endTime = time.Now()
 	committed := &Committed{
 		SeqNo:     core.prePrepare.SeqNo,
-		Request:   core.prePrepare.Request,
+		Height:    core.prePrepare.Height,
+		Digest:    commit.Digest,
+		Txs:       core.txs,
+		ErrTxs:    core.errTxs,
 		Chain:     lbft.options.Chain,
 		ReplicaID: lbft.options.ID,
 	}
@@ -392,15 +421,15 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 
 func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 	if committed.Chain != lbft.options.Chain {
-		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore diff chain", lbft.options.ID, committed.ReplicaID, committed.Request.Name())
+		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore diff chain", lbft.options.ID, committed.ReplicaID, committed.Digest)
 		return nil
 	}
 	if _, ok := lbft.committedRequests[committed.SeqNo]; ok || committed.SeqNo <= lbft.execSeqNo {
-		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore delay(%d<=%d)", lbft.options.ID, committed.ReplicaID, committed.Request.Name(), committed.SeqNo, lbft.execSeqNo)
+		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore delay(%d<=%d)", lbft.options.ID, committed.ReplicaID, committed.Digest, committed.SeqNo, lbft.execSeqNo)
 		return nil
 	}
 
-	digest := committed.Request.Name()
+	digest := committed.Digest
 	if committed.ReplicaID == lbft.options.ID {
 		log.Debugf("Replica %s received Committed from %s for consensus %s", lbft.options.ID, committed.ReplicaID, digest)
 		//lbft.committedRequests[committed.SeqNo] = committed.Request
@@ -430,12 +459,15 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 			return nil
 		}
 	}
-	lbft.committedRequests[committed.SeqNo] = committed.Request
+	lbft.committedRequests[committed.SeqNo] = committed
 	d, _ := time.ParseDuration("0s")
 	if core, ok := lbft.coreStore[digest]; ok {
 		lbft.stopNewViewTimerForCore(core)
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
+		if core.txs == nil {
+			lbft.function(4, core.txs)
+		}
 	}
 	//remove invalid ViewChange
 	lbft.rwVcStore.Lock()
@@ -451,7 +483,7 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		delete(lbft.vcStore, key)
 	}
 	lbft.rwVcStore.Unlock()
-	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Request.Name(), committed.SeqNo, committed.Request.Height, d)
+	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Digest, committed.SeqNo, committed.Height, d)
 	lbft.execute()
 
 	// for _, core := range lbft.coreStore {
@@ -517,10 +549,9 @@ func (lbft *Lbft) execute() {
 			}
 			lbft.outputTxs = append(lbft.outputTxs, request.Txs...)
 			lbft.seqNos = append(lbft.seqNos, seqNo)
-			if request.Func != nil {
-				request.Func(3, request.Txs)
-			}
-			if request.ID == EMPTYREQUEST {
+			lbft.function(3, request.Txs)
+			lbft.function(6, request.ErrTxs)
+			if len(request.Txs) == 0 && len(request.ErrTxs) == 0 {
 				lbft.execHeight = request.Height + 1
 				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s), block size(%d)", lbft.options.BlockTimeout, lbft.options.BlockSize))
 				lbft.outputTxs = nil
@@ -531,7 +562,7 @@ func (lbft *Lbft) execute() {
 			if seqNo-nextExec > uint32(lbft.options.K) {
 				log.Debugf("Replica %s need seqNo %d ", lbft.options.ID, nextExec)
 				for n, r := range lbft.committedRequests {
-					log.Debugf("Replica %s seqNo %d : %s", lbft.options.ID, n, r.Name)
+					log.Debugf("Replica %s seqNo %d : %s", lbft.options.ID, n, r.Digest)
 				}
 				log.Panicf("Replica %s fallen behind over %d", lbft.options.ID, lbft.options.K)
 			}

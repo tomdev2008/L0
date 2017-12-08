@@ -33,7 +33,6 @@ type Request struct {
 	ID     int64
 	Time   uint32
 	Height uint32
-	Func   func(int, types.Transactions)
 	Txs    types.Transactions
 }
 
@@ -44,8 +43,7 @@ func (msg *Request) Name() string {
 		ID:   msg.ID,
 		Time: msg.Time,
 		//Height: msg.Height,
-		Func: msg.Func,
-		Txs:  msg.Txs,
+		Txs: msg.Txs,
 	}
 	hash := sha256.Sum256(utils.Serialize(r))
 	keys = append(keys, hex.EncodeToString(hash[:]))
@@ -60,10 +58,11 @@ type PrePrepare struct {
 	Height    uint32
 	OptHash   string
 	// Digest    string
-	Quorum    int
-	Request   *Request
-	Chain     string
-	ReplicaID string
+	MerkleRoot string
+	Quorum     int
+	Request    *Request
+	Chain      string
+	ReplicaID  string
 }
 
 //Prepare Define struct
@@ -93,7 +92,10 @@ type Commit struct {
 //Committed Define struct
 type Committed struct {
 	SeqNo     uint32
-	Request   *Request
+	Height    uint32
+	Digest    string
+	Txs       types.Transactions
+	ErrTxs    types.Transactions
 	Chain     string
 	ReplicaID string
 }

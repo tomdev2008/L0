@@ -104,7 +104,10 @@ func (noops *Noops) Start() {
 			seqNos = make([]uint32, 0)
 			return
 		case batchReq := <-noops.pendingChan:
-			_, txs := noops.stack.VerifyTxs(batchReq.Txs, true)
+			batchReq.Function(1, batchReq.Txs)
+			txs, errTxs := noops.stack.VerifyTxs(batchReq.Txs)
+			batchReq.Function(3, txs)
+			batchReq.Function(6, errTxs)
 			if len(txs) > 0 {
 				if len(outputTxs) == 0 {
 					noops.blockTimer.Reset(noops.options.BlockTimeout)
@@ -117,9 +120,7 @@ func (noops *Noops) Start() {
 					outputTxs = make(types.Transactions, 0)
 					seqNos = make([]uint32, 0)
 				}
-				batchReq.Function(3, txs)
-			} else {
-				//batchReq.Function(2, txs)
+
 			}
 		case <-noops.blockTimer.C:
 			noops.processBlock(outputTxs, seqNos, fmt.Sprintf("timeout %s", noops.options.BlockTimeout))

@@ -58,7 +58,7 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 
 	lbft.vcStore = make(map[string]*viewChangeList)
 	lbft.coreStore = make(map[string]*lbftCore)
-	lbft.committedRequests = make(map[uint32]*Request)
+	lbft.committedRequests = make(map[uint32]*Committed)
 
 	lbft.blockTimer = time.NewTimer(lbft.options.BlockTimeout)
 	lbft.blockTimer.Stop()
@@ -85,6 +85,8 @@ type Lbft struct {
 	options *Options
 	stack   consensus.IStack
 
+	function func(int, types.Transactions)
+
 	recvConsensusMsgChan chan *Message
 	outputTxsChan        chan *consensus.OutputTxs
 	broadcastChan        chan *consensus.BroadcastConsensus
@@ -104,7 +106,7 @@ type Lbft struct {
 	vcStore           map[string]*viewChangeList
 	rwVcStore         sync.RWMutex
 	coreStore         map[string]*lbftCore
-	committedRequests map[uint32]*Request
+	committedRequests map[uint32]*Committed
 
 	fetched   []*Committed
 	outputTxs types.Transactions
@@ -162,7 +164,6 @@ func (lbft *Lbft) sendEmptyRequest() {
 			Time:   uint32(time.Now().UnixNano()),
 			Height: lbft.height,
 			Txs:    nil,
-			Func:   nil,
 		}
 		// lbft.recvConsensusMsgChan <- &Message{
 		// 	Type:    MESSAGEREQUEST,
@@ -203,25 +204,26 @@ func (lbft *Lbft) BatchTimeout() time.Duration {
 
 //ProcessBatches
 func (lbft *Lbft) ProcessBatch(txs types.Transactions, function func(int, types.Transactions)) {
-	lbft.startNewViewTimer()
-	if !lbft.isPrimary() {
-		function(0, txs)
+	lbft.function = function
+	if len(txs) == 0 {
 		return
 	}
-
-	if _, txs := lbft.stack.VerifyTxs(txs, true); len(txs) > 0 {
-		req := &Request{
-			ID:   time.Now().UnixNano(),
-			Time: uint32(time.Now().Unix()),
-			Txs:  txs,
-			Func: function,
-		}
-		log.Debugf("Replica %s send Request for consensus %s", lbft.options.ID, req.Name())
-		lbft.recvConsensusMsgChan <- &Message{
-			Type:    MESSAGEREQUEST,
-			Payload: utils.Serialize(req),
-		}
-		function(1, txs)
+	lbft.startNewViewTimer()
+	if !lbft.isPrimary() {
+		lbft.function(0, txs)
+		return
+	}
+	lbft.function(1, txs)
+	lbft.function(3, txs)
+	req := &Request{
+		ID:   time.Now().UnixNano(),
+		Time: uint32(time.Now().Unix()),
+		Txs:  txs,
+	}
+	log.Debugf("Replica %s send Request for consensus %s", lbft.options.ID, req.Name())
+	lbft.recvConsensusMsgChan <- &Message{
+		Type:    MESSAGEREQUEST,
+		Payload: utils.Serialize(req),
 	}
 }
 
@@ -374,7 +376,10 @@ func (lbft *Lbft) recvFetchCommitted(fct *FetchCommitted) *Message {
 	if request, ok := lbft.committedRequests[fct.SeqNo]; ok {
 		ctt := &Committed{
 			SeqNo:     fct.SeqNo,
-			Request:   request,
+			Height:    request.Height,
+			Digest:    request.Digest,
+			Txs:       request.Txs,
+			ErrTxs:    request.ErrTxs,
 			Chain:     lbft.options.Chain,
 			ReplicaID: lbft.options.ID,
 		}
@@ -563,11 +568,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	for _, core := range lbft.coreStore {
 		lbft.stopNewViewTimerForCore(core)
 		if core.prePrepare != nil {
-			req := core.prePrepare.Request
-			f := req.Func
-			if f != nil {
-				f(2, req.Txs)
-			}
+			lbft.function(5, core.txs)
 		}
 	}
 	lbft.coreStore = make(map[string]*lbftCore)
@@ -575,10 +576,7 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	for seqNo, req := range lbft.committedRequests {
 		if req.Height > lbft.execHeight || seqNo > lbft.execSeqNo {
 			delete(lbft.committedRequests, seqNo)
-			f := req.Func
-			if f != nil {
-				f(2, req.Txs)
-			}
+			lbft.function(5, req.Txs)
 		}
 	}
 }

@@ -41,7 +41,7 @@ import (
 type Validator interface {
 	Start()
 	ProcessTransaction(tx *types.Transaction) error
-	VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions)
+	VerifyTxs(txs types.Transactions) (types.Transactions, types.Transactions)
 	UpdateAccount(tx *types.Transaction) bool
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
@@ -170,64 +170,72 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
 }
 
 func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
+	if len(txs) == 0 {
+		return
+	}
 	switch flag {
-	// not use verify
-	case 0:
-		log.Debug("[validator] not use ...")
-
-	// use verify
-	case 1:
-		log.Debug("[validator] use ...")
+	case 0: // not used, do nothing
+		log.Debug("[validator] not primary replica ...")
+	case 1: //used, do nothing
+		log.Debug("[validator] primary replica ...")
+	case 2: // add
+		v.rwInTxs.Lock()
+		defer v.rwInTxs.Unlock()
+		for _, tx := range txs {
+			v.txpool.Add(tx)
+		}
+	case 3: // remove
+		v.rwInTxs.Lock()
+		defer v.rwInTxs.Unlock()
 		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
 			elems = append(elems, tx)
 		}
 		v.txpool.Removes(elems)
-	// consensus failed
-	case 2:
-		log.Debug("[validator] consensus failed & verified...")
+	case 4: //update account
+		v.rwAccount.Lock()
+		defer v.rwAccount.Unlock()
+		for _, tx := range txs {
+			if !v.updateAccount(tx) {
+				panic("balance is not enough")
+			}
+		}
+	case 5: // rollback account
+		v.rwAccount.Lock()
+		defer v.rwAccount.Unlock()
+		for _, tx := range txs {
+			v.rollBackAccount(tx)
+		}
+	case 6: // remove when verify error
 		v.rwInTxs.Lock()
 		defer v.rwInTxs.Unlock()
+		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
-			v.RollBackAccount(tx)
-			v.txpool.Add(tx)
-			v.notify(tx, "consensus failed & verified")
+			v.notify(tx, "failed to verify")
+			delete(v.inTxs, tx.Hash())
+			elems = append(elems, tx)
 		}
-	// consensus succeed
-	case 3:
-		log.Debug("[validator] consensus succeed...")
+		v.txpool.Removes(elems)
 	default:
 		log.Error("[validator] not support this flag ...")
 	}
 }
 
-func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
-	if !v.config.IsValid {
-		return true, txs
+// VerifyTxs consensus verify txs
+func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transactions, etxs types.Transactions) {
+	if len(txs) == 0 || !v.config.IsValid {
+		return txs, etxs
 	}
 	v.rwInTxs.Lock()
 	v.rwAccount.Lock()
 	defer v.rwInTxs.Unlock()
 	defer v.rwAccount.Unlock()
-	var ttxs types.Transactions
 	for _, tx := range txs {
 		if !v.isExist(tx) {
 			if err := v.checkTransaction(tx); err != nil {
-				log.Errorf("[validator] illegal ,tx_hash: %s", tx.Hash().String())
-				for _, rollbackTx := range ttxs {
-					v.rollBackAccount(rollbackTx)
-				}
-				v.notify(tx, err.Error())
-				return false, nil
-			}
-
-			if err := v.checkTransactionSecurity(tx); err != nil {
-				log.Errorf("check transaction security fail, tx_hash: %+v", tx.Hash().String())
-				for _, rollbackTx := range ttxs {
-					v.rollBackAccount(rollbackTx)
-				}
-				v.notify(tx, err.Error())
-				return false, nil
+				etxs = append(etxs, tx)
+				log.Errorf("[validator] tx_hash: %s illegal, err %s", tx.Hash().String(), err)
+				continue
 			}
 		}
 
@@ -238,36 +246,16 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 		if tx.GetType() != types.TypeIssue {
 			if asset == nil {
-				v.notify(tx, "asset id not exist")
-				if primary {
-					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
-					delete(v.inTxs, tx.Hash())
-					v.txpool.Remove(tx)
-					continue
-				} else {
-					log.Errorf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
-					for _, rollbackTx := range ttxs {
-						v.rollBackAccount(rollbackTx)
-					}
-					return false, nil
-				}
-			} else if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
+				etxs = append(etxs, tx)
+				log.Errorf("[validator] tx_hash: %s, asset %d not exist", tx.Hash().String(), tx.AssetID())
+				continue
+			}
+			if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
-					v.notify(tx, fmt.Sprintf("asset %s", err))
-					if primary {
-						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
-						delete(v.inTxs, tx.Hash())
-						v.txpool.Remove(tx)
-						continue
-					} else {
-						log.Errorf("[validator] issue update asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
-						for _, rollbackTx := range ttxs {
-							v.rollBackAccount(rollbackTx)
-						}
-
-						return false, nil
-					}
+					etxs = append(etxs, tx)
+					log.Errorf("[validator] tx_hash: %s, update asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
+					continue
 				}
 				v.assets[assetID] = newAsset
 			}
@@ -280,58 +268,28 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
-					v.notify(tx, fmt.Sprintf("asset %s", err))
-					if primary {
-						log.Warnf("[validator] issue asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
-						delete(v.inTxs, tx.Hash())
-						v.txpool.Remove(tx)
-						continue
-					} else {
-						log.Errorf("[validator] issue asset %d(%s) :err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
-						for _, rollbackTx := range ttxs {
-							v.rollBackAccount(rollbackTx)
-						}
-						return false, nil
-					}
+					etxs = append(etxs, tx)
+					log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
+					continue
 				}
 				v.assets[assetID] = newAsset
 			} else {
-				v.notify(tx, "asset id already exist")
-				if primary {
-					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
-					delete(v.inTxs, tx.Hash())
-					v.txpool.Remove(tx)
-					continue
-				} else {
-					log.Errorf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
-					for _, rollbackTx := range ttxs {
-						v.rollBackAccount(rollbackTx)
-					}
-					return false, nil
-				}
+				etxs = append(etxs, tx)
+				log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- already exist", tx.Hash().String(), assetID, string(tx.Payload))
+				continue
 			}
 		}
 
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
-			v.notify(tx, "balance is negative")
-			if primary {
-				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
-				delete(v.inTxs, tx.Hash())
-				v.txpool.Remove(tx)
-				continue
-			} else {
-				log.Errorf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
-				for _, rollbackTx := range ttxs {
-					v.rollBackAccount(rollbackTx)
-				}
-				return false, nil
-			}
+			etxs = append(etxs, tx)
+			log.Errorf("[validator] tx_hash: %s, asset %d balance is not enough", tx.Hash().String(), tx.AssetID())
+			continue
 		}
 		ttxs = append(ttxs, tx)
 	}
 
-	return true, ttxs
+	return ttxs, etxs
 }
 
 func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {

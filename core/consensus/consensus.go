@@ -69,6 +69,6 @@ type BlockchainInfo struct {
 
 // IStack Interface for other function for plugin consenser
 type IStack interface {
-	VerifyTxs(request types.Transactions, primary bool) (bool, types.Transactions)
+	VerifyTxs(request types.Transactions) (types.Transactions, types.Transactions)
 	GetBlockchainInfo() *BlockchainInfo
 }

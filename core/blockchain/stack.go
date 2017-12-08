@@ -23,9 +23,9 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-//VerifyTxsInConsensus verify
-func (bc *Blockchain) VerifyTxs(txs types.Transactions, primary bool) (bool, types.Transactions) {
-	return bc.validator.VerifyTxs(txs, primary)
+//VerifyTxs verify
+func (bc *Blockchain) VerifyTxs(txs types.Transactions) (types.Transactions, types.Transactions) {
+	return bc.validator.VerifyTxs(txs)
 }
 
 func (bc *Blockchain) GetBlockchainInfo() *consensus.BlockchainInfo {
