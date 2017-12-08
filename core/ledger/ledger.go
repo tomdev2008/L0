@@ -429,9 +429,11 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 			syncTxs = append(syncTxs, tx)
 		}
 
+		continue
 	ctu:
-		ledger.Validator.Notify(tx, "execute Tx error:"+err.Error())
+		ledger.Validator.Notify(tx, "execute Tx error")
 	}
+
 	for _, tx := range syncContractGenTxs {
 		if ledger.Validator != nil {
 			ledger.Validator.UpdateAccount(tx)
