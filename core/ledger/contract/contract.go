@@ -366,7 +366,7 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 			cv := &CacheKVs{}
 			cv.deserialize(value)
 			if cv.Optype == db.OperationDelete {
-				log.Debugln("Contract Del: ", string(key), string(cv.Value))
+				log.Debugln("Contract Del: ", string(key))
 				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.GetColumnFamily(), db.OperationDelete, key, cv.Value, sctx.GetColumnFamily()))
 			} else if cv.Optype == db.OperationPut {
 				log.Debugln("Contract Put: ", string(key), string(cv.Value))
