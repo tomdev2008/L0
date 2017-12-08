@@ -19,6 +19,8 @@
 package rpc
 
 import (
+	"fmt"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"

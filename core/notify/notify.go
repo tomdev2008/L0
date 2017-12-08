@@ -16,10 +16,11 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package blockchain
+package notify
 
 import (
 	"errors"
+	"math/big"
 	"sync"
 
 	"github.com/bocheninc/L0/core/types"
@@ -31,16 +32,24 @@ var (
 
 // Register receive transaction hash and callback function
 // When the transaction is submitted execute callback function
-func Register(txHash interface{}, callback func(interface{})) error {
+func Register(txHash interface{}, sender, recipient *big.Int, callback func(...interface{})) error {
 	if callback == nil || txHash == nil {
 		return errors.New("txHash or callback function cannot be nil")
 
 	}
-	callbacks.Store(txHash, callback)
+	if cb, ok := callbacks.Load(txHash); ok {
+		if balance, ok := cb.(*types.Balance); ok {
+			balance.Sender = sender
+			balance.Recipient = recipient
+			callbacks.Store(txHash, balance)
+		}
+	} else {
+		callbacks.Store(txHash, &types.Balance{Sender: sender, Recipient: recipient, Callback: callback})
+	}
 	return nil
 }
 
-func blockNotify(block *types.Block) {
+func BlockNotify(block *types.Block) {
 	if block == nil || len(block.Transactions) == 0 {
 		return
 	}
@@ -48,8 +57,8 @@ func blockNotify(block *types.Block) {
 	go func(txs []*types.Transaction) {
 		for _, tx := range block.Transactions {
 			if cb, ok := callbacks.Load(tx.Hash()); ok {
-				if call, b := cb.(func(interface{})); b {
-					call(nil)
+				if balance, b := cb.(*types.Balance); b {
+					balance.Callback(balance.Sender, balance.Recipient)
 				}
 				callbacks.Delete(tx)
 			}
@@ -57,10 +66,10 @@ func blockNotify(block *types.Block) {
 	}(block.Transactions)
 }
 
-func txNotify(tx *types.Transaction, i interface{}) {
+func TxNotify(tx *types.Transaction, i interface{}) {
 	if cb, ok := callbacks.Load(tx.Hash()); ok {
-		if call, b := cb.(func(interface{})); b {
-			call(i)
+		if balance, b := cb.(*types.Balance); b {
+			balance.Callback(i)
 		}
 		callbacks.Delete(tx)
 	}

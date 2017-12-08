@@ -20,6 +20,7 @@ package validator
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 	"sync"
@@ -34,6 +35,7 @@ import (
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -48,8 +50,6 @@ type Validator interface {
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
-	SetNotify(func(*types.Transaction, interface{}))
-	Notify(*types.Transaction, interface{})
 	SecurityPluginDir() string
 }
 
@@ -67,7 +67,6 @@ type Verification struct {
 	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
-	notify             func(*types.Transaction, interface{})
 	sync.RWMutex
 	sctx *contract.SmartConstract
 }
@@ -191,7 +190,7 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		for _, tx := range txs {
 			v.RollBackAccount(tx)
 			v.txpool.Add(tx)
-			v.notify(tx, "consensus failed & verified")
+			notify.TxNotify(tx, errors.New("consensus failed & verified"))
 		}
 	// consensus succeed
 	case 3:
@@ -217,7 +216,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
-				v.notify(tx, err.Error())
+				notify.TxNotify(tx, err)
 				return false, nil
 			}
 
@@ -226,7 +225,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				for _, rollbackTx := range ttxs {
 					v.rollBackAccount(rollbackTx)
 				}
-				v.notify(tx, err.Error())
+				notify.TxNotify(tx, err)
 				return false, nil
 			}
 		}
@@ -238,7 +237,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 		}
 		if tx.GetType() != types.TypeIssue {
 			if asset == nil {
-				v.notify(tx, "asset id not exist")
+				notify.TxNotify(tx, errors.New("asset id not exist"))
 				if primary {
 					log.Warnf("[validator] asset id %d not exist, tx_hash: %s", tx.AssetID(), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
@@ -254,7 +253,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 			} else if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
-					v.notify(tx, fmt.Sprintf("asset %s", err))
+					notify.TxNotify(tx, fmt.Errorf("asset %s", err))
 					if primary {
 						log.Warnf("[validator] issue update asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						delete(v.inTxs, tx.Hash())
@@ -280,7 +279,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				newAsset, err := asset.Update(string(tx.Payload))
 				if err != nil {
-					v.notify(tx, fmt.Sprintf("asset %s", err))
+					notify.TxNotify(tx, fmt.Errorf("asset %s", err))
 					if primary {
 						log.Warnf("[validator] issue asset %d(%s) : err %s, tx_hash: %s", assetID, string(tx.Payload), err, tx.Hash().String())
 						delete(v.inTxs, tx.Hash())
@@ -296,7 +295,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 				}
 				v.assets[assetID] = newAsset
 			} else {
-				v.notify(tx, "asset id already exist")
+				notify.TxNotify(tx, errors.New("asset id already exist"))
 				if primary {
 					log.Warnf("[validator] issue asset %d(%s) : already exist, tx_hash: %s", assetID, string(tx.Payload), tx.Hash().String())
 					delete(v.inTxs, tx.Hash())
@@ -314,7 +313,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions, primary bool) (bool, ty
 
 		// remove balance is negative tx
 		if !v.updateAccount(tx) {
-			v.notify(tx, "balance is negative")
+			notify.TxNotify(tx, errors.New("balance is negative"))
 			if primary {
 				log.Warnf("[validator] balance is negative ,tx_hash: %s, asset: %d", tx.Hash().String(), tx.AssetID())
 				delete(v.inTxs, tx.Hash())
@@ -449,12 +448,4 @@ func (v *Verification) GetAsset(id uint32) *state.Asset {
 		asset, _ = v.ledger.GetAssetFromDB(id)
 	}
 	return asset
-}
-
-func (v *Verification) SetNotify(callback func(*types.Transaction, interface{})) {
-	v.notify = callback
-}
-
-func (v *Verification) Notify(tx *types.Transaction, i interface{}) {
-	v.notify(tx, i)
 }
