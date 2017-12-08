@@ -205,6 +205,22 @@ Out:
 								utils.Deserialize(batch.Value, &tx)
 								bal, _ := json.Marshal(tx)
 								json.Unmarshal(bal, &value)
+								switch tp := tx.GetType(); tp {
+								case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
+								case types.TypeSecurity:
+								default:
+									balance, err := notify.GetBalanceByTxInCallbacks(&tx)
+									if err != nil {
+										log.Errorf("GetBalanceByTxInCallbacks, err: %+v", err)
+										batchesBlockChan <- batches
+										break Out
+									}
+
+									notify.RemoveTxInCallbacks(&tx)
+									value.(map[string]interface{})["sender_balance"] = balance.Sender.Int64()
+									value.(map[string]interface{})["receiver_balance"] = balance.Recipient.Int64()
+								}
+
 							case ledger.block.GetIndexCF():
 								txs, ok := ledger.block.GetTransactionInBlock(batch.Value, batch.Typ)
 								if ok != true {
