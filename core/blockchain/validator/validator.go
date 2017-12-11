@@ -210,7 +210,7 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		defer v.rwInTxs.Unlock()
 		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
-			notify.TxNotify(tx, "failed to verify")
+			notify.TxNotify(tx, fmt.Errorf("failed to verify"))
 			delete(v.inTxs, tx.Hash())
 			elems = append(elems, tx)
 		}
