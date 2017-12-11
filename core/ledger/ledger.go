@@ -549,8 +549,8 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 				goto ctu
 			}
-
-			ttxs, err := ledger.executeSmartContractTx(tx)
+			var ttxs types.Transactions
+			ttxs, err = ledger.executeSmartContractTx(tx)
 			if err != nil {
 				errTxs = append(errTxs, tx)
 				//rollback Validator balance cache
