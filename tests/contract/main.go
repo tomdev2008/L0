@@ -114,13 +114,15 @@ var (
 		false,
 		nil,
 		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+	//[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	coinJS = newContractConf(
 		"./l0coin.js",
 		langJS,
 		false,
 		[]string{"hello", "world"},
-		[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+		//[]string{"transfer", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
+		[]string{"testwrite", "8ce1bb0858e71b50d603ebe4bec95b11d8833e68", "100"})
 
 	globalSetAccountLua = newContractConf(
 		"./global.lua",
@@ -140,7 +142,11 @@ func main() {
 	go sendTransaction()
 	time.Sleep(1 * time.Microsecond)
 
-	testSecurityContract()
+	issueTX()
+	//testSecurityContract()
+	deploySmartContractTX(coinJS)
+	// time.Sleep(10 * time.Second)
+	// execSmartContractTX(coinJS)
 
 	ch := make(chan struct{})
 	<-ch
@@ -195,14 +201,14 @@ func issueTX() {
 		uint32(nonce),
 		issueSender,
 		sender,
-		0,
-		big.NewInt(10e11),
+		1,
+		big.NewInt(1000),
 		big.NewInt(1),
 		uint32(time.Now().Unix()),
 	)
 
 	issueCoin := make(map[string]interface{})
-	issueCoin["id"] = 0
+	issueCoin["id"] = 1
 	tx.Payload, _ = json.Marshal(issueCoin)
 	tx.Meta, _ = json.Marshal(map[string]map[string]string{
 		"account": accountInfo,
@@ -237,8 +243,8 @@ func deploySmartContractTX(conf *contractConf) []byte {
 		uint32(nonce),
 		sender,
 		accounts.NewAddress(contractSpec.ContractAddr),
-		0,
-		big.NewInt(1000),
+		1,
+		big.NewInt(100),
 		big.NewInt(0),
 		uint32(time.Now().Unix()),
 	)

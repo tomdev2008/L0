@@ -34,6 +34,7 @@ var (
 	PublicAddress []string
 	ConnNums      int
 	LocalIp       string
-	Validator     bool
+	Nvp           bool
+	Mongodb       bool
 	MaxOccurs     int
 )

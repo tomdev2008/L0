@@ -47,6 +47,7 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 	exporterFuncs.Set("DelState", delStateFunc)
 	exporterFuncs.Set("GetByPrefix", getByPrefixFunc)
 	exporterFuncs.Set("GetByRange", getByRangeFunc)
+	exporterFuncs.Set("ComplexQuery", complexQueryFunc)
 
 	return exporterFuncs, nil
 }
@@ -338,4 +339,27 @@ func getByRangeFunc(fc otto.FunctionCall) otto.Value {
 	}
 	return val
 
+}
+
+func complexQueryFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 1 {
+		log.Error("param illegality when invoke complexQuery")
+		return fc.Otto.MakeCustomError("complexQueryFunc", "param illegality when invoke complexQuery")
+	}
+	key, err := fc.Argument(0).ToString()
+	data, err := vmproc.CCallComplexQuery(key)
+	if err != nil {
+		log.Errorf("complexQuery error key:%s  err:%s", key, err)
+		return fc.Otto.MakeCustomError("complexQueryFunc", "complexQuery error:"+err.Error())
+	}
+	if data == nil {
+		return otto.NullValue()
+	}
+
+	val, err := otto.ToValue(string(data))
+	if err != nil {
+		log.Error("byteToJSvalue error", err)
+		return fc.Otto.MakeCustomError("complexQueryFunc", "byteToJSvalue error:"+err.Error())
+	}
+	return val
 }

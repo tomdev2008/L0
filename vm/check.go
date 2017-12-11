@@ -92,3 +92,11 @@ func CheckContractCode(code string) error {
 
 	return nil
 }
+
+func CheckVmMem(mem int) error {
+	if mem < 200 {
+		VMConf.VMMaxMem = 200
+		return errors.New("if maxMem < 200 ,maxMem use the default value 200MB")
+	}
+	return nil
+}

@@ -45,7 +45,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		VMRegistrySize:             256,
 		VMCallStackSize:            64,
-		VMMaxMem:                   800,
+		VMMaxMem:                   200,
 		ExecLimitStackDepth:        100,
 		ExecLimitMaxOpcodeCount:    10000,
 		ExecLimitMaxRunTime:        1000,

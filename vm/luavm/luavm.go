@@ -19,8 +19,10 @@
 package luavm
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
@@ -124,6 +126,11 @@ func execContract(cd *vm.ContractData, funcName string) (interface{}, error) {
 
 	L := newState()
 	defer L.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vm.VMConf.ExecLimitMaxRunTime)*time.Millisecond)
+	defer cancel()
+
+	L.SetContext(ctx)
 
 	loader := func(L *lua.LState) int {
 		mod := L.SetFuncs(L.NewTable(), exporter()) // register functions to the table

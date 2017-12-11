@@ -47,7 +47,7 @@ var (
 
 func TestExecuteIssueTx(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -90,7 +90,7 @@ func TestExecuteIssueTx(t *testing.T) {
 func TestExecuteAtmoicTx(t *testing.T) {
 
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -153,7 +153,7 @@ func TestExecuteAtmoicTx(t *testing.T) {
 
 func TestExecuteAcossTx1(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -211,7 +211,7 @@ func TestExecuteAcossTx1(t *testing.T) {
 
 func TestExecuteAcossTx2(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -269,7 +269,7 @@ func TestExecuteAcossTx2(t *testing.T) {
 
 func TestExecuteMergedTx(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -334,7 +334,7 @@ func TestExecuteMergedTx(t *testing.T) {
 
 func TestExecuteDistributTx(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(0)}
@@ -395,7 +395,7 @@ func TestExecuteDistributTx(t *testing.T) {
 
 func TestExecuteBackfrontTx(t *testing.T) {
 	testDb := db.NewDB(db.DefaultConfig())
-	li := NewLedger(testDb)
+	li := NewLedger(testDb, &Config{"file"})
 	defer os.RemoveAll("/tmp/rocksdb-test")
 
 	params.ChainID = []byte{byte(1)}

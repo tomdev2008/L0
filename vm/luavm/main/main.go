@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strconv"
 	"syscall"
-	"time"
 
 	"os"
 
@@ -38,9 +37,13 @@ func main() {
 
 	vmConfig()
 
+	if err := vm.CheckVmMem(vm.VMConf.VMMaxMem); err != nil {
+		log.Warning(err)
+	}
+
 	var rlimit syscall.Rlimit
 	rlimit.Max = uint64(vm.VMConf.VMMaxMem) * 1024 * 1024
-	rlimit.Cur = uint64(rlimit.Max / 2)
+	rlimit.Cur = uint64(rlimit.Max / 5 * 4)
 	err := syscall.Setrlimit(syscall.RLIMIT_AS, &rlimit)
 	if err != nil {
 		fmt.Println("set rlimit error", err)
@@ -51,10 +54,7 @@ func main() {
 	if err != nil {
 		log.Error("luavm start error", err)
 	}
-
-	for {
-		time.Sleep(time.Second * 60)
-	}
+	select {}
 }
 
 func vmConfig() {
@@ -62,7 +62,8 @@ func vmConfig() {
 	vm.VMConf.VMMaxMem, _ = strconv.Atoi(os.Args[3])
 	vm.VMConf.VMCallStackSize, _ = strconv.Atoi(os.Args[4])
 	vm.VMConf.VMRegistrySize, _ = strconv.Atoi(os.Args[5])
-	vm.VMConf.ExecLimitMaxOpcodeCount, _ = strconv.Atoi(os.Args[6])
-	vm.VMConf.ExecLimitStackDepth, _ = strconv.Atoi(os.Args[7])
-	vm.VMConf.ExecLimitMaxScriptSize, _ = strconv.Atoi(os.Args[8])
+	vm.VMConf.ExecLimitMaxRunTime, _ = strconv.Atoi(os.Args[6])
+	vm.VMConf.ExecLimitMaxOpcodeCount, _ = strconv.Atoi(os.Args[7])
+	vm.VMConf.ExecLimitStackDepth, _ = strconv.Atoi(os.Args[8])
+	vm.VMConf.ExecLimitMaxScriptSize, _ = strconv.Atoi(os.Args[9])
 }

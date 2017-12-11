@@ -83,3 +83,18 @@ func ConcrateStateJson(v interface{}) (*bytes.Buffer, error) {
 
 	return buf, nil
 }
+
+// func AppendContractPrefix(v []byte) (*bytes.Buffer, error) {
+// 	data, err := json.Marshal(v)
+// 	if err != nil {
+// 		return &bytes.Buffer{}, err
+// 	}
+
+// 	buf := new(bytes.Buffer)
+// 	buf.WriteByte(stringType)
+// 	lenByte := utils.VarInt(uint64(len(data)))
+// 	buf.Write(lenByte)
+// 	buf.Write(data)
+
+// 	return buf, nil
+// }

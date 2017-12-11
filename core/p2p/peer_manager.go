@@ -57,10 +57,17 @@ type peerManager struct {
 // getPeerManager returns a peerManager
 func getPeerManager() *peerManager {
 	if pm == nil {
+		var localPeerType uint32
+		if params.Nvp {
+			localPeerType = TypeNvp
+		} else {
+			localPeerType = TypeVp
+		}
+
 		pm = &peerManager{
 			localPeer: NewPeer(
 				[]byte(config.NodeID),
-				nil, config.Address, nil),
+				nil, config.Address, localPeerType, nil),
 			peers:        newPeerMap(),
 			handshakings: newPeerMap(),
 			dialings:     make(map[string]bool),
@@ -114,7 +121,7 @@ func (pm *peerManager) add(peer *Peer) {
 	// 	peer.Conn.Close()
 	// }
 	if pm.peers.contains(peer.ID) {
-		log.Debugf("Peer [%s] already connected", peer.ID)
+		log.Debugf("Peer [id: %s, type: %d] already connected", peer.ID, peer.Type)
 		peer.Conn.Close()
 		return
 	}
@@ -361,15 +368,16 @@ func (pm *peerManager) savePeers() {
 func (pm *peerManager) broadcast(msg *Msg) {
 	if msg != nil {
 		for _, peer := range pm.peers.getPeers() {
+			if peer.Type == TypeNvp {
+				if msg.Cmd == 23 || msg.Cmd == 20 {
+					continue
+				}
+			}
 			log.Debugf("Peer Manager broadcast message %d to peer %s ...", msg.Cmd, peer.Address)
-			// if msg.Cmd <= peersMsg || msg.Cmd == 23 || !peer.TestFilter(msg.CheckSum[:]) {
 			if n, err := msg.write(peer.Conn); err != nil || n == 0 {
 				log.Errorf("broadcast message write error %d - %v", n, err)
 			}
 			log.Debugf("Peer Manager broadcast message %d to peer %s", msg.Cmd, peer.Address)
-			// } else {
-			// 	log.Errorf("Peer Manager broadcast error %d %s", msg.Cmd, peer.Address)
-			// }
 		}
 	} else {
 		log.Errorf("broadcast message error, msg is nil %v", msg)

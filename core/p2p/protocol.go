@@ -25,6 +25,7 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/core/params"
 )
 
 var (
@@ -66,16 +67,25 @@ type ProtoHandshake struct {
 	Version    string
 	ID         []byte
 	SrvAddress string
+	Type       uint32
 }
 
 // GetProtoHandshake returns protocol handshake
 func GetProtoHandshake() *ProtoHandshake {
 	if protoHandshake == nil {
+		var localPeerType uint32
+		if params.Nvp {
+			localPeerType = TypeNvp
+		} else {
+			localPeerType = TypeVp
+		}
+
 		protoHandshake = &ProtoHandshake{
 			Name:       baseProtocolName,
 			Version:    baseProtocolVersion,
 			ID:         getPeerID(),
 			SrvAddress: getPeerAddress(config.Address),
+			Type:       localPeerType,
 		}
 	}
 	return protoHandshake

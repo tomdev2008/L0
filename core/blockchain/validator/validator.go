@@ -25,6 +25,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bocheninc/L0/core/notify"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
@@ -48,8 +50,6 @@ type Validator interface {
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
 	GetAsset(id uint32) *state.Asset
 	GetBalance(addr accounts.Address) *state.Balance
-	SetNotify(func(*types.Transaction, interface{}))
-	Notify(*types.Transaction, interface{})
 	SecurityPluginDir() string
 }
 
@@ -67,7 +67,6 @@ type Verification struct {
 	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
-	notify             func(*types.Transaction, interface{})
 	sync.RWMutex
 	sctx *contract.SmartConstract
 }
@@ -211,7 +210,7 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		defer v.rwInTxs.Unlock()
 		var elems []sortedlinkedlist.IElement
 		for _, tx := range txs {
-			v.notify(tx, "failed to verify")
+			notify.TxNotify(tx, "failed to verify")
 			delete(v.inTxs, tx.Hash())
 			elems = append(elems, tx)
 		}
@@ -407,12 +406,4 @@ func (v *Verification) GetAsset(id uint32) *state.Asset {
 		asset, _ = v.ledger.GetAssetFromDB(id)
 	}
 	return asset
-}
-
-func (v *Verification) SetNotify(callback func(*types.Transaction, interface{})) {
-	v.notify = callback
-}
-
-func (v *Verification) Notify(tx *types.Transaction, i interface{}) {
-	v.notify(tx, i)
 }

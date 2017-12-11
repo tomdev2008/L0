@@ -21,13 +21,21 @@ package ledger
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/big"
 	"path/filepath"
 
+	"fmt"
+
+	"errors"
+	"strconv"
+	"strings"
+
+	"reflect"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
@@ -37,8 +45,10 @@ import (
 	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/merge"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"gopkg.in/mgo.v2/bson"
 )
 
 var (
@@ -50,7 +60,6 @@ type ValidatorHandler interface {
 	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	SecurityPluginDir() string
-	Notify(*types.Transaction, interface{})
 }
 
 // Ledger represents the ledger in blockchain
@@ -61,29 +70,206 @@ type Ledger struct {
 	storage   *merge.Storage
 	contract  *contract.SmartConstract
 	Validator ValidatorHandler
+	conf      *Config
+	mdb       *mongodb.Mdb
+	mdbChan   chan []*db.WriteBatch
 }
 
 // NewLedger returns the ledger instance
-func NewLedger(db *db.BlockchainDB) *Ledger {
+func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 	if ledgerInstance == nil {
 		ledgerInstance = &Ledger{
-			dbHandler: db,
-			block:     block_storage.NewBlockchain(db),
-			state:     state.NewState(db),
-			storage:   merge.NewStorage(db),
+			dbHandler: kvdb,
+			block:     block_storage.NewBlockchain(kvdb),
+			state:     state.NewState(kvdb),
+			storage:   merge.NewStorage(kvdb),
 		}
+		ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 		_, err := ledgerInstance.Height()
 		if err != nil {
+			if params.Nvp && params.Mongodb {
+				ledgerInstance.mdb = mongodb.MongDB()
+				ledgerInstance.block.RegisterColumn(ledgerInstance.mdb)
+				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
+				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
+				ledgerInstance.conf = conf
+				go ledgerInstance.PutIntoMongoDB()
+			}
 			ledgerInstance.init()
 		}
 	}
 
-	ledgerInstance.contract = contract.NewSmartConstract(db, ledgerInstance)
 	return ledgerInstance
 }
 
 func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
+}
+
+func (ledger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.WriteBatch {
+	reBatches := make(map[string][]*db.WriteBatch)
+	for _, batch := range batches {
+		columnName := batch.CfName
+		batchKey := batch.Key
+		if 0 == strings.Compare(batch.CfName, ledger.contract.GetColumnFamily()) {
+			keys := strings.SplitN(string(batch.Key), "|", 2)
+			if len(keys) != 2 {
+				continue
+			}
+			columnName = "contract|" + keys[0]
+			batchKey = []byte(keys[1])
+		}
+
+		if _, ok := reBatches[columnName]; !ok {
+			reBatches[columnName] = make([]*db.WriteBatch, 0)
+		}
+
+		reBatches[columnName] = append(reBatches[columnName], db.NewWriteBatch(columnName, batch.Operation, batchKey, batch.Value, batch.Typ))
+	}
+
+	return reBatches
+}
+
+func (ledger *Ledger) PutIntoMongoDB() {
+	contractCol := false
+	var err error
+	batchesBlockChan := make(chan []*db.WriteBatch, 1)
+
+Out:
+	for {
+		select {
+		case batches := <-ledger.mdbChan:
+			log.Infof("all data len: %+v", len(batches))
+
+			reBatches := ledger.reOrgBatches(batches)
+			for colName, colBatches := range reBatches {
+				contractCol = false
+				if strings.Contains(colName, "contract") {
+					contractCol = true
+					cols := strings.SplitN(colName, "|", 2)
+					if len(cols) == 2 {
+						colName = cols[1]
+					}
+				}
+				bulk := ledger.mdb.Coll(colName).Bulk()
+
+				log.Infof("colName: %+v, start -----", colName)
+				writeBatchCnt := 0
+				for _, batch := range colBatches {
+					var value interface{}
+					if batch.Operation == db.OperationPut {
+						if contractCol {
+							contractData, err := contract.DoContractStateData(batch.Value)
+							if err != nil || contractData == nil && err == nil {
+								log.Warnf("state data parse error, key: %+v, value: %+v", string(batch.Key), batch.Value)
+							}
+
+							if ok := IsJson(contractData); ok {
+								err := json.Unmarshal(contractData, &value)
+								if err != nil {
+									log.Errorf("state data not unmarshal json, key: %+v, value: %+v", string(batch.Key), string(batch.Value))
+								}
+								log.Debugf("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
+
+								switch value.(type) {
+								case map[string]interface{}:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
+								default:
+									bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
+								}
+							} else {
+								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
+								break Out
+							}
+						} else {
+							switch colName {
+							case ledger.state.GetAssetCF():
+								var asset state.Asset
+								utils.Deserialize(batch.Value, &asset)
+								bal, _ := json.Marshal(asset)
+								json.Unmarshal(bal, &value)
+							case ledger.state.GetBalanceCF():
+								var balance state.Balance
+								utils.Deserialize(batch.Value, &balance)
+								bal, _ := json.Marshal(balance)
+								json.Unmarshal(bal, &value)
+								log.Infof("balance: %+v", balance)
+							case ledger.contract.GetColumnFamily():
+							case ledger.block.GetBlockCF():
+								var blockHeader types.BlockHeader
+								utils.Deserialize(batch.Value, &blockHeader)
+								bal, _ := json.Marshal(blockHeader)
+								json.Unmarshal(bal, &value)
+							case ledger.block.GetTransactionCF():
+								var tx types.Transaction
+								utils.Deserialize(batch.Value, &tx)
+								bal, _ := json.Marshal(tx)
+								json.Unmarshal(bal, &value)
+								switch tp := tx.GetType(); tp {
+								case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
+								case types.TypeSecurity:
+								default:
+									balance, err := notify.GetBalanceByTxInCallbacks(&tx)
+									if err != nil {
+										log.Errorf("GetBalanceByTxInCallbacks, err: %+v", err)
+										batchesBlockChan <- batches
+										break Out
+									}
+
+									notify.RemoveTxInCallbacks(&tx)
+									value.(map[string]interface{})["sender_balance"] = balance.Sender.Int64()
+									value.(map[string]interface{})["receiver_balance"] = balance.Recipient.Int64()
+								}
+
+							case ledger.block.GetIndexCF():
+								txs, ok := ledger.block.GetTransactionInBlock(batch.Value, batch.Typ)
+								if ok != true {
+									continue
+								}
+								bal, _ := json.Marshal(txs)
+								json.Unmarshal(bal, &value)
+							default:
+								continue
+							}
+							bulk.Upsert(bson.M{"_id": utils.BytesToHex(batch.Key)}, value)
+						}
+					} else if batch.Operation == db.OperationDelete {
+						bulk.Remove(bson.M{"_id": string(batch.Key)})
+					}
+
+					writeBatchCnt++
+					if writeBatchCnt > 800 {
+						_, err = bulk.Run()
+						if err != nil {
+							log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
+							batchesBlockChan <- batches
+							break Out
+						}
+						bulk = ledger.mdb.Coll(colName).Bulk()
+						writeBatchCnt = 0
+					}
+				}
+
+				_, err = bulk.Run()
+				if err != nil {
+					log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
+					batchesBlockChan <- batches
+					break Out
+				}
+			}
+		}
+	}
+
+	//in case not to block the main process
+	for {
+		select {
+		case batches := <-ledger.mdbChan:
+			_ = batches
+			log.Warn("recv new batches, but no handle")
+		case batches := <-batchesBlockChan:
+			go ledger.writeBlock(batches)
+		}
+	}
 }
 
 // VerifyChain verifys the blockchain data
@@ -130,7 +316,9 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	ledger.contract.StartConstract(bh)
 
 	txWriteBatchs, block.Transactions, errTxs = ledger.executeTransactions(block.Transactions, flag)
-	_ = errTxs
+	if len(errTxs) != 0 {
+		ledger.Validator.RemoveTxsInVerification(errTxs)
+	}
 
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
 	writeBatchs := ledger.block.AppendBlock(block)
@@ -138,6 +326,9 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
 	if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
 		return err
+	}
+	if params.Nvp && params.Mongodb {
+		ledger.mdbChan <- writeBatchs
 	}
 
 	ledger.Validator.RemoveTxsInVerification(block.Transactions)
@@ -185,6 +376,11 @@ func (ledger *Ledger) GetTransactionHashList(number uint32) ([]crypto.Hash, erro
 // Height returns height of ledger
 func (ledger *Ledger) Height() (uint32, error) {
 	return ledger.block.GetBlockchainHeight()
+}
+
+//ComplexQuery com
+func (ledger *Ledger) ComplexQuery(key string) ([]byte, error) {
+	return ledger.contract.ComplexQuery(key)
 }
 
 //GetLastBlockHash returns last block hash
@@ -280,6 +476,7 @@ func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
 
 // init generates the genesis block
 func (ledger *Ledger) init() error {
+
 	// genesis block
 	blockHeader := new(types.BlockHeader)
 	blockHeader.TimeStamp = uint32(0)
@@ -304,16 +501,31 @@ func (ledger *Ledger) init() error {
 		db.NewWriteBatch(contract.ColumnFamily,
 			db.OperationPut,
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
-			buf.Bytes()))
+			buf.Bytes(), contract.ColumnFamily))
 
 	// global contract
+	buf, err = contract.ConcrateStateJson(&contract.DefaultGlobalContract)
+	if err != nil {
+		return err
+	}
+
 	writeBatchs = append(writeBatchs,
 		db.NewWriteBatch(contract.ColumnFamily,
 			db.OperationPut,
 			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.GlobalContractKey)),
-			utils.Serialize(&contract.DefaultGlobalContract)))
+			buf.Bytes(), contract.ColumnFamily))
 
-	return ledger.dbHandler.AtomicWrite(writeBatchs)
+	err = ledger.dbHandler.AtomicWrite(writeBatchs)
+	if err != nil {
+		return err
+	}
+	if params.Nvp && params.Mongodb {
+		ledger.mdb.RegisterCollection(params.GlobalStateKey)
+		ledger.mdbChan <- writeBatchs
+	}
+
+	return err
+
 }
 
 func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, types.Transactions) {
@@ -328,7 +540,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 	for _, tx := range txs {
 		switch tp := tx.GetType(); tp {
 		case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
-			if err := ledger.executeTransaction(tx, false); err != nil {
+			if err = ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
 				//rollback Validator balance cache
 				if ledger.Validator != nil {
@@ -344,32 +556,32 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				//rollback Validator balance cache
 				if ledger.Validator != nil {
 					ledger.Validator.RollBackAccount(tx)
-				}
-				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				goto ctu
-			} else {
-				var tttxs types.Transactions
-				for _, tt := range ttxs {
-					if err = ledger.executeTransaction(tt, false); err != nil {
-						break
-					}
-					tttxs = append(tttxs, tt)
-				}
-				if len(tttxs) != len(ttxs) {
-					for _, tt := range tttxs {
-						ledger.executeTransaction(tt, true)
-					}
-					errTxs = append(errTxs, tx)
-					//rollback Validator balance cache
-					if ledger.Validator != nil {
-						ledger.Validator.RollBackAccount(tx)
-					}
-					log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
+					log.Errorf("execute contract Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 					goto ctu
+				} else {
+					var tttxs types.Transactions
+					for _, tt := range ttxs {
+						if err = ledger.executeTransaction(tt, false); err != nil {
+							break
+						}
+						tttxs = append(tttxs, tt)
+					}
+					if len(tttxs) != len(ttxs) {
+						for _, tt := range tttxs {
+							ledger.executeTransaction(tt, true)
+						}
+						errTxs = append(errTxs, tx)
+						//rollback Validator balance cache
+						if ledger.Validator != nil {
+							ledger.Validator.RollBackAccount(tx)
+						}
+						log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
+						goto ctu
+					}
+					syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 				}
-				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
+				syncTxs = append(syncTxs, tx)
 			}
-			syncTxs = append(syncTxs, tx)
 		case types.TypeSecurity:
 			adminData, err := ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {
@@ -417,7 +629,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				goto ctu
 			}
 		default:
-			if err := ledger.executeTransaction(tx, false); err != nil {
+			if err = ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
 				//rollback Validator balance cache
 				if ledger.Validator != nil {
@@ -426,12 +638,13 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 				goto ctu
 			}
+
+			ledger.registerBalance(tx)
 			syncTxs = append(syncTxs, tx)
 		}
-
 		continue
 	ctu:
-		ledger.Validator.Notify(tx, "execute Tx error")
+		notify.TxNotify(tx, err)
 	}
 
 	for _, tx := range syncContractGenTxs {
@@ -447,6 +660,18 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 		syncTxs = append(syncTxs, syncContractGenTxs...)
 	}
 	return writeBatchs, syncTxs, errTxs
+}
+
+func (ledger *Ledger) registerBalance(tx *types.Transaction) {
+
+	senderBalance, _ := ledger.state.GetTmpBalance(tx.Sender())
+	recipientBalance, _ := ledger.state.GetTmpBalance(tx.Recipient())
+
+	sb := big.NewInt(0)
+	rb := big.NewInt(0)
+	sb.Set(senderBalance.Get(tx.AssetID()))
+	rb.Set(recipientBalance.Get(tx.AssetID()))
+	notify.Register(tx.Hash(), tx.AssetID(), sb, rb, func(...interface{}) {})
 }
 
 func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {
@@ -539,6 +764,33 @@ func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*state.Balance, erro
 	return balance, err
 }
 
+func (ledger *Ledger) writeBlock(data interface{}) error {
+	var bvalue []byte
+	switch data.(type) {
+	case []*db.WriteBatch:
+		orgData := data.([]*db.WriteBatch)
+		bvalue = utils.Serialize(orgData)
+	}
+
+	height, err := ledger.Height()
+	if err != nil {
+		log.Errorf("can't get blockchain height")
+	}
+
+	path := ledger.conf.ExceptBlockDir + string(filepath.Separator)
+	fileName := path + strconv.Itoa(int(height))
+	if utils.FileExist(fileName) {
+		log.Infof("BlockChan have error, please check ...")
+		return errors.New("except block have existed")
+	}
+
+	err = ioutil.WriteFile(fileName, bvalue, 0666)
+	if err != nil {
+		log.Errorf("write file: %s fail err: %+v", fileName, err)
+	}
+	return err
+}
+
 func merkleRootHash(txs []*types.Transaction) crypto.Hash {
 	if len(txs) > 0 {
 		hashs := make([]crypto.Hash, 0)
@@ -548,4 +800,9 @@ func merkleRootHash(txs []*types.Transaction) crypto.Hash {
 		return crypto.ComputeMerkleHash(hashs)[0]
 	}
 	return crypto.Hash{}
+}
+
+func IsJson(src []byte) bool {
+	var value interface{}
+	return json.Unmarshal(src, &value) == nil
 }

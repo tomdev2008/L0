@@ -33,16 +33,17 @@ import (
 )
 
 const (
-	defaultConfigFilename   = "lcnd.yaml"
-	defaultVMLogFilename    = "vm.log"
-	defaultLogFilename      = "lcnd.log"
-	defaultChainDataDirname = "chaindata"
-	defaultLogDirname       = "logs"
-	defaultKeyStoreDirname  = "keystore"
-	defaultNodeDirname      = "node"
-	defaultNodeKeyFilename  = "nodekey"
-	defaultPluginDirname    = "plugin"
-	defaultMaxPeers         = 8
+	defaultConfigFilename       = "lcnd.yaml"
+	defaultVMLogFilename        = "vm.log"
+	defaultLogFilename          = "lcnd.log"
+	defaultChainDataDirname     = "chaindata"
+	defaultLogDirname           = "logs"
+	defaultKeyStoreDirname      = "keystore"
+	defaultNodeDirname          = "node"
+	defaultNodeKeyFilename      = "nodekey"
+	defaultPluginDirname        = "plugin"
+	defaultExceptinBlockDirname = "except_write_block"
+	defaultMaxPeers             = 8
 )
 
 var (
@@ -61,11 +62,12 @@ var (
 // Config Represents the global config of lcnd
 type Config struct {
 	// dir
-	DataDir     string
-	LogDir      string
-	NodeDir     string
-	KeyStoreDir string
-	PluginDir   string
+	DataDir                string
+	LogDir                 string
+	NodeDir                string
+	KeyStoreDir            string
+	PluginDir              string
+	WriteExceptionBlockDir string
 
 	// file
 	PeersFile  string
@@ -138,6 +140,7 @@ func loadConfig(cfgFile string) (conf *Config, err error) {
 	cfg.KeyStoreDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultKeyStoreDirname))
 	cfg.NodeDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultNodeDirname))
 	cfg.PluginDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultPluginDirname))
+	cfg.WriteExceptionBlockDir, err = utils.OpenDir(filepath.Join(appDataDir, defaultExceptinBlockDirname))
 
 	/*set chainid from config file just for test*/
 	cfg.readParamConfig()
@@ -178,10 +181,16 @@ func (cfg *Config) readParamConfig() {
 	pk := getStringSlice("issueaddr.addr", []string{})
 	params.ChainID = utils.HexToBytes(str)
 	params.PublicAddress = pk
-	viper.SetDefault("blockchain.validator", true)
-	params.Validator = viper.GetBool("blockchain.validator")
-	viper.SetDefault("blockchain.maxOccurs", 1)
-	params.MaxOccurs = viper.GetInt("blockchain.maxOccurs")
+
+	params.MaxOccurs = getInt("blockchain.maxOccurs", 1)
+
+	nodeType := getString("blockchain.nodeType.type", "vp")
+	if nodeType == "vp" {
+		params.Nvp = false
+	} else {
+		params.Nvp = true
+		params.Mongodb = getbool("blockchain.nodeType.mongodb", false)
+	}
 }
 
 func (cfg *Config) readLogConfig() {

@@ -105,7 +105,7 @@ func TestWriteBatch(t *testing.T) {
 	var writeBatchs []*WriteBatch
 
 	for i := 0; i < 100; i++ {
-		writeBatchs = append(writeBatchs, NewWriteBatch("balance", OperationPut, []byte("key"+strconv.Itoa(i)), []byte("value"+strconv.Itoa(i))))
+		writeBatchs = append(writeBatchs, NewWriteBatch("balance", OperationPut, []byte("key"+strconv.Itoa(i)), []byte("value"+strconv.Itoa(i)), "balance"))
 	}
 	fmt.Println("start writeBatch...")
 

@@ -26,8 +26,8 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/L0/core/blockchain"
 	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -113,9 +113,12 @@ func (t *Transaction) Create(args *TransactionCreateArgs, reply *string) error {
 }
 
 type BroadcastReply struct {
-	Result          *string     `json:"result"`
-	ContractAddr    *string     `json:"contractAddr"`
-	TransactionHash crypto.Hash `json:"transactionHash"`
+	Result           *string     `json:"result"`
+	ContractAddr     *string     `json:"contractAddr"`
+	TransactionHash  crypto.Hash `json:"transactionHash"`
+	AssetID          int         `json:"assetID"`
+	SenderBalance    *big.Int    `json:"senderBalance"`
+	RecipientBalance *big.Int    `json:"recipientBalance"`
 }
 
 func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
@@ -148,20 +151,33 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	}
 
 	ch := make(chan struct{}, 1)
-	var errMsg string
-	blockchain.Register(tx.Hash(), func(iTx interface{}) {
+	var errMsg error
+	var sBalance, rBalance *big.Int
+	var assetID int
+	notify.Register(tx.Hash(), 0, nil, nil, func(iTx ...interface{}) {
 		ch <- struct{}{}
-		if iTx != nil {
-			if s, ok := iTx.(string); ok {
+		if len(iTx) == 1 {
+			if s, ok := iTx[0].(error); ok {
 				errMsg = s
+			}
+		}
+		if len(iTx) == 3 {
+			if sb, ok := iTx[0].(*big.Int); ok {
+				sBalance = sb
+			}
+			if rb, ok := iTx[1].(*big.Int); ok {
+				rBalance = rb
+			}
+			if id, ok := iTx[2].(int); ok {
+				assetID = id
 			}
 		}
 	})
 
 	t.pmHander.Relay(tx)
 	<-ch
-	if len(errMsg) > 0 {
-		return errors.New(errMsg)
+	if errMsg != nil {
+		return errMsg
 	}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
@@ -170,7 +186,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
 		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
 	} else {
-		*reply = BroadcastReply{TransactionHash: tx.Hash()}
+		*reply = BroadcastReply{TransactionHash: tx.Hash(), SenderBalance: sBalance, RecipientBalance: rBalance, AssetID: assetID}
 	}
 	return nil
 }

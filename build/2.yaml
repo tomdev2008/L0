@@ -1,6 +1,6 @@
 net:
   maxPeers: 8
-  bootstrapNodes: ["encode://303030315f616263@127.0.0.1:20166"]
+  bootstrapNodes: ["encode://303030315f616263@127.0.0.1:20166|0"]
   listenAddr: "127.0.0.1:20167"
 
   msgnet:
@@ -20,6 +20,9 @@ blockchain:
   maxOccurs: 1
   cpuprofile: "profile/prof_node2"
   profPort: "6062"
+  nodeType:
+    type: "vp"
+    mongodb: false
 
 validator:
   status: true
@@ -58,7 +61,7 @@ consensus:
 # vm
 vm:
 
-  # vm maximum memory size (MB)
+  # vm maximum memory size (MB) if maxMem < 200 ,maxMem use the default value 200M
   maxMem: 800
   registrySize: 256
   callStackSize: 64

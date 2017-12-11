@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 )
@@ -60,13 +61,13 @@ func (state *State) WriteBatchs() []*db.WriteBatch {
 	writeBatchs := make([]*db.WriteBatch, 0)
 	for a, b := range state.tmpBalance {
 		key := append(state.balancePrefix, []byte(a)...)
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.balanceCF, db.OperationPut, key, b.serialize()))
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.balanceCF, db.OperationPut, key, b.serialize(), state.balanceCF))
 	}
 	state.tmpBalance = make(map[string]*Balance)
 	for a, b := range state.tmpAsset {
 		id := utils.Serialize(a)
 		key := append(state.assetPrefix, id...)
-		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.assetCF, db.OperationPut, key, utils.Serialize(b)))
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(state.assetCF, db.OperationPut, key, utils.Serialize(b), state.assetCF))
 	}
 	state.tmpAsset = make(map[uint32]*Asset)
 	return writeBatchs
@@ -169,4 +170,17 @@ func (state *State) UpdateAsset(id uint32, issur, owner accounts.Address, jsonSt
 	}
 	state.tmpAsset[id] = newAsset
 	return nil
+}
+
+func (state *State) RegisterColumn(mdb *mongodb.Mdb) {
+	mdb.RegisterCollection(state.assetCF)
+	mdb.RegisterCollection(state.balanceCF)
+}
+
+func (state *State) GetAssetCF() string {
+	return state.assetCF
+}
+
+func (state *State) GetBalanceCF() string {
+	return state.balanceCF
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -111,7 +112,6 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 func (bc *Blockchain) SetBlockchainValidator(validator validator.Validator) {
 	bc.validator = validator
 	bc.ledger.Validator = bc.validator
-	bc.validator.SetNotify(txNotify)
 }
 
 // SetBlockchainConsenter sets the consenter of the blockchain
@@ -243,7 +243,6 @@ func (bc *Blockchain) StartConsensusService() {
 func (bc *Blockchain) processConsensusOutput(output *consensus.OutputTxs) {
 	blk := bc.GenerateBlock(output.Txs, output.Time)
 	if blk.Height() == output.Height {
-		blockNotify(blk)
 		bc.pm.Relay(blk)
 	}
 }
@@ -268,7 +267,7 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool)
 	if err != nil {
 		log.Errorf(fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
 		if needNotify {
-			txNotify(tx, fmt.Sprintf("process transaction %v failed, %v", tx.Hash(), err))
+			notify.TxNotify(tx, fmt.Errorf("process transaction %v failed, %v", tx.Hash(), err))
 		}
 		return false
 	}
@@ -280,9 +279,10 @@ func (bc *Blockchain) ProcessTransaction(tx *types.Transaction, needNotify bool)
 func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 	bc.mu.Lock()
 	defer bc.mu.Unlock()
-	log.Debugf("block previoushash %s, currentblockhash %s", blk.PreviousHash(), bc.CurrentBlockHash())
+	log.Debugf("block previoushash %s, currentblockhash %s,len %d", blk.PreviousHash(), bc.CurrentBlockHash(), len(blk.Transactions))
 	if blk.PreviousHash() == bc.CurrentBlockHash() {
 		bc.ledger.AppendBlock(blk, flag)
+		notify.BlockNotify(blk)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
 		bc.heightStatus <- &Status{Height: blk.Height(), Tps: len(blk.Transactions) / 10}

@@ -16,12 +16,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-package blockchain
+package notify
 
 import (
 	"errors"
+	"fmt"
+	"math/big"
 	"sync"
 
+	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -31,16 +34,25 @@ var (
 
 // Register receive transaction hash and callback function
 // When the transaction is submitted execute callback function
-func Register(txHash interface{}, callback func(interface{})) error {
+func Register(txHash interface{}, id uint32, sender, recipient *big.Int, callback func(...interface{})) error {
 	if callback == nil || txHash == nil {
 		return errors.New("txHash or callback function cannot be nil")
 
 	}
-	callbacks.Store(txHash, callback)
+	if cb, ok := callbacks.Load(txHash); ok {
+		if balance, ok := cb.(*types.Balance); ok {
+			balance.ID = id
+			balance.Sender = sender
+			balance.Recipient = recipient
+			callbacks.Store(txHash, balance)
+		}
+	} else {
+		callbacks.Store(txHash, &types.Balance{ID: id, Sender: sender, Recipient: recipient, Callback: callback})
+	}
 	return nil
 }
 
-func blockNotify(block *types.Block) {
+func BlockNotify(block *types.Block) {
 	if block == nil || len(block.Transactions) == 0 {
 		return
 	}
@@ -48,20 +60,37 @@ func blockNotify(block *types.Block) {
 	go func(txs []*types.Transaction) {
 		for _, tx := range block.Transactions {
 			if cb, ok := callbacks.Load(tx.Hash()); ok {
-				if call, b := cb.(func(interface{})); b {
-					call(nil)
+				if balance, b := cb.(*types.Balance); b {
+					balance.Callback(balance.Sender, balance.Recipient, balance.ID)
 				}
-				callbacks.Delete(tx)
+				if !(params.Nvp && params.Mongodb) {
+					callbacks.Delete(tx.Hash())
+				}
 			}
 		}
 	}(block.Transactions)
 }
 
-func txNotify(tx *types.Transaction, i interface{}) {
+func TxNotify(tx *types.Transaction, i interface{}) {
 	if cb, ok := callbacks.Load(tx.Hash()); ok {
-		if call, b := cb.(func(interface{})); b {
-			call(i)
+		if balance, b := cb.(*types.Balance); b {
+			balance.Callback(i)
 		}
-		callbacks.Delete(tx)
+		callbacks.Delete(tx.Hash())
 	}
+}
+
+func RemoveTxInCallbacks(tx *types.Transaction) {
+	callbacks.Delete(tx.Hash())
+}
+
+func GetBalanceByTxInCallbacks(tx *types.Transaction) (*types.Balance, error) {
+	txHash := tx.Hash()
+	if cb, ok := callbacks.Load(txHash); ok {
+		if balance, ok := cb.(*types.Balance); ok {
+			return balance, nil
+		}
+	}
+
+	return nil, errors.New(fmt.Sprintf("can't find this tx, txHash: %+v", txHash))
 }

@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -75,8 +76,20 @@ func NewSmartConstract(db *db.BlockchainDB, ledgerHandler ILedgerSmartContract) 
 		ledgerHandler: ledgerHandler,
 		stateExtra:    NewStateExtra(),
 	}
+	if params.Nvp {
+		mdb := mongodb.MongDB()
+		mdb.RegisterCollection(sctx.columnFamily)
+	}
 
 	return sctx
+}
+
+func (sctx *SmartConstract) GetColumnFamily() string {
+	//if params.Nvp {
+	//	return sctx.scAddr
+	//}
+
+	return sctx.columnFamily
 }
 
 // StartConstract start constract
@@ -105,6 +118,12 @@ func (sctx *SmartConstract) ExecTransaction(tx *types.Transaction, scAddr string
 	sctx.currentTx = tx
 	sctx.scAddr = scAddr
 	sctx.smartContractTxs = make(types.Transactions, 0)
+	if params.Nvp && params.Mongodb {
+		if tx.GetType() == types.TypeJSContractInit || tx.GetType() == types.TypeLuaContractInit {
+			mdb := mongodb.MongDB()
+			mdb.RegisterCollection(scAddr)
+		}
+	}
 }
 
 // GetGlobalState returns the global state.
@@ -195,6 +214,14 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 	return nil
 }
 
+func (sctx *SmartConstract) ComplexQuery(key string) ([]byte, error) {
+	if !params.Nvp {
+		return nil, errors.New("vp can't support complex qery")
+	}
+	mdb := mongodb.MongDB()
+	return mdb.Query(key)
+}
+
 // GetState get value
 func (sctx *SmartConstract) GetState(key string) ([]byte, error) {
 	if !sctx.InProgress() {
@@ -210,7 +237,7 @@ func (sctx *SmartConstract) GetStateInOneAddr(scAddr, key string) ([]byte, error
 		var err error
 		scAddrkey := EnSmartContractKey(scAddr, key)
 		log.Debugf("sctx.scAddr: %s,%s,%s", scAddr, key, scAddrkey)
-		value, err = sctx.dbHandler.Get(sctx.columnFamily, []byte(scAddrkey))
+		value, err = sctx.dbHandler.Get(sctx.GetColumnFamily(), []byte(scAddrkey))
 		if err != nil {
 			return nil, fmt.Errorf("can't get data from db err: %v", err)
 		}
@@ -244,7 +271,7 @@ func (sctx *SmartConstract) GetByPrefix(prefix string) []*db.KeyValue {
 	}
 	scAddrkey := EnSmartContractKey(sctx.scAddr, prefix)
 	cacheValues := sctx.stateExtra.getByPrefix(sctx.scAddr, prefix)
-	dbValues := sctx.dbHandler.GetByPrefix(sctx.columnFamily, []byte(scAddrkey))
+	dbValues := sctx.dbHandler.GetByPrefix(sctx.GetColumnFamily(), []byte(scAddrkey))
 
 	return sctx.getKeyValues(cacheValues, dbValues)
 }
@@ -257,7 +284,7 @@ func (sctx *SmartConstract) GetByRange(startKey, limitKey string) []*db.KeyValue
 	scAddrStartKey := EnSmartContractKey(sctx.scAddr, startKey)
 	scAddrlimitKey := EnSmartContractKey(sctx.scAddr, limitKey)
 	cacheValues := sctx.stateExtra.getByRange(sctx.scAddr, startKey, limitKey)
-	dbValues := sctx.dbHandler.GetByRange(sctx.columnFamily, []byte(scAddrStartKey), []byte(scAddrlimitKey))
+	dbValues := sctx.dbHandler.GetByRange(sctx.GetColumnFamily(), []byte(scAddrStartKey), []byte(scAddrlimitKey))
 
 	return sctx.getKeyValues(cacheValues, dbValues)
 }
@@ -340,10 +367,10 @@ func (sctx *SmartConstract) AddChangesForPersistence(writeBatch []*db.WriteBatch
 			cv.deserialize(value)
 			if cv.Optype == db.OperationDelete {
 				log.Debugln("Contract Del: ", string(key))
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationDelete, key, cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.GetColumnFamily(), db.OperationDelete, key, cv.Value, sctx.GetColumnFamily()))
 			} else if cv.Optype == db.OperationPut {
 				log.Debugln("Contract Put: ", string(key), string(cv.Value))
-				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.columnFamily, db.OperationPut, key, cv.Value))
+				writeBatch = append(writeBatch, db.NewWriteBatch(sctx.GetColumnFamily(), db.OperationPut, key, cv.Value, sctx.GetColumnFamily()))
 			} else {
 				log.Errorf("invalid method ...")
 			}
@@ -412,49 +439,3 @@ func (sctx *SmartConstract) QueryContract(tx *types.Transaction) ([]byte, error)
 	}
 	return result, nil
 }
-
-//func GetContractStateData(scAddr, key string) (interface{}, error) {
-//	if sctx != nil {
-//		oriCtxDat, err := sctx.GetContractStateData(scAddr, key)
-//		log.Errorf("===========>>> GetContractStateData, key: %+v, src: %+v,  err: %+v", key, oriCtxDat, err)
-//		if err != nil {
-//			log.Errorf("origin data: %+v, origin str: %+v", oriCtxDat, string(oriCtxDat))
-//			return "", err
-//		}
-//
-//		var f interface{}
-//		err = json.Unmarshal(oriCtxDat, &f)
-//		if err != nil {
-//			log.Errorf("src data: %+v, json unmarshal err: %+v", oriCtxDat, err)
-//			return "", err
-//		}
-//
-//		log.Errorf("===========>>> GetContractStateData, src: %+v,  f: %+v", oriCtxDat, f)
-//		return f, nil
-//	}
-//
-//	return "", errors.New("not Contract Instance")
-//}
-//
-//func FetchContractStateData(key string) (interface{}, error) {
-//	if sctx != nil {
-//		oriCtxDat, err := sctx.GetContractStateData(utils.BytesToHex(DefaultAdminAddr.Bytes()), key)
-//		log.Errorf("===========>>> FetchContractStateData, key: %+v, src: %+v,  err: %+v", key, oriCtxDat, err)
-//		if err != nil {
-//			log.Errorf("origin data: %+v, origin str: %+v", oriCtxDat, string(oriCtxDat))
-//			return "", err
-//		}
-//
-//		var f interface{}
-//		err = json.Unmarshal(oriCtxDat, &f)
-//		if err != nil {
-//			log.Errorf("src data: %+v, json unmarshal err: %+v", oriCtxDat, err)
-//			return "", err
-//		}
-//
-//		log.Errorf("===========>>> FetchContractStateData, src: %+v,  f: %+v", oriCtxDat, f)
-//		return f, nil
-//	}
-//
-//	return "", errors.New("not Contract Instance")
-//}

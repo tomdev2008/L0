@@ -143,6 +143,7 @@ func (csd *ContractStateDelta) getByRange(startKey string, limitkey string) []*d
 				break
 			}
 		}
+
 	}
 	return values
 

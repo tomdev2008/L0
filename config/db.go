@@ -18,7 +18,10 @@
 
 package config
 
-import "github.com/bocheninc/L0/components/db"
+import (
+	"github.com/bocheninc/L0/components/db"
+	"github.com/bocheninc/L0/components/db/mongodb"
+)
 
 // DBConfig returns configurations for database
 func DBConfig(path string) *db.Config {
@@ -30,4 +33,13 @@ func DBConfig(path string) *db.Config {
 	dbConfig.LogLevel = getString("db.loglevel", dbConfig.LogLevel)
 
 	return dbConfig
+}
+
+// DBConfig returns configurations for database
+func MDBConfig() *mongodb.Config {
+	mdbConfig := mongodb.DefaultConfig()
+	mdbConfig.Hosts = getStringSlice("db.mdb.Hosts", mdbConfig.Hosts)
+	mdbConfig.DBName = getString("db.mdb.DBName", mdbConfig.DBName)
+
+	return mdbConfig
 }

@@ -37,7 +37,7 @@ const (
 )
 
 var (
-	deafultColumnfamilies = []string{"account", "asset", "balance", "ledger", "peer", "index", "state", "block", "storage", "scontract", "persistCacheTxs"}
+	deafultColumnfamilies = []string{"account", "asset", "balance", "ledger", "peer", "index", "state", "block", "transaction", "storage", "scontract", "persistCacheTxs"}
 	config                *Config
 	dbInstance            *BlockchainDB
 	once                  sync.Once
@@ -81,6 +81,7 @@ type WriteBatch struct {
 	Operation uint
 	Key       []byte
 	Value     []byte
+	Typ       string
 }
 
 // DefaultConfig defines the default configuration of the rocksdb
@@ -278,11 +279,12 @@ func (blockchainDB *BlockchainDB) checkIfColumnExists(cfName string) {
 }
 
 // NewWriteBatch returns a writebatch instance
-func NewWriteBatch(cfName string, operation uint, key, value []byte) *WriteBatch {
+func NewWriteBatch(cfName string, operation uint, key, value []byte, typ string) *WriteBatch {
 	return &WriteBatch{
 		CfName:    cfName,
 		Operation: operation,
 		Key:       key,
 		Value:     value,
+		Typ:       typ,
 	}
 }

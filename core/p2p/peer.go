@@ -26,6 +26,7 @@ import (
 	"io"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,8 +36,9 @@ import (
 )
 
 var (
-	scheme    = "encode"
-	delimiter = "&"
+	scheme            = "encode"
+	delimiter         = "&"
+	peerTypeDelimiter = "|"
 )
 
 // PeerID represents the peer identity
@@ -130,18 +132,24 @@ func (p PeerID) String() string {
 	return hex.EncodeToString(p)
 }
 
+const (
+	TypeVp uint32 = iota
+	TypeNvp
+)
+
 // Peer represents a peer in blockchain
 type Peer struct {
 	ID             PeerID
 	LastActiveTime time.Time
 	Address        string
 	Conn           net.Conn
+	Type           uint32
 
 	running map[string]*protoRW
 }
 
 // NewPeer returns a new Peer with input id
-func NewPeer(id []byte, conn net.Conn, addr string, protocols []Protocol) *Peer {
+func NewPeer(id []byte, conn net.Conn, addr string, peerType uint32, protocols []Protocol) *Peer {
 	protoMap := make(map[string]*protoRW)
 	for _, proto := range protocols {
 		protoMap[proto.Name] = &protoRW{Protocol: proto, in: make(chan Msg, 100), w: conn}
@@ -152,6 +160,7 @@ func NewPeer(id []byte, conn net.Conn, addr string, protocols []Protocol) *Peer 
 		LastActiveTime: *new(time.Time),
 		Conn:           conn,
 		Address:        addr,
+		Type:           peerType,
 		running:        protoMap,
 	}
 }
@@ -163,7 +172,7 @@ func (peer *Peer) String() string {
 	u.Host = peer.Address
 
 	_, _, _ = net.SplitHostPort(peer.Address)
-	return u.String()
+	return u.String() + peerTypeDelimiter + strconv.Itoa(int(peer.Type))
 }
 
 // AddFilter adds data to bloomfilter
@@ -243,7 +252,7 @@ func (peer *Peer) run() {
 				break
 			}
 		}
-		log.Debugf("handle message %d(%s), server address:%s", m.Cmd, msgMap[m.Cmd], peer.Address)
+		//log.Debugf("handle message %d(%s), server address:%s", m.Cmd, msgMap[m.Cmd], peer.Address)
 		// log.Debugf("handle message over type:%d raddr:%s", m.Cmd, c.conn.RemoteAddr().String())
 	}
 }
@@ -287,7 +296,13 @@ func (peer *Peer) startProtocols() {
 
 // ParsePeer parses a peer designator.
 func ParsePeer(rawurl string) (*Peer, error) {
-	u, err := url.Parse(rawurl)
+	urlAndType := strings.Split(rawurl, peerTypeDelimiter)
+	if len(urlAndType) != 2 {
+		return nil, errors.New("invalid rawurl")
+	}
+	peerURL := urlAndType[0]
+	typeStr := urlAndType[1]
+	u, err := url.Parse(peerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +314,9 @@ func ParsePeer(rawurl string) (*Peer, error) {
 		return nil, errors.New("does not contain peer ID")
 	}
 	id, _ := hex.DecodeString(u.User.String())
-	return NewPeer(id, nil, u.Host, nil), nil
+
+	peerType, _ := strconv.Atoi(typeStr)
+	return NewPeer(id, nil, u.Host, uint32(peerType), nil), nil
 }
 
 func getPeerAddress(address string) string {

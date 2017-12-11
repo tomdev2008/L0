@@ -45,6 +45,13 @@ type Transaction struct {
 	sender atomic.Value
 }
 
+type Balance struct {
+	ID        uint32
+	Sender    *big.Int
+	Recipient *big.Int
+	Callback  func(...interface{})
+}
+
 type ContractSpec struct {
 	ContractAddr   []byte
 	ContractCode   []byte
