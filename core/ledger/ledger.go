@@ -580,8 +580,8 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 					}
 					syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 				}
-				syncTxs = append(syncTxs, tx)
 			}
+			syncTxs = append(syncTxs, tx)
 		case types.TypeSecurity:
 			adminData, err := ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {

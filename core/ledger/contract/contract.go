@@ -139,18 +139,19 @@ func (sctx *SmartConstract) GetGlobalState(key string) ([]byte, error) {
 func (sctx *SmartConstract) verifyPermission(key string) error {
 	var dataAdmin []byte
 	var err error
-	switch {
-	case key == params.AdminKey:
-		fallthrough
-	case key == params.GlobalContractKey:
-		fallthrough
-	case strings.Contains(key, permissionPrefix):
+	if key == params.AdminKey || key == params.GlobalContractKey {
 		dataAdmin, err = sctx.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 		if err != nil {
 			return err
 		}
-	default:
-		permissionKey := permissionPrefix + key
+	} else {
+		var permissionKey string
+		if strings.Contains(key, permissionPrefix) {
+			permissionKey = key
+		} else {
+			permissionKey = permissionPrefix + key
+		}
+
 		dataAdmin, err = sctx.GetContractStateData(params.GlobalStateKey, permissionKey)
 		if err != nil {
 			return err

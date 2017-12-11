@@ -230,7 +230,7 @@ func doReceive(p *VMProc, receiveData *InvokeData) {
 			errmsg := ""
 			if err != nil {
 				errmsg = err.Error()
-				//log.Error("call requestHandle error msg:", errmsg)
+				log.Error("call requestHandle error msg:", errmsg)
 			}
 
 			data.SetParams(errmsg, result)

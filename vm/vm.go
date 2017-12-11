@@ -118,11 +118,14 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstr
 			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})
 			if err != nil {
 				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
-				return nil, nil
+				return nil, err
 			}
 
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
+				err := handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
+				if err != nil {
+					return nil, err
+				}
 			} else {
 				handler.AddState(contractCodeKey, code.Bytes()) // add js contract code into state
 			}
@@ -134,10 +137,13 @@ func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstr
 			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "luavm"})
 			if err != nil {
 				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
-				return nil, nil
+				return nil, err
 			}
 			if len(cs.ContractAddr) == 0 {
-				handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
+				err := handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
+				if err != nil {
+					return nil, err
+				}
 			} else {
 				handler.AddState(contractCodeKey, code.Bytes()) // add lua contract code into state
 			}

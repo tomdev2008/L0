@@ -341,7 +341,11 @@ func (data *InvokeData) DecodeParams(dataObj ...interface{}) error {
 		return err
 	}
 
-	if count == byte(len(dataObj)) && reader.Len() > 0 {
+	if count > byte(len(dataObj)) {
+		count = byte(len(dataObj))
+	}
+
+	if reader.Len() > 0 {
 		for i := byte(0); i < count; i++ {
 			err = utils.VarDecode(reader, dataObj[i])
 			if err != nil {
