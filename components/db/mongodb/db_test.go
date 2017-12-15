@@ -97,22 +97,25 @@ func TestCheckFormat(t *testing.T) {
 	db.RegisterCollection("balance")
 
 	testBulkInsert(db.Coll("person"))
+	var keys []string
+	keys = append(keys, `db.person.findOne()`)
+	keys = append(keys, `db.person.find()`)
+	keys = append(keys, `db.person.find().limit(1)`)
+	keys = append(keys, `db.person.find().skip(1)`)
+	keys = append(keys, `db.person.find().skip(1).limit(1)`)
+	keys = append(keys, `db.person.find().sort({"age":1})`)
+	keys = append(keys, `db.person.find({"age":1})`)
+	keys = append(keys, `db.person.find({"age":{$gt:1}})`)
+	keys = append(keys, `db.person.find({"age":{$lt:10,$gt:1}})`)
+	keys = append(keys, `db.person.find({$or:[{"age":9},{"age":1}]})`)
 
-	//key := `db.person.findOne()`
-	//key := `db.person.find()`
-	//key := `db.person.find().limit(1)`
-	//key := `db.person.find().skip(1)`
-	//key := `db.person.find().skip(1).limit(1)`
-	key := `db.person.find().sort({"age":1})`
-	//key := `db.person.find({"age":1})`
-	//key := `db.person.find({"age":{$gt:1}})`
-
-	//key := `db.person.find({"age":{$lt:10,$gt:1}})`
-	result, err := db.Query(key)
-	if err != nil {
-		t.Error("db query ", err)
+	for _, v := range keys {
+		result, err := db.Query(v)
+		if err != nil {
+			t.Errorf("%s result: %s ", v, err)
+		}
+		t.Logf(" %s result: %s", v, string(result))
 	}
-	t.Log("result: ", string(result))
 
 	remove(db.Coll("person"))
 

@@ -214,7 +214,7 @@ func (db *Mdb) execQuery(col, method string, param interface{}, query *mgo.Query
 		}
 		query = query.Sort(fields...)
 	default:
-		return nil, errors.New("not supot sql method: " + method)
+		return nil, errors.New("not suppot sql method: " + method)
 	}
 
 	if err != nil {
@@ -246,7 +246,7 @@ func (db *Mdb) checkFormat(key string) ([]map[string]interface{}, error) {
 
 func parseMethodAndParams(methodAndParams string) ([]map[string]interface{}, error) {
 	var results []map[string]interface{}
-	regMethod := regexp.MustCompile(`(\w+)(\(([\w:"\{\},\.\$ -]*)\))*`)
+	regMethod := regexp.MustCompile(`(\w+)(\(([\w:"\{\},\[\]\.\$ -]*)\))*`)
 	methodParams := regMethod.FindAllStringSubmatch(methodAndParams, -1)
 	for k, v := range methodParams {
 		if len(v) != 4 {
@@ -267,7 +267,7 @@ func parseMethodAndParams(methodAndParams string) ([]map[string]interface{}, err
 			}
 			result[v[1]] = "collection"
 		case 2:
-			if v[1] != "find" {
+			if v[1] != "find" && v[1] != "findOne" {
 				return nil, errors.New("query key  must be find method")
 			}
 			fallthrough
