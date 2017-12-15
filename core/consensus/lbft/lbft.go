@@ -49,11 +49,6 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 		outputTxsChan:        make(chan *consensus.OutputTxs, options.BufferSize),
 		broadcastChan:        make(chan *consensus.BroadcastConsensus, options.BufferSize),
 	}
-	lbft.height = lbft.stack.GetBlockchainInfo().Height
-	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
-	lbft.execHeight = lbft.height
-	lbft.execSeqNo = lbft.seqNo
-	lbft.priority = time.Now().UnixNano()
 	lbft.primaryHistory = make(map[string]int64)
 
 	lbft.vcStore = make(map[string]*viewChangeList)
@@ -139,6 +134,11 @@ func (lbft *Lbft) Start() {
 	}
 	log.Infof("lbft : %s", lbft)
 	log.Infof("Replica %s consenter started", lbft.options.ID)
+	lbft.height = lbft.stack.GetBlockchainInfo().Height
+	lbft.seqNo = lbft.stack.GetBlockchainInfo().LastSeqNo
+	lbft.execHeight = lbft.height
+	lbft.execSeqNo = lbft.seqNo
+	lbft.priority = time.Now().UnixNano()
 	lbft.exit = make(chan struct{})
 	for {
 		select {

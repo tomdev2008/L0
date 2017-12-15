@@ -199,6 +199,7 @@ func (bc *Blockchain) Synced() bool {
 
 // StartConsensusService starts consensus service
 func (bc *Blockchain) StartConsensusService() {
+	go bc.consenter.Start()
 	go func() {
 		for {
 			select {

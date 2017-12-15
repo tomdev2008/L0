@@ -37,7 +37,7 @@ func NewConsenter(option *Options, stack consensus.IStack) (consenter consensus.
 	} else {
 		panic(fmt.Sprintf("Unspport consenter of plugin %s", plugin))
 	}
-	go consenter.Start()
+	//go consenter.Start()
 	return consenter
 }
 
