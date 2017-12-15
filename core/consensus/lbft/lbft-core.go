@@ -233,6 +233,11 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, diff chain (%s==%s)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.Chain, lbft.options.Chain)
 		return nil
 	}
+	if len(lbft.primaryID) == 0 && len(lbft.lastPrimaryID) == 0 {
+		lbft.primaryID = preprepare.ReplicaID
+		lbft.seqNo = preprepare.SeqNo
+		lbft.execSeqNo = lbft.seqNo
+	}
 	if preprepare.ReplicaID != lbft.primaryID {
 		log.Errorf("Replica %s received PrePrepare from %s for consensus %s: ignore, diff primayID (%s==%s)", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.PrimaryID, lbft.primaryID)
 		return nil
