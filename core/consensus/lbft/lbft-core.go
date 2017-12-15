@@ -459,6 +459,10 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 			return nil
 		}
 	}
+	if lbft.seqNo == 0 {
+		lbft.seqNo = committed.SeqNo
+		lbft.execSeqNo = lbft.seqNo
+	}
 	lbft.committedRequests[committed.SeqNo] = committed
 	d, _ := time.ParseDuration("0s")
 	if core, ok := lbft.coreStore[digest]; ok {
