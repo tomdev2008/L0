@@ -199,6 +199,10 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 	case *types.Transaction:
 		var tx types.Transaction
 		tx.Deserialize(inv.Serialize())
+		if pm.filter.TestAndAdd(inv.Serialize()) {
+			log.Debugf("Bloom Test is true, txHash: %+v", tx.Hash())
+			return
+		}
 
 		if tx.GetType() == types.TypeMerged {
 			msg = p2p.NewMsg(broadcastAckMergeTxsMsg, inv.Serialize())
@@ -211,7 +215,13 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
 		}
 	case *types.Block:
-		if pm.Blockchain.ProcessBlock(inv.(*types.Block), true) {
+		block := inv.(*types.Block)
+		//if pm.filter.TestAndAdd(block.Serialize()) {
+		//	log.Debugf("Bloom Test is true, BlockHash: %+v", block.Hash())
+		//	return
+		//}
+
+		if pm.Blockchain.ProcessBlock(block, true) {
 			inventory.Type = InvTypeBlock
 			inventory.Hashes = []crypto.Hash{inv.Hash()}
 			log.Debugf("Relay inventory %v", inventory)
@@ -292,13 +302,14 @@ func (pm *ProtocolManager) OnStatus(m p2p.Msg, p *p2p.Peer) {
 // OnTx processes tx message
 func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 
-	if pm.filter.TestAndAdd(m.Payload) {
-		return
-	}
-
 	tx := new(types.Transaction)
 	if err := tx.Deserialize(m.Payload); err != nil {
 		log.Errorln("OnTx deserialize error ", err)
+		return
+	}
+
+	if pm.filter.TestAndAdd(m.Payload) {
+		log.Debugf("Bloom Test is true, txHash: %+v", tx.Hash())
 		return
 	}
 
@@ -359,11 +370,17 @@ func (pm *ProtocolManager) OnGetBlocks(m p2p.Msg, peer *p2p.Peer) {
 }
 
 func (pm *ProtocolManager) OnBlock(m p2p.Msg, peer *p2p.Peer) {
+
 	blk := new(types.Block)
 	if err := blk.Deserialize(m.Payload); err != nil {
 		log.Errorln("-----sync----- OnBlock  deserialize ", err)
 		return
 	}
+
+	//if pm.filter.TestAndAdd(m.Payload) {
+	//	log.Debugf("Bloom Test is true, BlockHash: %+v", blk.Hash())
+	//	return
+	//}
 
 	log.Debugf("-----sync----- OnBlock %s(%d)", blk.Hash(), blk.Height())
 	// p.AddFilter(m.CheckSum[:])

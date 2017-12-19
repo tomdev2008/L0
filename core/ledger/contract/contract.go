@@ -35,6 +35,7 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/vm"
+	"sync"
 )
 
 const (
@@ -63,6 +64,7 @@ type SmartConstract struct {
 	committed        bool
 	currentTx        *types.Transaction
 	smartContractTxs types.Transactions
+	sync.Mutex
 }
 
 //var sctx *SmartConstract
@@ -398,6 +400,8 @@ func (sctx *SmartConstract) GetContractStateData(scAddr string, key string) ([]b
 }
 
 func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
+	sctx.Lock()
+	defer sctx.Unlock()
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
@@ -416,6 +420,8 @@ func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types
 }
 
 func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr string) (bool, error) {
+	sctx.Lock()
+	defer sctx.Unlock()
 	contractSpec := new(types.ContractSpec)
 	contractSpec.ContractAddr = utils.HexToBytes(scAddr)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
@@ -429,6 +435,8 @@ func (sctx *SmartConstract) ExecuteRequireContract(tx *types.Transaction, scAddr
 }
 
 func (sctx *SmartConstract) QueryContract(tx *types.Transaction) ([]byte, error) {
+	sctx.Lock()
+	defer sctx.Unlock()
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
