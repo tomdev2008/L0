@@ -468,10 +468,10 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 		return nil
 	}
 
-	if len(lbft.primaryID) != 0 && vc.LastPrimaryID != lbft.primaryID {
-		log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff primaryID (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.primaryID, vc.LastPrimaryID)
-		return nil
-	}
+	// if len(lbft.primaryID) != 0 && vc.LastPrimaryID != lbft.primaryID {
+	// 	log.Errorf("Replica %s received ViewChange(%s) from %s: ingnore, diff primaryID (%s-%s)", lbft.options.ID, vc.ID, vc.ReplicaID, lbft.primaryID, vc.LastPrimaryID)
+	// 	return nil
+	// }
 
 	lbft.rwVcStore.Lock()
 	defer lbft.rwVcStore.Unlock()

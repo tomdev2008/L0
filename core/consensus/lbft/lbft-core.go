@@ -83,7 +83,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, replica string) {
 		if strings.Contains(k, "resend") {
 			continue
 		}
-		if (lbft.hasPrimary() && strings.Contains(k, "lbft")) || k == core.digest {
+		if /*(lbft.hasPrimary() && strings.Contains(k, "lbft")) ||*/ k == core.digest {
 			vcs := []*ViewChange{}
 			for _, vc := range vcl.vcs {
 				if vc.ReplicaID == replica {
