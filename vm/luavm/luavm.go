@@ -34,10 +34,10 @@ var vmproc *vm.VMProc
 var luaProto = make(map[string]*lua.FunctionProto)
 
 // Start start vm process
-func Start() error {
+func Start(name string) error {
 	log.Info("begin start luavm proc")
 	var err error
-	if vmproc, err = vm.FindVMProcess(); err != nil {
+	if vmproc, err = vm.FindVMProcess(name); err != nil {
 		return err
 	}
 	log.Info("find luavm proc pid:", vmproc.Proc.Pid)
