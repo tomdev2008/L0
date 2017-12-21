@@ -227,8 +227,9 @@ func getContractCode(cs *types.ContractSpec, txType uint32, handler ISmartConstr
 	if code != nil && len(code) > 0 {
 		if txType == types.TypeJSContractInit {
 			return string(code), "jsvm", nil
+		} else if txType == types.TypeLuaContractInit {
+			return string(code), "luavm", nil
 		}
-		return string(code), "luavm", nil
 	}
 
 	cc := new(ContractCode)
