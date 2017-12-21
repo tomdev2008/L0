@@ -133,8 +133,8 @@ func execContract(cd *vm.ContractData, funcName string) (result interface{}, err
 	ottoVM.Interrupt = make(chan func(), 1) // The buffer prevents blocking
 
 	go func() {
+		time.Sleep(time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond)
 		ottoVM.Interrupt <- func() {
-			time.Sleep(time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond)
 			panic(errors.New("code run time out"))
 		}
 	}()

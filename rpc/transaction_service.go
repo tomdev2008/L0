@@ -30,6 +30,7 @@ import (
 	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/components/log"
 )
 
 type IBroadcast interface {
@@ -199,8 +200,9 @@ func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
 			args.ContractAddr = args.ContractAddr[2:]
 		}
 
-		contractAddress := utils.HexToBytes(args.ContractAddr)
+		contractAddress = utils.HexToBytes(args.ContractAddr)
 		if len(contractAddress) != 20 && len(contractAddress) != 22 {
+			log.Errorf("contract address[%s] is illegal", args.ContractAddr)
 			return errors.New("contract address is illegal")
 		}
 	}

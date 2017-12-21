@@ -74,18 +74,18 @@ type txdata struct {
 
 // Transaction type
 const (
-	TypeAtomic          uint32 = iota // 链内交易
-	TypeAcrossChain                   // 跨链交易
-	TypeMerged                        // 跨链合并交易
-	TypeBackfront                     // 资金回笼交易
-	TypeDistribut                     // 下发交易
-	TypeIssue                         // 发行交易
-	TypeIssueUpdate                   // 发行更新
-	TypeJSContractInit                // js contract_Init
-	TypeLuaContractInit               // lua contract_Init
-	TypeContractInvoke                // contract_Invoke
-	TypeContractQuery                 // contract_Query
-	TypeSecurity                      // security
+	TypeAtomic          uint32 = iota // 链内交易 0
+	TypeAcrossChain                   // 跨链交易 1
+	TypeMerged                        // 跨链合并交易 2
+	TypeBackfront                     // 资金回笼交易 3
+	TypeDistribut                     // 下发交易 4
+	TypeIssue                         // 发行交易 5
+	TypeIssueUpdate                   // 发行更新 6
+	TypeJSContractInit                // js contract_Init 7
+	TypeLuaContractInit               // lua contract_Init 8
+	TypeContractInvoke                // contract_Invoke 9
+	TypeContractQuery                 // contract_Query 10
+	TypeSecurity                      // security 11
 )
 
 // NewTransaction creates an new transaction with the parameters
