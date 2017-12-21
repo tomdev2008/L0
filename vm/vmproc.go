@@ -21,13 +21,12 @@ package vm
 import (
 	"os"
 	"os/signal"
-	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
-	"strings"
 )
 
 // VMProc the vm process struct
@@ -69,18 +68,9 @@ func NewVMProc(name string) (*VMProc, error) {
 
 	attr := new(os.ProcAttr)
 	attr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr, pr, cw}
+
 	argv := []string{
-		"L0 contract " + name + " proc",
-		VMConf.LogFile,
-		VMConf.LogLevel,
-		strconv.Itoa(VMConf.VMMaxMem),
-		strconv.Itoa(VMConf.VMCallStackSize),
-		strconv.Itoa(VMConf.VMRegistrySize),
-		strconv.Itoa(VMConf.ExecLimitMaxRunTime),
-		strconv.Itoa(VMConf.ExecLimitMaxOpcodeCount),
-		strconv.Itoa(VMConf.ExecLimitStackDepth),
-		strconv.Itoa(VMConf.ExecLimitMaxScriptSize),
-	}
+		"L0 contract " + name + " proc", VMConf.String()}
 	proc, err := os.StartProcess(name, argv, attr)
 	if err != nil {
 		log.Error("create vm proc error ", err)
@@ -221,7 +211,6 @@ func doSend(p *VMProc, sendData []interface{}) {
 		syscall.Kill(p.PeerProc.Pid, syscall.SIGUSR2)
 	}
 
-
 	if data.Type == InvokeTypeRequest {
 		ch := sendData[1].(chan *InvokeData)
 		p.RequestMap[data.SessionID] = ch
@@ -245,9 +234,12 @@ func doReceive(p *VMProc, receiveData *InvokeData) {
 			//log.Debugf("begin call requestHandle %s\n", data.FuncName)
 			result, err := p.RequestHandle(p, data)
 			//log.Debugf("after call requestHandle %s\n", data.FuncName)
-			errmsg := ""
+			var errmsg string
 			if err != nil {
 				errmsg = err.Error()
+				if strings.Contains(err.Error(), "context deadline exceeded") {
+					errmsg = "lua vm run time out"
+				}
 				log.Error("call requestHandle error msg:", errmsg)
 			}
 

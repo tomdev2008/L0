@@ -128,14 +128,13 @@ func execContract(cd *vm.ContractData, funcName string) (result interface{}, err
 	ottoVM := otto.New()
 	ottoVM.SetOPCodeLimit(vm.VMConf.ExecLimitMaxOpcodeCount)
 	ottoVM.SetStackDepthLimit(vm.VMConf.ExecLimitStackDepth)
-	exporter(ottoVM) //export go func
-
+	exporter(ottoVM)                        //export go func
 	ottoVM.Interrupt = make(chan func(), 1) // The buffer prevents blocking
-
+	timeOut := time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond
 	go func() {
-		time.Sleep(time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond)
+		time.Sleep(timeOut)
 		ottoVM.Interrupt <- func() {
-			panic(errors.New("code run time out"))
+			panic(fmt.Errorf("code run: %v,time out", timeOut))
 		}
 	}()
 
@@ -172,7 +171,6 @@ func callJSFunc(ottoVM *otto.Otto, cd *vm.ContractData, funcName string) (val ot
 			val, err = ottoVM.Call(funcName, nil, cd.ContractParams)
 		}
 	}
-
 	return
 }
 

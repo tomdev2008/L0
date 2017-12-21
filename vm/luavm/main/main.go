@@ -20,7 +20,6 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"syscall"
 
 	"os"
@@ -32,10 +31,11 @@ import (
 
 func main() {
 
-	log.New(os.Args[1])
-	log.SetLevel(os.Args[2])
+	vm.VMConf = vm.DefaultConfig()
+	vm.VMConf.SetString(os.Args[1])
 
-	vmConfig()
+	log.New(vm.VMConf.LogFile)
+	log.SetLevel(vm.VMConf.LogLevel)
 
 	if err := vm.CheckVmMem(vm.VMConf.VMMaxMem); err != nil {
 		log.Warning(err)
@@ -55,15 +55,4 @@ func main() {
 		log.Error("luavm start error", err)
 	}
 	select {}
-}
-
-func vmConfig() {
-	vm.VMConf = vm.DefaultConfig()
-	vm.VMConf.VMMaxMem, _ = strconv.Atoi(os.Args[3])
-	vm.VMConf.VMCallStackSize, _ = strconv.Atoi(os.Args[4])
-	vm.VMConf.VMRegistrySize, _ = strconv.Atoi(os.Args[5])
-	vm.VMConf.ExecLimitMaxRunTime, _ = strconv.Atoi(os.Args[6])
-	vm.VMConf.ExecLimitMaxOpcodeCount, _ = strconv.Atoi(os.Args[7])
-	vm.VMConf.ExecLimitStackDepth, _ = strconv.Atoi(os.Args[8])
-	vm.VMConf.ExecLimitMaxScriptSize, _ = strconv.Atoi(os.Args[9])
 }

@@ -35,7 +35,9 @@ func CheckStateKey(key string) error {
 	}
 
 	if len(key) > VMConf.ExecLimitMaxStateKeyLength {
-		return errors.New("state key too long max length is:" + strconv.Itoa(VMConf.ExecLimitMaxStateKeyLength))
+		return errors.New("state key size illegal " +
+			strconv.Itoa(len(key)) +
+			" , max length is:" + strconv.Itoa(VMConf.ExecLimitMaxStateKeyLength))
 	}
 
 	return nil
@@ -47,7 +49,9 @@ func CheckStateValue(value []byte) error {
 	}
 
 	if len(value) > VMConf.ExecLimitMaxStateValueSize {
-		return errors.New("state value too long max size is:" + strconv.Itoa(VMConf.ExecLimitMaxStateValueSize))
+		return errors.New("state value size illegal " +
+			strconv.Itoa(len(value)) +
+			"  max size is:" + strconv.Itoa(VMConf.ExecLimitMaxStateValueSize))
 	}
 
 	return nil
@@ -84,9 +88,9 @@ func CheckAddr(addr string) error {
 
 func CheckContractCode(code string) error {
 	if len(code) == 0 || len(code) > VMConf.ExecLimitMaxScriptSize {
-		return errors.New("contract script code size " +
+		return errors.New("contract script code size illegal " +
 			strconv.Itoa(len(code)) +
-			"byte illegal, max size is:" +
+			"byte , max size is:" +
 			strconv.Itoa(VMConf.ExecLimitMaxScriptSize) + " byte")
 	}
 

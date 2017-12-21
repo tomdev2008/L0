@@ -22,6 +22,7 @@ package luavm
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/bocheninc/L0/vm/luavm/utils"
 	"github.com/yuin/gopher-lua"
@@ -43,7 +44,19 @@ func exporter() map[string]lua.LGFunction {
 		"ComplexQuery":       complexQueryFunc,
 		"jsonEncode":         utils.ApiEncode,
 		"jsonDecode":         utils.ApiDecode,
+		"sleep":              sleepFunc,
 	}
+}
+
+func sleepFunc(l *lua.LState) int {
+	if l.GetTop() != 1 {
+		l.RaiseError("param illegality when invoke sleep")
+		return 1
+	}
+	n := time.Duration(int64(float64(l.CheckNumber(1))))
+	time.Sleep(n * time.Millisecond)
+	l.Push(lua.LBool(true))
+	return 1
 }
 
 func accountFunc(l *lua.LState) int {

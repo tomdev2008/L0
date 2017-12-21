@@ -20,6 +20,7 @@ package jsvm
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/robertkrimen/otto"
@@ -48,8 +49,25 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 	exporterFuncs.Set("GetByPrefix", getByPrefixFunc)
 	exporterFuncs.Set("GetByRange", getByRangeFunc)
 	exporterFuncs.Set("ComplexQuery", complexQueryFunc)
+	exporterFuncs.Set("Sleep", sleepFunc)
 
 	return exporterFuncs, nil
+}
+
+func sleepFunc(fc otto.FunctionCall) otto.Value {
+	if len(fc.ArgumentList) != 1 {
+		log.Error("sleepFunc -> param illegality when invoke Transfer")
+		return fc.Otto.MakeCustomError("sleepFunc", "param illegality when invoke Sleep")
+	}
+
+	n, err := fc.Argument(0).ToInteger()
+	if err != nil {
+		log.Errorf("sleepFunc -> get duration error")
+		return fc.Otto.MakeCustomError("sleepFunc", err.Error())
+	}
+	time.Sleep(time.Duration(n) * time.Millisecond)
+	val, _ := otto.ToValue(true)
+	return val
 }
 
 func accountFunc(fc otto.FunctionCall) otto.Value {

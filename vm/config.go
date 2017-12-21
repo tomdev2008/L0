@@ -20,6 +20,8 @@
 
 package vm
 
+import "encoding/json"
+
 var VMConf *Config
 
 // Config vm config struct
@@ -56,4 +58,13 @@ func DefaultConfig() *Config {
 		LuaVMExeFilePath:           "bin/luavm",
 		JSVMExeFilePath:            "bin/jsvm",
 	}
+}
+
+func (c *Config) String() string {
+	data, _ := json.Marshal(c)
+	return string(data)
+}
+
+func (c *Config) SetString(src string) error {
+	return json.Unmarshal([]byte(src), c)
 }
