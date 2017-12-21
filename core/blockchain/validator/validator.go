@@ -175,6 +175,10 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 	switch flag {
 	case 0: // not used, do nothing
 		log.Debug("[validator] not primary replica ...")
+		log.Debugf("ccc size: %d", len(txs))
+		for _, tx := range txs {
+			log.Debug("ccc tx_hash %s", tx.Hash().String())
+		}
 	case 1: //used, do nothing
 		log.Debug("[validator] primary replica ...")
 	case 2: // add

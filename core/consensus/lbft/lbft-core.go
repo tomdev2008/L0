@@ -406,6 +406,7 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	if core.passCommit || !lbft.maybePassCommit(core) {
 		return nil
 	}
+	lbft.stopNewViewTimerForCore(core)
 	core.passCommit = true
 	core.endTime = time.Now()
 	committed := &Committed{
