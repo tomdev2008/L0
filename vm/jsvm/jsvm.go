@@ -31,10 +31,10 @@ import (
 var vmproc *vm.VMProc
 
 // Start start jsvm process
-func Start() error {
+func Start(name string) error {
 	log.Info("begin start jsvm proc")
 	var err error
-	if vmproc, err = vm.FindVMProcess(); err != nil {
+	if vmproc, err = vm.FindVMProcess(name); err != nil {
 		return err
 	}
 	log.Info("find jsvm proc pid:", vmproc.Proc.Pid)

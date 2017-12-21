@@ -27,6 +27,7 @@ import (
 
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"strings"
 )
 
 // VMProc the vm process struct
@@ -87,6 +88,7 @@ func NewVMProc(name string) (*VMProc, error) {
 	}
 
 	vmproc := new(VMProc)
+	vmproc.Lang = name
 	vmproc.Proc = proc
 	vmproc.PeerProc = proc
 	vmproc.Running = true
@@ -100,15 +102,19 @@ func NewVMProc(name string) (*VMProc, error) {
 	vmproc.Files = []*os.File{pr, pw, cr, cw}
 
 	// listen sigusr2 sig
-	signal.Notify(vmproc.readPipeChan, syscall.SIGUSR2)
-	<-vmproc.readPipeChan // wait child proc
+	if strings.Contains(name, "lua") {
+		signal.Notify(vmproc.readPipeChan, syscall.SIGUSR1)
+	} else {
+		signal.Notify(vmproc.readPipeChan, syscall.SIGUSR2)
+	}
 
+	<-vmproc.readPipeChan // wait child proc
 	log.Infof("start one vm proc pid:%d\n", proc.Pid)
 	return vmproc, nil
 }
 
 // FindVMProcess find vm process from child proc
-func FindVMProcess() (*VMProc, error) {
+func FindVMProcess(name string) (*VMProc, error) {
 	selfProc, err := os.FindProcess(os.Getpid())
 	if err != nil {
 		return nil, err
@@ -120,6 +126,7 @@ func FindVMProcess() (*VMProc, error) {
 	log.Infof("child find pid:%d, parentPid:%d", selfProc.Pid, parentProc.Pid)
 
 	vmproc := new(VMProc)
+	vmproc.Lang = name
 	vmproc.Proc = selfProc
 	vmproc.PeerProc = parentProc
 	vmproc.Running = true
@@ -131,9 +138,15 @@ func FindVMProcess() (*VMProc, error) {
 	vmproc.PipeWriter = os.NewFile(4, "")
 
 	// listen sigusr2 sig
-	signal.Notify(vmproc.readPipeChan, syscall.SIGUSR2)
-	// parentProc.Signal(syscall.SIGUSR2)
-	syscall.Kill(parentProc.Pid, syscall.SIGUSR2) //notify parent proc the child proc created success
+	if strings.Contains(name, "lua") {
+		signal.Notify(vmproc.readPipeChan, syscall.SIGUSR1)
+		// parentProc.Signal(syscall.SIGUSR1)
+		syscall.Kill(parentProc.Pid, syscall.SIGUSR1) //notify parent proc the child proc created success
+	} else {
+		signal.Notify(vmproc.readPipeChan, syscall.SIGUSR2)
+		// parentProc.Signal(syscall.SIGUSR2)
+		syscall.Kill(parentProc.Pid, syscall.SIGUSR2) //notify parent proc the child proc created success
+	}
 
 	return vmproc, nil
 }
@@ -175,7 +188,7 @@ func (p *VMProc) Selector() {
 			case data := <-p.receiveChan:
 				doReceive(p, data)
 			case sig := <-p.readPipeChan:
-				if sig == syscall.SIGUSR2 {
+				if sig == syscall.SIGUSR2 || sig == syscall.SIGUSR1 {
 					doReadPipe(p)
 				}
 			}
@@ -202,7 +215,12 @@ func doSend(p *VMProc, sendData []interface{}) {
 
 	// sends a SIGUSR2 signal to the peer process
 	// p.PeerProc.Signal(syscall.SIGUSR2)
-	syscall.Kill(p.PeerProc.Pid, syscall.SIGUSR2)
+	if strings.Contains(p.Lang, "lua") {
+		syscall.Kill(p.PeerProc.Pid, syscall.SIGUSR1)
+	} else {
+		syscall.Kill(p.PeerProc.Pid, syscall.SIGUSR2)
+	}
+
 
 	if data.Type == InvokeTypeRequest {
 		ch := sendData[1].(chan *InvokeData)

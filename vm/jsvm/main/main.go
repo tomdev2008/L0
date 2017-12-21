@@ -46,7 +46,7 @@ func main() {
 		return
 	}
 
-	err = jsvm.Start()
+	err = jsvm.Start("js")
 	if err != nil {
 		log.Error("jsvm start error", err)
 	} else {

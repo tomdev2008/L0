@@ -50,7 +50,7 @@ func main() {
 		return
 	}
 
-	err = luavm.Start()
+	err = luavm.Start("lua")
 	if err != nil {
 		log.Error("luavm start error", err)
 	}
