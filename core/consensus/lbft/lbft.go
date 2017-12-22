@@ -500,20 +500,20 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 
 	if len(vcs) >= lbft.Quorum() {
 		lbft.stopNewViewTimer()
-		if len(vcs) == lbft.Quorum() {
-			if lbft.primaryID != "" {
-				lbft.lastPrimaryID = lbft.primaryID
-				lbft.primaryID = ""
-				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s - %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID, vcs[0].ID)
-			}
-		}
+		// if len(vcs) == lbft.Quorum() {
+		// 	if lbft.primaryID != "" {
+		// 		lbft.lastPrimaryID = lbft.primaryID
+		// 		lbft.primaryID = ""
+		// 		log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s - %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID, vcs[0].ID)
+		// 	}
+		// }
 		q := 0
 		var tvc *ViewChange
 		for _, v := range vcs {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if v.SeqNo <= lbft.execSeqNo || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -529,7 +529,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if v.SeqNo <= lbft.execSeqNo || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -541,6 +541,11 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			q++
 		}
 		if q >= lbft.Quorum() && lbft.primaryID == "" {
+			if lbft.primaryID != "" {
+				lbft.lastPrimaryID = lbft.primaryID
+				lbft.primaryID = ""
+				log.Infof("Replica %s ViewChange(%s) over : clear PrimaryID %s - %s", lbft.options.ID, vcs[0].ID, lbft.lastPrimaryID, vcs[0].ID)
+			}
 			lbft.newView(tvc)
 		}
 	}
