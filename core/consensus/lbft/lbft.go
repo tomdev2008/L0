@@ -513,7 +513,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo <= lbft.execSeqNo || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -529,7 +529,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if v.SeqNo <= lbft.execSeqNo || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
