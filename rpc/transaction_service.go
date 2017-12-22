@@ -27,7 +27,7 @@ import (
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
-	"github.com/bocheninc/L0/core/notify"
+	//"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/components/log"
@@ -123,6 +123,8 @@ type BroadcastReply struct {
 }
 
 func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
+	//startTime := time.Now()
+
 	if len(txHex) < 1 {
 		return errors.New("Invalid Params: len(txSerializeData) must be >0 ")
 	}
@@ -151,35 +153,36 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errors.New("Invalid Tx, varify the signature of Tx failed")
 	}
 
-	ch := make(chan struct{}, 1)
-	var errMsg error
+	//ch := make(chan struct{}, 1)
+	//var errMsg error
 	var sBalance, rBalance *big.Int
 	var assetID int
-	notify.Register(tx.Hash(), 0, nil, nil, func(iTx ...interface{}) {
-		ch <- struct{}{}
-		if len(iTx) == 1 {
-			if s, ok := iTx[0].(error); ok {
-				errMsg = s
-			}
-		}
-		if len(iTx) == 3 {
-			if sb, ok := iTx[0].(*big.Int); ok {
-				sBalance = sb
-			}
-			if rb, ok := iTx[1].(*big.Int); ok {
-				rBalance = rb
-			}
-			if id, ok := iTx[2].(int); ok {
-				assetID = id
-			}
-		}
-	})
+	//notify.Register(tx.Hash(), 0, nil, nil, func(iTx ...interface{}) {
+	//	ch <- struct{}{}
+	//	if len(iTx) == 1 {
+	//		if s, ok := iTx[0].(error); ok {
+	//			errMsg = s
+	//		}
+	//	}
+	//	if len(iTx) == 3 {
+	//		if sb, ok := iTx[0].(*big.Int); ok {
+	//			sBalance = sb
+	//		}
+	//		if rb, ok := iTx[1].(*big.Int); ok {
+	//			rBalance = rb
+	//		}
+	//		if id, ok := iTx[2].(int); ok {
+	//			assetID = id
+	//		}
+	//	}
+	//})
 
 	t.pmHander.Relay(tx)
-	<-ch
-	if errMsg != nil {
-		return errMsg
-	}
+	//<-ch
+	//log.Debugf("BroadcastTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
+	//if errMsg != nil {
+	//	return errMsg
+	//}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)

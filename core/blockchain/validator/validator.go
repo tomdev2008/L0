@@ -69,6 +69,7 @@ type Verification struct {
 	rwInTxs            sync.RWMutex
 	sync.RWMutex
 	sctx *contract.SmartConstract
+	//static map[crypto.Hash]time.Duration
 }
 
 func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.Consenter) *Verification {
@@ -140,6 +141,7 @@ func (v *Verification) processLoop() {
 }
 
 func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
+	startTime := time.Now()
 	if err := v.checkTransaction(tx); err != nil {
 		return err
 	}
@@ -164,6 +166,7 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
 		v.requestBatchTimer.Reset(v.consenter.BatchTimeout())
 	}
 	v.requestBatchSignal <- cnt
+	log.Debugf("ProcessTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
 	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), cnt)
 	return nil
 }
@@ -191,7 +194,9 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		v.rwInTxs.Lock()
 		defer v.rwInTxs.Unlock()
 		var elems []sortedlinkedlist.IElement
+		//d:=time.Now().Sub(time.Unix(0,0))
 		for _, tx := range txs {
+			//v.static[tx.Hash()] =  d- v.static[tx.Hash()]
 			elems = append(elems, tx)
 		}
 		v.txpool.Removes(elems)
