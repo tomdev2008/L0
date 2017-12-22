@@ -45,21 +45,35 @@ var (
 	index          = time.Now().Nanosecond()
 	list           = make(chan *crypto.PrivateKey, 10)
 	txChan         = make(chan *types.Transaction, 1000)
-	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
+	//issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 )
 
 func sendTx() {
 	TCPSend(srvAddress)
 	time.Sleep(time.Second * 20)
 	fmt.Println("start Send ...")
-	go generateIssueTx()
-	go generateAtomicTx()
+	//go generateIssueTx()
+	//go generateAtomicTx()
+
+	go generateContract()
 	for {
 		select {
 		case tx := <-txChan:
 			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 			Relay(NewMsg(0x14, tx.Serialize()))
 		}
+	}
+}
+
+func generateContract() {
+	ct := &Contract{}
+	txChan <- ct.init()
+	time.Sleep(2 * time.Second)
+	txChan <- ct.createInitTransaction()
+	time.Sleep(2 * time.Second)
+	for {
+		time.Sleep(time.Second)
+		txChan <- ct.createInvokeTransaction()
 	}
 }
 
