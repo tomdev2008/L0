@@ -398,6 +398,8 @@ func (self Otto) SetOPCodeLimit(limit int) {
 // MakeCustomError creates a new Error object with the given name and message,
 // returning it as a Value.
 func (self Otto) MakeCustomError(name, message string) Value {
+	//add by yanchenxu return custom error to L0
+	panic(self.runtime.panicCustomError(name, message))
 	return self.runtime.toValue(self.runtime.newError(name, self.runtime.toValue(message), 0))
 }
 

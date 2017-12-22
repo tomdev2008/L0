@@ -55,8 +55,12 @@ func PreInitContract(cd *vm.ContractData) (interface{}, error) {
 func RealInitContract(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Init")
-	if !ok.(bool) || err != nil {
-		return ok, err
+	if err != nil {
+		return false, err
+	}
+
+	if _, ok := ok.(bool); !ok {
+		return false, errors.New("InitContract execContract result type is not bool")
 	}
 
 	err = vmproc.CCallCommit()
@@ -77,8 +81,12 @@ func PreExecute(cd *vm.ContractData) (interface{}, error) {
 func RealExecute(cd *vm.ContractData) (interface{}, error) {
 	resetProc(cd)
 	ok, err := execContract(cd, "L0Invoke")
-	if !ok.(bool) || err != nil {
-		return ok, err
+	if err != nil {
+		return false, err
+	}
+
+	if _, ok := ok.(bool); !ok {
+		return false, errors.New("RealExecute execContract result type is not bool")
 	}
 
 	err = vmproc.CCallCommit()
@@ -95,13 +103,17 @@ func RealExecute(cd *vm.ContractData) (interface{}, error) {
 func QueryContract(cd *vm.ContractData) ([]byte, error) {
 	resetProc(cd)
 
-	result, err := execContract(cd, "L0Query")
-
+	value, err := execContract(cd, "L0Query")
 	if err != nil {
 		return nil, err
 	}
 
-	return []byte(result.(string)), nil
+	result, ok := value.(string)
+	if !ok {
+		return nil, errors.New("QueryContract execContract result type is not string")
+	}
+
+	return []byte(result), nil
 }
 
 func resetProc(cd *vm.ContractData) {

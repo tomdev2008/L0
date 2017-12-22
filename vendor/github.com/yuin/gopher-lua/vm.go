@@ -1484,7 +1484,7 @@ func checkExecLimit(L *LState) {
 	}
 
 	if L.opCodeExecCount > L.Options.MaxAllowOpCodeCount {
-		err := newApiErrorS(ApiErrorRun, "MaxAllowOpCodeCount forbid maxvalue: "+strconv.Itoa(L.Options.MaxAllowOpCodeCount))
+		err := newApiErrorS(ApiErrorRun, "Maximum execute opcode count exceeded maxcount: "+strconv.Itoa(L.Options.MaxAllowOpCodeCount))
 		err.StackTrace = L.stackTrace(0)
 		panic(err)
 	}

@@ -190,6 +190,13 @@ func newError(rt *_runtime, name string, stackFramesToPop int, in ...interface{}
 	return err
 }
 
+//add by yanchenxu return custom error
+func (rt *_runtime) panicCustomError(name string, argumentList ...interface{}) *_exception {
+	return &_exception{
+		value: newError(rt, name, 0, argumentList...),
+	}
+}
+
 func (rt *_runtime) panicTypeError(argumentList ...interface{}) *_exception {
 	return &_exception{
 		value: newError(rt, "TypeError", 0, argumentList...),
