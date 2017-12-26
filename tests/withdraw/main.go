@@ -87,7 +87,13 @@ func main() {
 	invokeArgs = []string{}
 	invokeArgs = append(invokeArgs, "succeed")
 	invokeArgs = append(invokeArgs, "D0002")
-	invokeTx(userPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+	invokeArgs = append(invokeArgs, "10")
+	invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "fail")
+	invokeArgs = append(invokeArgs, "D0003")
+	invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
 }
 
 func issueTx(owner accounts.Address, assetID uint32, amount *big.Int) {

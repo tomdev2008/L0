@@ -26,6 +26,8 @@ import (
 	"math/big"
 	"strings"
 
+	"sync"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
@@ -35,7 +37,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/vm"
-	"sync"
 )
 
 const (
@@ -405,9 +406,13 @@ func (sctx *SmartConstract) ExecuteSmartContractTx(tx *types.Transaction) (types
 	contractSpec := new(types.ContractSpec)
 	utils.Deserialize(tx.Payload, contractSpec)
 	sctx.ExecTransaction(tx, utils.BytesToHex(contractSpec.ContractAddr))
-	_, err := vm.RealExecute(tx, contractSpec, sctx)
+	ok, err := vm.RealExecute(tx, contractSpec, sctx)
 	if err != nil {
 		return nil, fmt.Errorf("contract execute failed : %v ", err)
+	}
+
+	if !ok {
+		return nil, fmt.Errorf("contract execute failed : error in contract")
 	}
 
 	smartContractTxs, err := sctx.FinishContractTransaction()
