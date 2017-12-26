@@ -38,6 +38,7 @@ func exporter(ottoVM *otto.Otto) (*otto.Object, error) {
 	}`)
 
 	exporterFuncs.Set("Account", accountFunc)
+	exporterFuncs.Set("TxInfo", txInfoFunc)
 	exporterFuncs.Set("Transfer", transferFunc)
 	exporterFuncs.Set("CurrentBlockHeight", currentBlockHeightFunc)
 	exporterFuncs.Set("GetGlobalState", getGlobalStateFunc)
@@ -107,6 +108,31 @@ func accountFunc(fc otto.FunctionCall) otto.Value {
 	mp["Balances"] = balancesValue
 	mp["Sender"] = sender
 	mp["Recipient"] = recipient
+	mp["Amount"] = amountValue
+
+	val, err := fc.Otto.ToValue(mp)
+	if err != nil {
+		log.Error("accountFunc -> otto ToValue error", err)
+		return fc.Otto.MakeCustomError("accountFunc", "otto ToValue error:"+err.Error())
+	}
+	return val
+}
+
+func txInfoFunc(fc otto.FunctionCall) otto.Value {
+	sender := vmproc.ContractData.Transaction.Sender().String()
+	recipient := vmproc.ContractData.Transaction.Recipient().String()
+	assetID := vmproc.ContractData.Transaction.AssetID()
+	amount := vmproc.ContractData.Transaction.Amount().Int64()
+	amountValue, err := fc.Otto.ToValue(amount)
+	if err != nil {
+		log.Error("accountFunc -> call amount ToLValue error", err)
+		return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
+	}
+
+	mp := make(map[string]interface{}, 4)
+	mp["Sender"] = sender
+	mp["Recipient"] = recipient
+	mp["AssetID"] = assetID
 	mp["Amount"] = amountValue
 
 	val, err := fc.Otto.ToValue(mp)

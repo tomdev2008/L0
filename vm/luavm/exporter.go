@@ -31,6 +31,7 @@ import (
 func exporter() map[string]lua.LGFunction {
 	return map[string]lua.LGFunction{
 		"Account":            accountFunc,
+		"TxInfo":             txInfoFunc,
 		"Transfer":           transferFunc,
 		"CurrentBlockHeight": currentBlockHeightFunc,
 		"GetGlobalState":     getGlobalStateFunc,
@@ -82,6 +83,20 @@ func accountFunc(l *lua.LState) int {
 	tb.RawSetString("Recipient", lua.LString(recipient))
 	tb.RawSetString("Amount", lua.LNumber(amount))
 	tb.RawSetString("Balances", objToLValue(balances))
+	l.Push(tb)
+	return 1
+}
+
+func txInfoFunc(l *lua.LState) int {
+	sender := vmproc.ContractData.Transaction.Sender().String()
+	recipient := vmproc.ContractData.Transaction.Recipient().String()
+	assetID := vmproc.ContractData.Transaction.AssetID()
+	amount := vmproc.ContractData.Transaction.Amount().Int64()
+	tb := l.NewTable()
+	tb.RawSetString("Sender", lua.LString(sender))
+	tb.RawSetString("Recipient", lua.LString(recipient))
+	tb.RawSetString("AssetID", lua.LNumber(assetID))
+	tb.RawSetString("Amount", lua.LNumber(amount))
 	l.Push(tb)
 	return 1
 }
