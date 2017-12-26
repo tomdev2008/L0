@@ -203,7 +203,7 @@ function succeed(args)
     local tb = string.split(withdrawInfo, "&")
     assetID = tonumber(tb[2])
     amount = tonumber(tb[3])
-    if (amount <= feeAmount) 
+    if (amount < feeAmount) 
     then
         print("ERR :" .. CName ..  " succeed --- balance is not enough", feeAmount, amount)
         return false
