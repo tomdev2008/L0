@@ -40,11 +40,6 @@ type NetworkStack interface {
 	Relay(inv types.IInventory)
 }
 
-type Status struct {
-	Height uint32
-	Tps    int
-}
-
 // Blockchain is blockchain instance
 type Blockchain struct {
 	mu                 sync.Mutex
@@ -58,10 +53,9 @@ type Blockchain struct {
 	// network stack
 	pm NetworkStack
 
-	quitCh       chan bool
-	txCh         chan *types.Transaction
-	blkCh        chan *types.Block
-	heightStatus chan *Status
+	quitCh chan bool
+	txCh   chan *types.Transaction
+	blkCh  chan *types.Block
 
 	orphans *list.List
 	// 0 respresents sync block, 1 respresents sync done
@@ -100,7 +94,6 @@ func NewBlockchain(ledger *ledger.Ledger) *Blockchain {
 		quitCh:             make(chan bool),
 		txCh:               make(chan *types.Transaction, 10000),
 		blkCh:              make(chan *types.Block, 10),
-		heightStatus:       make(chan *Status, 100),
 		currentBlockHeader: new(types.BlockHeader),
 		orphans:            list.New(),
 	}
@@ -217,6 +210,7 @@ func (bc *Blockchain) StartConsensusService() {
 					bc.processConsensusOutput(commitedTxs)
 				} else if commitedTxs.Height > height {
 					//orphan
+					bc.orphans.PushBack(commitedTxs)
 					for elem := bc.orphans.Front(); elem != nil; elem = elem.Next() {
 						ocommitedTxs := elem.Value.(*consensus.OutputTxs)
 						if ocommitedTxs.Height < height {
@@ -232,7 +226,6 @@ func (bc *Blockchain) StartConsensusService() {
 					if bc.orphans.Len() > 100 {
 						bc.orphans.Remove(bc.orphans.Front())
 					}
-					bc.orphans.PushBack(commitedTxs)
 				} /*else if bc.synced {
 					log.Panicf("Height %d already exist in ledger", commitedTxs.Height)
 				}*/
@@ -286,14 +279,9 @@ func (bc *Blockchain) ProcessBlock(blk *types.Block, flag bool) bool {
 		notify.BlockNotify(blk)
 		log.Infof("New Block  %s, height: %d Transaction Number: %d", blk.Hash(), blk.Height(), len(blk.Transactions))
 		bc.currentBlockHeader = blk.Header
-		bc.heightStatus <- &Status{Height: blk.Height(), Tps: len(blk.Transactions) / 10}
 		return true
 	}
 	return false
-}
-
-func (bc *Blockchain) HeightStatusChan() <-chan *Status {
-	return bc.heightStatus
 }
 
 func (bc *Blockchain) merkleRootHash(txs []*types.Transaction) crypto.Hash {
