@@ -558,28 +558,28 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 					ledger.Validator.RollBackAccount(tx)
 					log.Errorf("execute contract Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 					goto ctu
-				} else {
-					var tttxs types.Transactions
-					for _, tt := range ttxs {
-						if err = ledger.executeTransaction(tt, false); err != nil {
-							break
-						}
-						tttxs = append(tttxs, tt)
-					}
-					if len(tttxs) != len(ttxs) {
-						for _, tt := range tttxs {
-							ledger.executeTransaction(tt, true)
-						}
-						errTxs = append(errTxs, tx)
-						//rollback Validator balance cache
-						if ledger.Validator != nil {
-							ledger.Validator.RollBackAccount(tx)
-						}
-						log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-						goto ctu
-					}
-					syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 				}
+			} else {
+				var tttxs types.Transactions
+				for _, tt := range ttxs {
+					if err = ledger.executeTransaction(tt, false); err != nil {
+						break
+					}
+					tttxs = append(tttxs, tt)
+				}
+				if len(tttxs) != len(ttxs) {
+					for _, tt := range tttxs {
+						ledger.executeTransaction(tt, true)
+					}
+					errTxs = append(errTxs, tx)
+					//rollback Validator balance cache
+					if ledger.Validator != nil {
+						ledger.Validator.RollBackAccount(tx)
+					}
+					log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
+					goto ctu
+				}
+				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 			}
 			syncTxs = append(syncTxs, tx)
 		case types.TypeSecurity:
@@ -671,7 +671,7 @@ func (ledger *Ledger) registerBalance(tx *types.Transaction) {
 	rb := big.NewInt(0)
 	sb.Set(senderBalance.Get(tx.AssetID()))
 	rb.Set(recipientBalance.Get(tx.AssetID()))
-	notify.Register(tx.Hash(), tx.AssetID(), sb, rb, func(...interface{}) {})
+	notify.Register(tx.Hash(), tx.AssetID(), sb, rb, func(interface{}) {})
 }
 
 func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {

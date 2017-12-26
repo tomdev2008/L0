@@ -34,7 +34,7 @@ var (
 
 // Register receive transaction hash and callback function
 // When the transaction is submitted execute callback function
-func Register(txHash interface{}, id uint32, sender, recipient *big.Int, callback func(...interface{})) error {
+func Register(txHash interface{}, id uint32, sender, recipient *big.Int, callback func(interface{})) error {
 	if callback == nil || txHash == nil {
 		return errors.New("txHash or callback function cannot be nil")
 
@@ -61,7 +61,7 @@ func BlockNotify(block *types.Block) {
 		for _, tx := range block.Transactions {
 			if cb, ok := callbacks.Load(tx.Hash()); ok {
 				if balance, b := cb.(*types.Balance); b {
-					balance.Callback(balance.Sender, balance.Recipient, balance.ID)
+					balance.Callback(balance)
 				}
 				if !(params.Nvp && params.Mongodb) {
 					callbacks.Delete(tx.Hash())

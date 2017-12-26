@@ -117,7 +117,7 @@ func transferFunc(l *lua.LState) int {
 		return 1
 	}
 
-	l.Push(lua.LBool(false))
+	l.Push(lua.LBool(true))
 	return 1
 }
 

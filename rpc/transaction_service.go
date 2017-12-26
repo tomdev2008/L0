@@ -27,10 +27,11 @@ import (
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/notify"
 	//"github.com/bocheninc/L0/core/notify"
+	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/L0/components/log"
 )
 
 type IBroadcast interface {
@@ -153,36 +154,26 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errors.New("Invalid Tx, varify the signature of Tx failed")
 	}
 
-	//ch := make(chan struct{}, 1)
-	//var errMsg error
-	var sBalance, rBalance *big.Int
-	var assetID int
-	//notify.Register(tx.Hash(), 0, nil, nil, func(iTx ...interface{}) {
-	//	ch <- struct{}{}
-	//	if len(iTx) == 1 {
-	//		if s, ok := iTx[0].(error); ok {
-	//			errMsg = s
-	//		}
-	//	}
-	//	if len(iTx) == 3 {
-	//		if sb, ok := iTx[0].(*big.Int); ok {
-	//			sBalance = sb
-	//		}
-	//		if rb, ok := iTx[1].(*big.Int); ok {
-	//			rBalance = rb
-	//		}
-	//		if id, ok := iTx[2].(int); ok {
-	//			assetID = id
-	//		}
-	//	}
-	//})
+	var (
+		errMsg  error
+		balance *types.Balance
+	)
+	ch := make(chan struct{}, 1)
+	notify.Register(tx.Hash(), 0, nil, nil, func(arg interface{}) {
+		ch <- struct{}{}
+		switch arg.(type) {
+		case error:
+			errMsg = arg.(error)
+		case *types.Balance:
+			balance = arg.(*types.Balance)
+		}
+	})
 
 	t.pmHander.Relay(tx)
-	//<-ch
-	//log.Debugf("BroadcastTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
-	//if errMsg != nil {
-	//	return errMsg
-	//}
+	<-ch
+	if errMsg != nil {
+		return errMsg
+	}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
 		contractSpec := new(types.ContractSpec)
@@ -190,7 +181,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)
 		*reply = BroadcastReply{ContractAddr: &contractAddr, TransactionHash: tx.Hash()}
 	} else {
-		*reply = BroadcastReply{TransactionHash: tx.Hash(), SenderBalance: sBalance, RecipientBalance: rBalance, AssetID: assetID}
+		*reply = BroadcastReply{TransactionHash: tx.Hash(), SenderBalance: balance.Sender, RecipientBalance: balance.Recipient, AssetID: int(balance.ID)}
 	}
 	return nil
 }

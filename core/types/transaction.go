@@ -49,7 +49,7 @@ type Balance struct {
 	ID        uint32
 	Sender    *big.Int
 	Recipient *big.Int
-	Callback  func(...interface{})
+	Callback  func(interface{})
 }
 
 type ContractSpec struct {
