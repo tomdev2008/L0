@@ -27,7 +27,6 @@ import (
 	"net/rpc/jsonrpc"
 	"strings"
 
-	"encoding/json"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -113,12 +112,8 @@ func (pm *ProtocolManager) Start() {
 	pm.merger.Start()
 
 	go jrpc.StartServer(pm.jrpcServer, config.JrpcConfig())
-
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
-
-	go pm.reportStatusLoop()
-
 	go func() {
 		for {
 			<-time.NewTicker(time.Minute).C
@@ -258,19 +253,6 @@ func (pm *ProtocolManager) broadcastLoop() {
 		select {
 		case msg := <-pm.msgCh:
 			pm.Broadcast(msg)
-		}
-	}
-}
-
-func (pm *ProtocolManager) reportStatusLoop() {
-	for {
-		select {
-		case status := <-pm.Blockchain.HeightStatusChan():
-			msg := msgnet.Message{}
-			msg.Cmd = msgnet.ChainNodeStatusMsg
-			payload, _ := json.Marshal(*status)
-			msg.Payload = payload
-			pm.SendMsgnetMessage(pm.peerAddress(), "deploy:server", msg)
 		}
 	}
 }
