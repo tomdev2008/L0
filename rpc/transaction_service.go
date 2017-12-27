@@ -175,7 +175,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 		return errMsg
 	}
 
-	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke {
+	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke || tp == types.TypeSecurity {
 		contractSpec := new(types.ContractSpec)
 		utils.Deserialize(tx.Payload, contractSpec)
 		contractAddr := utils.BytesToHex(contractSpec.ContractAddr)

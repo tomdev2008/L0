@@ -21,3 +21,7 @@ debug.test
 tests/client/client
 *.tgz
 build/mongodb/*
+tests/contract/security.so
+tests/contract/contract
+
+

@@ -531,6 +531,8 @@ func (ledger *Ledger) init() error {
 func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, types.Transactions) {
 	var (
 		err                error
+		adminData          []byte
+		pluginData         *plugins.Plugin
 		errTxs             types.Transactions
 		syncTxs            types.Transactions
 		syncContractGenTxs types.Transactions
@@ -583,7 +585,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 			}
 			syncTxs = append(syncTxs, tx)
 		case types.TypeSecurity:
-			adminData, err := ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
+			adminData, err = ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {
 				log.Error(err)
 				goto ctu
@@ -602,24 +604,28 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 			}
 
 			if tx.Sender() != adminAddr {
-				log.Error("deploy security plugin, permission denied")
+				err = errors.New("deploy security plugin, permission denied")
+				log.Error(err)
 				goto ctu
 			}
 
-			pluginData, err := plugins.Make(tx.Payload)
+			pluginData, err = plugins.Make(tx.Payload)
 			if err != nil {
-				log.Error("invalid security plugin data")
+				err = errors.New("invalid security plugin data, " + err.Error())
+				log.Error(err)
 				goto ctu
 			}
 
 			if len(pluginData.Name) == 0 {
-				log.Error("name of security plugin is empty")
+				err = errors.New("name of security plugin is empty")
+				log.Error(err)
 				goto ctu
 			}
 
 			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginData.Name)
 			if utils.FileExist(path) {
-				log.Errorf("security plugin %s already existed", pluginData.Name)
+				err = fmt.Errorf("security plugin %s already existed", pluginData.Name)
+				log.Error(err)
 				goto ctu
 			}
 
@@ -628,6 +634,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				log.Error(err)
 				goto ctu
 			}
+			syncTxs = append(syncTxs, tx)
 		default:
 			if err = ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
