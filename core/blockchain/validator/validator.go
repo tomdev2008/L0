@@ -167,7 +167,8 @@ func (v *Verification) ProcessTransaction(tx *types.Transaction) error {
 	}
 	v.requestBatchSignal <- cnt
 	log.Debugf("ProcessTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
-	log.Debugf("[txPool] add transaction success, tx_hash: %s,txpool_len: %d", tx.Hash().String(), cnt)
+	log.Debugf("[txPool] add transaction success, tx_hash: %s, sender: %s, receiver: %s, assetID %d, amount: %s,txpool_len: %d",
+		tx.Hash().String(), tx.Sender(), tx.Recipient(), tx.AssetID(), tx.Amount().String(), cnt)
 	return nil
 }
 
