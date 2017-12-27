@@ -74,12 +74,18 @@ function L0Query(args)
         str = str .. v .. ","
     end
     print("INFO:" .. CName ..  " L0Query(" .. string.sub(str, 0, -2) .. ")")
-
+    -- validate
+    if(table.size(args) ~= 1)
+    then
+        print("ERR :" .. CName ..  " L0Query --- wrong args number", table.size(args))
+        return false
+    end
+    -- execute
     local withdrawID = "withdraw_"..args[0]
     local withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo)
     then
-        return "not found " .. withdrawID 
+        return "not found " .. args[0] 
     end
     return withdrawInfo
 end
@@ -100,7 +106,7 @@ function launch(args)
     ----[[
     if (L0.GetState(withdrawID))
     then
-        print("ERR :" .. CName ..  " launch --- id alreay exist", args[0])
+        print("ERR :" .. CName ..  " launch --- withdrawID alreay exist", args[0])
         return false
     end
     local txInfo = L0.TxInfo()
@@ -117,13 +123,13 @@ function launch(args)
         print("ERR :" .. CName ..  " launch --- wrong assetID", assetID)
         return false
     end
-    if (type(amount) ~= "number" or amount < 0)
+    if (type(amount) ~= "number" or amount <= 0)
     then
         print("ERR :" .. CName ..  " launch --- wrong amount", amount)
         return false
     end
     L0.PutState(withdrawID, sender.."&"..assetID.."&"..amount)
-    print("INFO:" .. CName ..  " launch ---", withdrawID, sender.."&"..assetID.."&"..amount)
+    print("INFO:" .. CName ..  " launch ---", withdrawID, sender, assetID, amount)
     --]]--
     return true
 end
@@ -144,11 +150,17 @@ function cancel(args)
     withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo) 
     then
-        print("ERR :" .. CName ..  " cancel --- id not exist", args[0])
+        print("ERR :" .. CName ..  " cancel --- withdrawID not exist", args[0])
         return false
     end
     local txInfo = L0.TxInfo()
     local sender = txInfo["Sender"]
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " cancel --- wrong tx amount", amount)
+        return false
+    end
     local tb = string.split(withdrawInfo, "&")
     receiver = tb[1]
     assetID = tonumber(tb[2])
@@ -188,16 +200,22 @@ function succeed(args)
     local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()
     local sender = txInfo["Sender"]
+    local amount = txInfo["Amount"]
     if (system ~= sender) 
     then
         print("ERR :" .. CName ..  " succeed --- wrong sender", sender, system)
+        return false
+    end
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " succeed --- wrong tx amount", amount)
         return false
     end
 
     withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo) 
     then
-        print("ERR :" .. CName ..  " succeed --- id not exist", args[0])
+        print("ERR :" .. CName ..  " succeed --- withdrawID not exist", args[0])
         return false
     end
     local tb = string.split(withdrawInfo, "&")
@@ -235,9 +253,15 @@ function fail(args)
     local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()
     local sender = txInfo["Sender"]
+    local amount = txInfo["Amount"]
     if (system ~= sender) 
     then
         print("ERR :" .. CName ..  " fail --- wrong sender", sender, system)
+        return false
+    end
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " fail --- wrong tx amount", amount)
         return false
     end
 

@@ -15,7 +15,7 @@ table.size = function(tb)
     return cnt
 end
 -- 合约创建时会被调用一次，之后就不会被调用
--- 设置手续费账户地址
+-- 设置系统账户地址 & 手续费账户地址
 function L0Init(args)
     -- info
     local str = ""
@@ -80,13 +80,19 @@ function L0Query(args)
         str = str .. v .. ","
     end
     print("INFO:" .. CName ..  " L0Query(" .. string.sub(str, 0, -2) .. ")")
-
+    -- validate
+    if(table.size(args) ~= 2)
+    then
+        print("ERR :" .. CName ..  " L0Query --- wrong args number", table.size(args))
+        return false
+    end
+    -- execute
     if (args[0] == "order") then
         local orderID = "order_"..args[1]
         local orderInfo = L0.GetState(orderID)
         if (not orderInfo)
         then
-            return "not found order " .. args[1] 
+            return "not found orderID " .. args[1] 
         end
         return orderInfo
     elseif (args[0] == "match") then
@@ -95,12 +101,15 @@ function L0Query(args)
         local matchInfo_sell = L0.GetState(matchID.."_sell")
         if (not matchInfo_buy and not matchInfo_sell)
         then
-            return "not found match" .. args[1] 
+            return "not found matchID " .. args[1] 
+        end
+        if not matchInfo_sell then
+            return matchInfo_buy
         end
         return matchInfo_buy .. "|" .. matchInfo_sell
+    else 
+        return "not support " .. args[0]
     end
-
-    
 end
 
 --  用户账户发起订单, 发送方转账到合约账户，保存订单ID（冻结金额）
@@ -119,7 +128,7 @@ function launch(args)
     ----[[
     if (L0.GetState(orderID))
     then
-        print("ERR :" .. CName ..  " launch --- id alreay exist", args[0])
+        print("ERR :" .. CName ..  " launch --- orderID alreay exist", args[0])
         return false
     end
     local txInfo = L0.TxInfo()
@@ -136,13 +145,13 @@ function launch(args)
         print("ERR :" .. CName ..  " launch --- wrong assetID", assetID)
         return false
     end
-    if (type(amount) ~= "number" or amount < 0)
+    if (type(amount) ~= "number" or amount <= 0)
     then
         print("ERR :" .. CName ..  " launch --- wrong amount", amount)
         return false
     end
     L0.PutState(orderID, sender.."&"..assetID.."&"..amount)
-    print("INFO:" .. CName ..  " launch ---", orderID, sender.."&"..assetID.."&"..amount)
+    print("INFO:" .. CName ..  " launch ---", orderID, sender, assetID, amount)
     --]]--
     return true
 end
@@ -174,6 +183,12 @@ function cancel(args)
     end
     local txInfo = L0.TxInfo()
     local sender = txInfo["Sender"]
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " cancel --- wrong tx amount", amount)
+        return false
+    end
     local tb = string.split(orderInfo, "&")
     local receiver = tb[1]
     local assetID = tonumber(tb[2])
@@ -190,7 +205,6 @@ function cancel(args)
         return false
     end
     L0.Transfer(receiver, assetID,tamount)
-
     local b = amount - tamount
     if (b == 0) then
         L0.DelState(orderID)
@@ -230,17 +244,23 @@ function matching(args)
         print("ERR :" .. CName ..  " matching --- wrong sender", sender, system)
         return false
     end
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " matching --- wrong tx amount", amount)
+        return false
+    end
     local matchInfo_buy = L0.GetState(matchID.."_buy")
     local matchInfo_sell = L0.GetState(matchID.."_sell")
     if (matchInfo_buy and matchInfo_sell) 
     then
-        print("ERR :" .. CName ..  " matching --- match id alreay exist", args[0])
+        print("ERR :" .. CName ..  " matching --- matchID alreay exist", args[0])
         return false
     end
     local orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
     then
-        print("ERR :" .. CName ..  " matching --- order id not exist", args[1])
+        print("ERR :" .. CName ..  " matching --- orderID not exist", args[1])
         return false
     end
     local tb = string.split(orderInfo, "&")
@@ -259,13 +279,13 @@ function matching(args)
     else
         L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
+
     if (not matchInfo_buy)
     then
         L0.PutState(matchID.."_buy",  receiver.."&"..assetID.."&"..tamount)
     else
         L0.PutState(matchID.."_sell",  receiver.."&"..assetID.."&"..tamount)
     end
-    
     print("INFO:" .. CName ..  " matching ---", matchID, orderID, amount, tamount, b)
     --]]--
     return true
@@ -278,7 +298,7 @@ function matched(args)
     -- validate
     if(table.size(args) ~= 1)
     then
-        print("ERR :" .. "fail --- wrong args number", table.size(args))
+        print("ERR :" .. "matched --- wrong args number", table.size(args))
         return false
     end
     -- execute
@@ -289,14 +309,20 @@ function matched(args)
     local sender = txInfo["Sender"]
     if (system ~= sender) 
     then
-        print("ERR :" .. CName ..  " fail --- wrong sender", sender, system)
+        print("ERR :" .. CName ..  " matched --- wrong sender", sender, system)
+        return false
+    end
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " matched --- wrong tx amount", amount)
         return false
     end
     local matchInfo_buy = L0.GetState(matchID.."_buy")
     local matchInfo_sell = L0.GetState(matchID.."_sell")
     if (not matchInfo_buy or not matchInfo_sell) 
     then
-        print("ERR :" .. CName ..  " fail --- matchID not exist", args[0])
+        print("ERR :" .. CName ..  " matched --- matchID not exist", args[0])
         return false
     end
     
@@ -326,7 +352,7 @@ function feecharge(args)
     -- validate
     if(table.size(args) ~= 3)
     then
-        print("ERR :" .. "matching --- wrong args number", table.size(args))
+        print("ERR :" .. "feecharge --- wrong args number", table.size(args))
         return false
     end
     -- execute
@@ -335,7 +361,7 @@ function feecharge(args)
     local feeamount = tonumber(args[2]) 
     if (not feeamount or feeamount <0) 
     then
-        print("ERR :" .. CName ..  " launch --- wrong fee amount", args[2])
+        print("ERR :" .. CName ..  " feecharge --- wrong fee amount", args[2])
         return false
     end
     ----[[
@@ -344,14 +370,20 @@ function feecharge(args)
     local sender = txInfo["Sender"]
     if (system ~= sender) 
     then
-        print("ERR :" .. CName ..  " matching --- wrong sender", sender, system)
+        print("ERR :" .. CName ..  " feecharge --- wrong sender", sender, system)
         return false
     end
-    
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " feecharge --- wrong tx amount", amount)
+        return false
+    end
+
     local orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
     then
-        print("ERR :" .. CName ..  " matching --- order id not exist", args[1])
+        print("ERR :" .. CName ..  " feecharge --- orderID not exist", args[1])
         return false
     end
     local tb = string.split(orderInfo, "&")
@@ -384,7 +416,7 @@ function syscancel(args)
     -- validate
     if(table.size(args) ~= 2)
     then
-        print("ERR :" .. CName ..  " cancel --- wrong args number", table.size(args))
+        print("ERR :" .. CName ..  " syscancel --- wrong args number", table.size(args))
         return false
     end
     -- execute
@@ -392,24 +424,31 @@ function syscancel(args)
     local tamount = tonumber(args[1])
     if (not tamount or tamount < 0) 
     then
-        print("ERR :" .. CName ..  " cancel --- wrong amount", args[1])
+        print("ERR :" .. CName ..  " syscancel --- wrong amount", args[1])
         return false
     end
     ----[[
     orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
     then
-        print("ERR :" .. CName ..  " cancel --- id not exist", args[0])
+        print("ERR :" .. CName ..  " syscancel --- id not exist", args[0])
         return false
     end
-     local system = L0.GetState("account_system")
+    local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()
     local sender = txInfo["Sender"]
     if (system ~= sender) 
     then
-        print("ERR :" .. CName ..  " cancel --- wrong sender", system, sender)
+        print("ERR :" .. CName ..  " syscancel --- wrong sender", system, sender)
         return false
     end
+    local amount = txInfo["Amount"]
+    if (type(amount) ~= "number" or amount > 0)
+    then
+        print("ERR :" .. CName ..  " syscancel --- wrong tx amount", amount)
+        return false
+    end
+
     local tb = string.split(orderInfo, "&")
     local receiver = tb[1]
     local assetID = tonumber(tb[2])
@@ -418,7 +457,7 @@ function syscancel(args)
     -- to do balance check
     if (amount < tamount)
     then
-        print("ERR :" .. CName ..  " cancel --- balance not enough", amount, tamount)
+        print("ERR :" .. CName ..  " syscancel --- balance not enough", amount, tamount)
         return false
     end
     L0.Transfer(receiver, assetID,tamount)

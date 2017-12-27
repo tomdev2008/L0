@@ -87,7 +87,7 @@ func main() {
 	invokeArgs = []string{}
 	invokeArgs = append(invokeArgs, "succeed")
 	invokeArgs = append(invokeArgs, "D0002")
-	invokeArgs = append(invokeArgs, "10")
+	invokeArgs = append(invokeArgs, "100")
 	invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
 
 	invokeArgs = []string{}
