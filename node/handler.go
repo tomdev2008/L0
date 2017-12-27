@@ -47,6 +47,7 @@ import (
 	"github.com/bocheninc/L0/msgnet"
 	jrpc "github.com/bocheninc/L0/rpc"
 	"github.com/willf/bloom"
+	"math/rand"
 )
 
 // ProtocolManager manages the protocol
@@ -147,11 +148,15 @@ func (pm *ProtocolManager) handle(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 }
 
 func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
+	threadRandNum := rand.Int()
 	for {
 		m, err := rw.ReadMsg()
 		if err != nil {
 			return err
 		}
+
+		log.Debugf("handleMsg [thread: %d], cmd: %d, peer_addr: %s, remote_addr: %s", threadRandNum, m.Cmd, p.Address, p.Conn.RemoteAddr())
+		startTime := time.Now()
 		switch m.Cmd {
 		case statusMsg:
 			return fmt.Errorf("should not appear status message")
@@ -176,6 +181,7 @@ func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 		default:
 			log.Error("Unknown message")
 		}
+		log.Debugf("handleMsg [thread: %d], cmd: %d, time: %s", threadRandNum, m.Cmd, time.Now().Sub(startTime))
 	}
 }
 
@@ -187,6 +193,8 @@ func (pm *ProtocolManager) handleShake(rw p2p.MsgReadWriter) {
 	rw.WriteMsg(*p2p.NewMsg(statusMsg, utils.Serialize(s)))
 }
 
+var allProcessTransaction time.Duration
+var allTransactionCnt int64
 // Relay relays inventory to remote peers
 func (pm *ProtocolManager) Relay(inv types.IInventory) {
 	var (
@@ -209,7 +217,19 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 			break
 		}
 
+		startTime := time.Now()
+
+		//notify.RegisterTransaction(&tx)
 		if pm.Blockchain.ProcessTransaction(&tx, true) {
+			oneProcessTransaction := time.Now().Sub(startTime)
+			allProcessTransaction += oneProcessTransaction
+			allTransactionCnt += 1
+			if allTransactionCnt % 100 == 0 {
+				log.Debugf("ProcessTransaction, tx_cnt: %+v, avg_time: %d", allTransactionCnt, allProcessTransaction.Nanoseconds() / allTransactionCnt /1000 /1000)
+
+			}
+			log.Debugf("ProcessTransaction, tx_hash: %+v time: %s", tx.Hash(), oneProcessTransaction)
+
 			//inventory.Type = InvTypeTx
 			//inventory.Hashes = []crypto.Hash{inv.Hash()}
 			msg = p2p.NewMsg(txMsg, inv.Serialize())
@@ -314,7 +334,7 @@ func (pm *ProtocolManager) OnTx(m p2p.Msg, p *p2p.Peer) {
 	}
 
 	//log.Debugln("OnTx Hash=", tx.Hash(), " Nonce=", tx.Nonce())
-
+	//notify.RegisterTransaction(tx)
 	if params.MaxOccurs > 1 {
 		pm.jobs <- &job{
 			In: tx,

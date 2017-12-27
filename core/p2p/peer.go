@@ -215,6 +215,9 @@ func (peer *Peer) run() {
 		m, err := readMsg(conn)
 		if m == nil || err != nil {
 			log.Errorf("peer read msg error %s", err)
+			for _, proto := range peer.running {
+				close(proto.in)
+			}
 			peerManager.delPeer <- conn
 			break
 		}
@@ -248,6 +251,9 @@ func (peer *Peer) run() {
 				}
 			} else {
 				log.Error("unknown message", p)
+				for _, proto := range peer.running {
+					close(proto.in)
+				}
 				peerManager.delPeer <- conn
 				break
 			}

@@ -31,6 +31,8 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/core/blockchain/validator"
+	"strings"
 )
 
 type IBroadcast interface {
@@ -236,4 +238,22 @@ func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
 
 	return nil
 
+}
+
+func (t *Transaction) GetTxPool(req *string, resp *string) error {
+	if len(*req) > 5 {
+		ok := validator.GetTxPoolTransacton(crypto.HexToHash(*req))
+		if ok {
+			*resp = "true"
+		} else {
+			*resp = "false"
+		}
+
+		return nil
+	}
+
+	txs := validator.GetTxPoolTransactions()
+	*resp = strings.Join(txs, " Hash: ")
+
+	return nil
 }

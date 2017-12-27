@@ -374,6 +374,7 @@ func (pm *peerManager) broadcast(msg *Msg) {
 				}
 			}
 			log.Debugf("Peer Manager broadcast message %d to peer %s ...", msg.Cmd, peer.Address)
+			//peer.Conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
 			if n, err := msg.write(peer.Conn); err != nil || n == 0 {
 				log.Errorf("broadcast message write error %d - %v", n, err)
 			}

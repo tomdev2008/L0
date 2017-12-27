@@ -26,18 +26,23 @@ end
 -- 查询
 function L0Query(args)
     print("in L0Query")
+    local tabs = L0.GetState(args[0])
+    local amount = L0.GetState(args[0].."amount")
+    local balances = L0.GetState("System")
+    print("value", tabs["tags"], tabs["amount"], amount, balances["amount"])
     return "L0query ok"
 end
 
 function send(args)
     local sender = L0.Account().Address
     local balances = L0.GetState("System")
-    balances = balances["amount"] - tonumber(args[1])
+    balances["amount"] = balances["amount"] - tonumber(args[1])
     local tabs = {amount=tonumber(args[1]), tags=args[2]}
     L0.PutState(args[0], tabs)
     L0.PutState(args[0].."tags", args[2])
     L0.PutState(args[0].."amount", args[1])
     L0.PutState("balances", balances)
+    print("send...", args[0], args[1], args[2])
 end
 
 function transfer(receiver, amount)

@@ -44,7 +44,7 @@ func NewContract() *Contract {
 }
 
 func (ct *Contract) transfer() {
-	//ct.initContract("lua", "./l0coin.lua", []string{"test"}, []string{})
+	ct.initContract("lua", "./l0coin.lua", []string{"test"}, []string{})
 	time.Sleep(3 * time.Second)
 	for j := 0; j < 10000; j ++ {
 		//time.Sleep(time.Second)
@@ -95,6 +95,7 @@ func (ct *Contract) init() error {
 		fmt.Errorf("filePath: %+v", err)
 	}
 	ct.dirPath = dir //filepath.Join(dir, )
+
 
 	assetID := 1
 	res, err := common.GetAsset(uint32(assetID))

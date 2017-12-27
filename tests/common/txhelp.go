@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"fmt"
 )
 
 var (
@@ -137,7 +138,7 @@ func CreateContractTransaction(txconf *TxConf, conf *ContractConf) *types.Transa
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txconf.receiver = accounts.NewAddress(contractSpec.ContractAddr)
-
+	fmt.Println(txconf.receiver.String())
 	return tx
 }
 

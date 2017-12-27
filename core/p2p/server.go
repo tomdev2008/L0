@@ -181,6 +181,10 @@ func (srv *Server) Sign(data []byte) (*crypto.Signature, error) {
 
 // Broadcast broadcasts message to remote peers
 func (srv *Server) Broadcast(msg *Msg) {
+	//if len(srv.peerManager.broadcastCh) > 98 {
+	//	log.Errorf("BroadcastCh len: %d", len(srv.peerManager.broadcastCh))
+	//	return
+	//}
 	srv.peerManager.broadcastCh <- msg
 }
 

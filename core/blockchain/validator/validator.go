@@ -72,8 +72,10 @@ type Verification struct {
 	//static map[crypto.Hash]time.Duration
 }
 
+var vf *Verification
+
 func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.Consenter) *Verification {
-	return &Verification{
+	vf = &Verification{
 		config:             config,
 		ledger:             ledger,
 		consenter:          consenter,
@@ -86,6 +88,8 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		inTxs:              make(map[crypto.Hash]*types.Transaction),
 		sctx:               contract.NewSmartConstract(ledger.DBHandler(), ledger),
 	}
+
+	return vf
 }
 
 func (v *Verification) Start() {
@@ -415,4 +419,20 @@ func (v *Verification) GetAsset(id uint32) *state.Asset {
 		asset, _ = v.ledger.GetAssetFromDB(id)
 	}
 	return asset
+}
+
+func GetTxPoolTransactions() []string {
+	iter := vf.txpool.Iter()
+	txs := []string{}
+	for ele := iter(); ele != nil ; ele = iter() {
+		tx := ele.(*types.Transaction)
+		txs = append(txs, tx.Hash().String())
+	}
+
+	return txs
+}
+
+func GetTxPoolTransacton(txHash crypto.Hash) bool {
+	_, ok := vf.GetTransactionByHash(txHash)
+	return ok
 }
