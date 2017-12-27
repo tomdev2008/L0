@@ -83,8 +83,46 @@ func main() {
 	invokeArgs = []string{}
 	invokeArgs = append(invokeArgs, "cancel")
 	invokeArgs = append(invokeArgs, "D0002")
+	invokeArgs = append(invokeArgs, "500")
+	invokeTx(userPriv2, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "matching")
+	invokeArgs = append(invokeArgs, "M0001")
+	invokeArgs = append(invokeArgs, "D0001")
 	invokeArgs = append(invokeArgs, "300")
-	invokeTx(userPriv2, assetID2, big.NewInt(500), contractAddr, invokeArgs)
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "matching")
+	invokeArgs = append(invokeArgs, "M0001")
+	invokeArgs = append(invokeArgs, "D0002")
+	invokeArgs = append(invokeArgs, "300")
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "matched")
+	invokeArgs = append(invokeArgs, "M0001")
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "feecharge")
+	invokeArgs = append(invokeArgs, "M0001")
+	invokeArgs = append(invokeArgs, "D0001")
+	invokeArgs = append(invokeArgs, "30")
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "syscancel")
+	invokeArgs = append(invokeArgs, "D0001")
+	invokeArgs = append(invokeArgs, "670")
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "syscancel")
+	invokeArgs = append(invokeArgs, "D0002")
+	invokeArgs = append(invokeArgs, "200")
+	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
 }
 
 func issueTx(owner accounts.Address, assetID uint32, amount *big.Int) {

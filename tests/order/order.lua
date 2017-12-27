@@ -195,7 +195,7 @@ function cancel(args)
     if (b == 0) then
         L0.DelState(orderID)
     else
-        L0.PutState(orderID, sender.."&"..assetID.."&"..b)
+        L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
     print("INFO:" .. CName ..  " cancel ---", orderID, receiver, assetID, amount, tamount, b)
     --]]--
@@ -257,7 +257,7 @@ function matching(args)
     if (b == 0) then
         L0.DelState(orderID)
     else
-        L0.PutState(orderID, sender.."&"..assetID.."&"..b)
+        L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
     if (not matchInfo_buy)
     then
@@ -368,7 +368,7 @@ function feecharge(args)
     if (b == 0) then
         L0.DelState(orderID)
     else
-        L0.PutState(orderID, sender.."&"..assetID.."&"..b)
+        L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
     fee = L0.GetState("account_fee")
     L0.Transfer(fee, assetID, feeamount)
@@ -402,16 +402,19 @@ function syscancel(args)
         print("ERR :" .. CName ..  " cancel --- id not exist", args[0])
         return false
     end
-    local system = L0.GetState("account_system")
+     local system = L0.GetState("account_system")
+    local txInfo = L0.TxInfo()
+    local sender = txInfo["Sender"]
+    if (system ~= sender) 
+    then
+        print("ERR :" .. CName ..  " cancel --- wrong sender", system, sender)
+        return false
+    end
     local tb = string.split(orderInfo, "&")
     local receiver = tb[1]
     local assetID = tonumber(tb[2])
     local amount = tonumber(tb[3])
-    if (receiver ~= system) 
-    then
-        print("ERR :" .. CName ..  " cancel --- wrong sender", system, receiver)
-        return false
-    end
+    
     -- to do balance check
     if (amount < tamount)
     then
@@ -424,7 +427,7 @@ function syscancel(args)
     if (b == 0) then
         L0.DelState(orderID)
     else
-        L0.PutState(orderID, sender.."&"..assetID.."&"..b)
+        L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
     print("INFO:" .. CName ..  " syscancel ---", orderID, receiver, assetID, amount, tamount, b)
     --]]--
