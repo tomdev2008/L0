@@ -1,7 +1,8 @@
 -- 用合约来完成一个提现系统
 local L0 = require("L0")
 -- 提现合约
-local CName = "withdraw" 
+local CName = "withdraw"
+local Scale = 1
 string.split = function(s, p)
     local rt= {}
     string.gsub(s, '[^'..p..']+', function(w) table.insert(rt, w) end )
@@ -85,9 +86,13 @@ function L0Query(args)
     local withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo)
     then
-        return "not found " .. args[0] 
+        return args[0] .. " not found "
     end
-    return withdrawInfo
+    local tb = string.split(withdrawInfo, "&")
+    addr = tb[1]
+    assetID = tonumber(tb[2])
+    amount = tonumber(tb[3])/Scale
+    return args[0] .. " addr:" .. addr .. " , asset:" .. assetID .. " , amount:" .. amount
 end
 
 --  用户账户发起提现, 发送方转账到合约账户，保存提现ID
@@ -196,6 +201,7 @@ function succeed(args)
         print("ERR :" .. CName ..  " launch --- wrong feeAmount", feeAmount)
         return false
     end
+    feeAmount = feeAmount * Scale
     ----[[
     local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()

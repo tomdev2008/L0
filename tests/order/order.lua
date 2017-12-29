@@ -2,6 +2,7 @@
 local L0 = require("L0")
 -- 订单清算(撮合)
 local CName = "order" 
+local Scale = 1
 string.split = function(s, p)
     local rt= {}
     string.gsub(s, '[^'..p..']+', function(w) table.insert(rt, w) end )
@@ -92,23 +93,29 @@ function L0Query(args)
         local orderInfo = L0.GetState(orderID)
         if (not orderInfo)
         then
-            return "not found orderID " .. args[1] 
+            return "order " .. args[1] .. " not found " 
         end
-        return orderInfo
-    elseif (args[0] == "match") then
-        local matchID = "match"..args[1]
+        local tb = string.split(orderInfo, "&")
+        local amount = tonumber(tb[3])/Scale
+        return "order " .. args[1] .. " addr:" .. tb[1] .. " , asset:" .. tb[2] .. " , amount:" .. amount 
+    elseif (args[0] == "matching") then
+        local matchID = "match_"..args[1]
         local matchInfo_buy = L0.GetState(matchID.."_buy")
         local matchInfo_sell = L0.GetState(matchID.."_sell")
         if (not matchInfo_buy and not matchInfo_sell)
         then
-            return "not found matchID " .. args[1] 
+            return "matching " .. args[1] .. " not found "
         end
+        local tb_buy = string.split(matchInfo_buy, "&")
+        local amount_buy = tonumber(tb_buy[3])/Scale
         if not matchInfo_sell then
-            return matchInfo_buy
+            return args[1] .. " addr:" .. tb_buy[1] .. " , asset:" .. tb_buy[2] .. " , amount:" ..  amount_buy
         end
-        return matchInfo_buy .. "|" .. matchInfo_sell
+        local tb_sell = string.split(matchInfo_sell, "&")
+        local amount_sell = tonumber(tb_sell[3])/Scale
+        return "matching " .. args[1] .. " addr:" .. tb_buy[1] .. " , asset:" .. tb_buy[2] .. " , amount:" .. amount_buy .. " addr:" .. tb_sell[1] .. " , asset:" .. tb_sell[2] .. " , amount:" .. amount_sell
     else 
-        return "not support " .. args[0]
+        return args[0] .. " not support "
     end
 end
 
@@ -174,6 +181,7 @@ function cancel(args)
         print("ERR :" .. CName ..  " cancel --- wrong amount", args[1])
         return false
     end
+    tamount = tamount * Scale
     ----[[
     orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
@@ -235,6 +243,7 @@ function matching(args)
         print("ERR :" .. CName ..  " launch --- wrong amount", args[2])
         return false
     end
+    tamount = tamount * Scale
     ----[[
     local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()
@@ -364,6 +373,7 @@ function feecharge(args)
         print("ERR :" .. CName ..  " feecharge --- wrong fee amount", args[2])
         return false
     end
+    feeamount = feeamount * Scale
     ----[[
     local system = L0.GetState("account_system")
     local txInfo = L0.TxInfo()
@@ -427,6 +437,7 @@ function syscancel(args)
         print("ERR :" .. CName ..  " syscancel --- wrong amount", args[1])
         return false
     end
+    tamount = tamount * Scale
     ----[[
     orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
