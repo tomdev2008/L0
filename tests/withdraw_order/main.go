@@ -61,7 +61,7 @@ func main() {
 			initArgs = append(initArgs, feeAddr.String())
 			contractAddr := deployTx(systemPriv, assetID, big.NewInt(0), "./withdraw.lua", initArgs)
 
-			time.Sleep(10 * time.Second)
+			//time.Sleep(10 * time.Second)
 
 			invokeArgs := []string{}
 			invokeArgs = append(invokeArgs, "launch")
@@ -128,7 +128,7 @@ func main() {
 			initArgs = append(initArgs, feeAddr.String())
 			contractAddr := deployTx(systemPriv, uint32(0), big.NewInt(0), "./order.lua", initArgs)
 
-			time.Sleep(10 * time.Second)
+			//time.Sleep(10 * time.Second)
 
 			invokeArgs := []string{}
 			invokeArgs = append(invokeArgs, "launch")
