@@ -18,7 +18,7 @@ import (
 var (
 	fromChain      = []byte{0}
 	toChain        = []byte{0}
-	txChan         = make(chan *types.Transaction, 1000)
+	txChan         = make(chan *types.Transaction, 1)
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 )
 
@@ -184,7 +184,7 @@ func main() {
 			invokeArgs = append(invokeArgs, "200")
 			invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
 		}
-
+		time.Sleep(time.Millisecond * 200)
 	}
 
 }
@@ -244,7 +244,7 @@ func deployTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, path 
 	contractSpec.ContractCode = buf
 
 	var a accounts.Address
-	pubBytes := []byte(sender.String() + string(buf))
+	pubBytes := []byte(time.Now().Format("2006-01-02 15:04:05.999999999") + sender.String() + string(buf))
 	a.SetBytes(crypto.Keccak256(pubBytes[1:])[12:])
 	contractSpec.ContractAddr = a.Bytes()
 
@@ -265,7 +265,7 @@ func deployTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, path 
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	//fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
+	fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
 	sendTransaction(tx)
 
 	return a
@@ -295,7 +295,7 @@ func invokeTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, contr
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	//fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
+	fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
 	sendTransaction(tx)
 }
 

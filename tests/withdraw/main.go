@@ -35,66 +35,64 @@ var (
 )
 
 func main() {
-	for {
-		systemPriv, _ := crypto.GenerateKey()
-		systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
-		feePriv, _ := crypto.GenerateKey()
-		feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
-		assetID := uint32(time.Now().UnixNano())
+	systemPriv, _ := crypto.GenerateKey()
+	systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
+	feePriv, _ := crypto.GenerateKey()
+	feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
+	assetID := uint32(time.Now().UnixNano())
 
-		userPriv, _ := crypto.GenerateKey()
-		userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
+	userPriv, _ := crypto.GenerateKey()
+	userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
 
-		//模拟交易所提现场景
-		//1.发行资产系统账户 10000
-		//2.转账给提现账户, 以完成提现操作 5000
-		//3.部署提现合约 1000
-		//4.发起提现请求
-		//5.发起撤销提现请求
-		//6.系统账户发起提现成功
-		//7.系统账户发起提现失败
+	//模拟交易所提现场景
+	//1.发行资产系统账户 10000
+	//2.转账给提现账户, 以完成提现操作 5000
+	//3.部署提现合约 1000
+	//4.发起提现请求
+	//5.发起撤销提现请求
+	//6.系统账户发起提现成功
+	//7.系统账户发起提现失败
 
-		issueTx(systemAddr, assetID, big.NewInt(10000))
-		atomicTx(systemPriv, userAddr, assetID, big.NewInt(5000))
+	issueTx(systemAddr, assetID, big.NewInt(10000))
+	atomicTx(systemPriv, userAddr, assetID, big.NewInt(5000))
 
-		initArgs := []string{}
-		initArgs = append(initArgs, systemAddr.String())
-		initArgs = append(initArgs, feeAddr.String())
-		contractAddr := deployTx(systemPriv, assetID, big.NewInt(0), "./withdraw.lua", initArgs)
+	initArgs := []string{}
+	initArgs = append(initArgs, systemAddr.String())
+	initArgs = append(initArgs, feeAddr.String())
+	contractAddr := deployTx(systemPriv, assetID, big.NewInt(0), "./withdraw.lua", initArgs)
 
-		//time.Sleep(10 * time.Second)
+	//time.Sleep(10 * time.Second)
 
-		invokeArgs := []string{}
-		invokeArgs = append(invokeArgs, "launch")
-		invokeArgs = append(invokeArgs, "D0001")
-		invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+	invokeArgs := []string{}
+	invokeArgs = append(invokeArgs, "launch")
+	invokeArgs = append(invokeArgs, "D0001")
+	invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
 
-		invokeArgs = []string{}
-		invokeArgs = append(invokeArgs, "cancel")
-		invokeArgs = append(invokeArgs, "D0001")
-		invokeTx(userPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "cancel")
+	invokeArgs = append(invokeArgs, "D0001")
+	invokeTx(userPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
 
-		invokeArgs = []string{}
-		invokeArgs = append(invokeArgs, "launch")
-		invokeArgs = append(invokeArgs, "D0002")
-		invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "launch")
+	invokeArgs = append(invokeArgs, "D0002")
+	invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
 
-		invokeArgs = []string{}
-		invokeArgs = append(invokeArgs, "succeed")
-		invokeArgs = append(invokeArgs, "D0002")
-		invokeArgs = append(invokeArgs, "100")
-		invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "succeed")
+	invokeArgs = append(invokeArgs, "D0002")
+	invokeArgs = append(invokeArgs, "100")
+	invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
 
-		invokeArgs = []string{}
-		invokeArgs = append(invokeArgs, "launch")
-		invokeArgs = append(invokeArgs, "D0003")
-		invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "launch")
+	invokeArgs = append(invokeArgs, "D0003")
+	invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
 
-		invokeArgs = []string{}
-		invokeArgs = append(invokeArgs, "fail")
-		invokeArgs = append(invokeArgs, "D0003")
-		invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
-	}
+	invokeArgs = []string{}
+	invokeArgs = append(invokeArgs, "fail")
+	invokeArgs = append(invokeArgs, "D0003")
+	invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
 }
 
 func issueTx(owner accounts.Address, assetID uint32, amount *big.Int) {
