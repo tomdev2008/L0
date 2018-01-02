@@ -147,11 +147,9 @@ func (v *Verification) checkTransaction(tx *types.Transaction) error {
 	if err := v.checkTransactionLegal(tx); err != nil {
 		return err
 	}
-
 	if err := v.checkTransactionSecurity(tx); err != nil {
-		return err
+		return fmt.Errorf("[validator] illegal transaction %+v: err: %v", tx.Hash(), err)
 	}
-
 	address, err := tx.Verfiy()
 	if err != nil || !bytes.Equal(address.Bytes(), tx.Sender().Bytes()) {
 		return fmt.Errorf("[validator] illegal transaction %s: invalid signature", tx.Hash())
@@ -186,9 +184,7 @@ func (v *Verification) getSecurityVerifier() (SecurityVerifier, error) {
 		log.Errorf("get security plugin path failed, %v", err)
 		return nil, fmt.Errorf("get security plugin path failed, %v", err)
 	}
-
 	if len(securityPathData) == 0 {
-		log.Info("there is no security plugin yet")
 		return nil, nil
 	}
 

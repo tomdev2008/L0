@@ -188,7 +188,7 @@ func (pm *ProtocolManager) Relay(inv types.IInventory) {
 		inventory InvVect
 		msg       *p2p.Msg
 	)
-	// log.Debugf("ProtocolManager Relay inventory, hash: %s", inv.Hash())
+	//log.Debugf("ProtocolManager Relay inventory, hash:  %+v", inv.Hash())
 
 	switch inv.(type) {
 	case *types.Transaction:
@@ -537,7 +537,7 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		tx := &types.Transaction{}
 		tx.Deserialize(msg.Payload)
 		pm.Blockchain.ProcessTransaction(tx, false)
-		log.Debugln("recv transaction msg")
+		//log.Debugln("recv transaction msg: ", tx.Hash().String())
 	case msgnet.ChainMergeTxsMsg:
 		fallthrough
 	case msgnet.ChainAckMergeTxsMsg:

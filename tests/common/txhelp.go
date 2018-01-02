@@ -2,16 +2,17 @@ package common
 
 import (
 	"encoding/json"
-	"github.com/bocheninc/L0/components/crypto"
-	L0Utils "github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/L0/core/coordinate"
-	"github.com/bocheninc/L0/core/types"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/bocheninc/L0/components/crypto"
+	L0Utils "github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/L0/core/coordinate"
+	"github.com/bocheninc/L0/core/types"
 )
 
 var (
@@ -24,7 +25,6 @@ const (
 	langJS  = "js"
 	invoke  = "invoke"
 )
-
 
 // Get Const data
 func GetLangLuaTyp() string {
@@ -145,12 +145,6 @@ func CreateIssueTransaction(issuePriKeyHex, privKeyHex string, id int) *types.Tr
 	var (
 		fromChain = []byte{0}
 		toChain   = []byte{0}
-
-		senderAccount = "abc123"
-		accountInfo   = map[string]string{
-			"from_user": senderAccount,
-			"to_user":   senderAccount,
-		}
 	)
 
 	nonce := time.Now().UnixNano()
@@ -179,9 +173,6 @@ func CreateIssueTransaction(issuePriKeyHex, privKeyHex string, id int) *types.Tr
 	issueCoin := make(map[string]interface{})
 	issueCoin["id"] = id
 	tx.Payload, _ = json.Marshal(issueCoin)
-	tx.Meta, _ = json.Marshal(map[string]map[string]string{
-		"account": accountInfo,
-	})
 
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
@@ -189,7 +180,7 @@ func CreateIssueTransaction(issuePriKeyHex, privKeyHex string, id int) *types.Tr
 	return tx
 }
 
-func CreateNormalTransaction(txconf *TxConf) *types.Transaction {
+func CreateNormalTransaction(txconf *TxConf, meta []byte) *types.Transaction {
 	nonce := time.Now().UnixNano()
 	privkey, _ := crypto.HexToECDSA(txconf.privKeyHex)
 	sender := accounts.PublicKeyToAddress(*privkey.Public())
@@ -197,7 +188,7 @@ func CreateNormalTransaction(txconf *TxConf) *types.Transaction {
 	tx := types.NewTransaction(
 		coordinate.NewChainCoordinate(fromChain),
 		coordinate.NewChainCoordinate(toChain),
-		types.TypeIssue,
+		types.TypeAtomic,
 		uint32(nonce),
 		sender,
 		txconf.receiver,
@@ -206,9 +197,11 @@ func CreateNormalTransaction(txconf *TxConf) *types.Transaction {
 		txconf.fee,
 		uint32(time.Now().Unix()),
 	)
-
+	tx.Meta = meta
+	securityAsset := make(map[string]interface{})
+	securityAsset["id"] = uint32(txconf.id)
+	tx.Payload, _ = json.Marshal(securityAsset)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-
 	return tx
 }

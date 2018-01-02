@@ -42,9 +42,9 @@ var (
 		//"127.0.0.1:20170",
 	}
 
-	index          = time.Now().Nanosecond()
-	list           = make(chan *crypto.PrivateKey, 10)
-	txChan         = make(chan *types.Transaction, 1000)
+	index  = time.Now().Nanosecond()
+	list   = make(chan *crypto.PrivateKey, 10)
+	txChan = make(chan *types.Transaction, 1000)
 	//issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 )
 
@@ -54,8 +54,8 @@ func sendTx() {
 	fmt.Println("start Send ...")
 	//go generateIssueTx()
 	//go generateAtomicTx()
-
-	go generateContract()
+	//go generateContract()
+	go generateSecurity()
 	for {
 		select {
 		case tx := <-txChan:
@@ -74,6 +74,22 @@ func generateContract() {
 	for {
 		time.Sleep(time.Second)
 		txChan <- ct.createInvokeTransaction()
+	}
+}
+
+func generateSecurity() {
+	s := &Security{}
+	txChan <- s.init()
+	time.Sleep(1 * time.Second)
+	txChan <- s.createSetAccountTx()
+	time.Sleep(1 * time.Second)
+	txChan <- s.createDeployTx()
+	time.Sleep(1 * time.Second)
+	txChan <- s.createSetPluginTx()
+	time.Sleep(10 * time.Second)
+	for {
+		time.Sleep(10 * time.Millisecond)
+		txChan <- s.createAtomicTx()
 	}
 }
 

@@ -22,6 +22,7 @@ tests/client/client
 *.tgz
 build/mongodb/*
 tests/contract/security.so
+tests/client/plugin.so
 tests/contract/contract
 
 

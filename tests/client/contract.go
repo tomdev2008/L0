@@ -1,15 +1,33 @@
+// Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
+//
+// This file is part of L0
+//
+// The L0 is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The L0 is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
 package main
 
 import (
 	"fmt"
-	"github.com/bocheninc/L0/tests/common"
-	"github.com/pborman/uuid"
 	"math/big"
 	"math/rand"
-	"path/filepath"
 	"os"
-	"github.com/bocheninc/L0/core/types"
+	"path/filepath"
 	"time"
+
+	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/tests/common"
+	"github.com/pborman/uuid"
 	//"net/http"
 	"strconv"
 )
@@ -17,7 +35,7 @@ import (
 var (
 	issuePriKeyHex = "496c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
 	privkeyHex     = "596c663b994c3f6a8e99373c3308ee43031d7ea5120baf044168c95c45fbcf83"
-	defaultURL = "http://127.0.0.1:8881"
+	defaultURL     = "http://127.0.0.1:8881"
 )
 
 type Contract struct {
@@ -32,7 +50,7 @@ func (ct *Contract) createInvokeTransaction() *types.Transaction {
 }
 
 func (ct *Contract) createInitTransaction() *types.Transaction {
-	return  ct.initContract("lua", "./l0coin.lua", []string{"test"}, []string{})
+	return ct.initContract("lua", "./l0coin.lua", []string{"test"}, []string{})
 }
 
 func (ct *Contract) invokeContract(typ, contractPath string, initArgs, invokeArgs []string) *types.Transaction {
@@ -57,10 +75,7 @@ func (ct *Contract) init() *types.Transaction {
 	}
 	ct.dirPath = dir //filepath.Join(dir, )
 
-
 	assetID := 1
 	tx := common.CreateIssueTransaction(issuePriKeyHex, privkeyHex, assetID)
-
 	return tx
 }
-
