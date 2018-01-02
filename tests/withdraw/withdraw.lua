@@ -89,9 +89,9 @@ function L0Query(args)
         return args[0] .. " not found "
     end
     local tb = string.split(withdrawInfo, "&")
-    addr = tb[1]
-    assetID = tonumber(tb[2])
-    amount = tonumber(tb[3])/Scale
+    local addr = tb[1]
+    local assetID = tonumber(tb[2])
+    local amount = tonumber(tb[3])/Scale
     return args[0] .. " addr:" .. addr .. " , asset:" .. assetID .. " , amount:" .. amount
 end
 
@@ -152,7 +152,7 @@ function cancel(args)
     -- execute
     local withdrawID = "withdraw_"..args[0]
     ----[[
-    withdrawInfo = L0.GetState(withdrawID)
+    local withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo) 
     then
         print("ERR :" .. CName ..  " cancel --- withdrawID not exist", args[0])
@@ -167,9 +167,9 @@ function cancel(args)
         return false
     end
     local tb = string.split(withdrawInfo, "&")
-    receiver = tb[1]
-    assetID = tonumber(tb[2])
-    amount = tonumber(tb[3])
+    local receiver = tb[1]
+    local assetID = tonumber(tb[2])
+    local amount = tonumber(tb[3])
     if (receiver ~= sender) 
     then
         print("ERR :" .. CName ..  " cancel --- wrong sender", sender, receiver)
@@ -218,22 +218,22 @@ function succeed(args)
         return false
     end
 
-    withdrawInfo = L0.GetState(withdrawID)
+    local withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo) 
     then
         print("ERR :" .. CName ..  " succeed --- withdrawID not exist", args[0])
         return false
     end
     local tb = string.split(withdrawInfo, "&")
-    assetID = tonumber(tb[2])
-    amount = tonumber(tb[3])
+    local assetID = tonumber(tb[2])
+    local amount = tonumber(tb[3])
     if (amount < feeAmount) 
     then
         print("ERR :" .. CName ..  " succeed --- balance is not enough", feeAmount, amount)
         return false
     end
     -- to do balance check
-    fee = L0.GetState("account_fee")
+    local fee = L0.GetState("account_fee")
     L0.Transfer(fee, assetID, feeAmount)
     L0.Transfer(system, assetID, amount-feeAmount)
     L0.DelState(withdrawID)
@@ -271,16 +271,16 @@ function fail(args)
         return false
     end
 
-    withdrawInfo = L0.GetState(withdrawID)
+    local withdrawInfo = L0.GetState(withdrawID)
     if (not withdrawInfo) 
     then
         print("ERR :" .. CName ..  " fail --- withdrawID not exist", args[0])
         return false
     end
     local tb = string.split(withdrawInfo, "&")
-    receiver = tb[1]
-    assetID = tonumber(tb[2])
-    amount = tonumber(tb[3])
+    local receiver = tb[1]
+    local assetID = tonumber(tb[2])
+    local amount = tonumber(tb[3])
     -- to do balance check
     L0.Transfer(receiver, assetID, amount)
     L0.DelState(withdrawID)

@@ -183,7 +183,7 @@ function cancel(args)
     end
     tamount = tamount * Scale
     ----[[
-    orderInfo = L0.GetState(orderID)
+    local orderInfo = L0.GetState(orderID)
     if (not orderInfo) 
     then
         print("ERR :" .. CName ..  " cancel --- id not exist", args[0])
@@ -412,7 +412,7 @@ function feecharge(args)
     else
         L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
-    fee = L0.GetState("account_fee")
+    local fee = L0.GetState("account_fee")
     L0.Transfer(fee, assetID, feeamount)
     print("INFO:" .. CName ..  " feecharge ---", matchID, orderID, amount, feeamount, b)
     --]]--

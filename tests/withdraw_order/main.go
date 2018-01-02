@@ -210,7 +210,7 @@ func issueTx(owner accounts.Address, assetID uint32, amount *big.Int) {
 	sig, _ := issueKey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 
-	fmt.Println("> issuer :", owner.String())
+	//fmt.Println("> issuer :", owner.String())
 	sendTransaction(tx)
 }
 
@@ -231,7 +231,7 @@ func atomicTx(privkey *crypto.PrivateKey, owner accounts.Address, assetID uint32
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 
-	fmt.Println("> atomic :", owner.String())
+	//fmt.Println("> atomic :", owner.String())
 	sendTransaction(tx)
 }
 
@@ -265,7 +265,7 @@ func deployTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, path 
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
+	//fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
 	sendTransaction(tx)
 
 	return a
@@ -295,7 +295,7 @@ func invokeTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, contr
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
+	//fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams)
 	sendTransaction(tx)
 }
 
