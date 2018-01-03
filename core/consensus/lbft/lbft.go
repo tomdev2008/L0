@@ -42,8 +42,11 @@ const EMPTYREQUEST = 1136160000
 //NewLbft Create lbft consenter
 func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	lbft := &Lbft{
-		options: options,
-		stack:   stack,
+		options:    options,
+		stack:      stack,
+		testing:    true,
+		testChan:   make(chan struct{}),
+		statistics: make(map[string]time.Duration),
 
 		recvConsensusMsgChan: make(chan *Message, options.BufferSize),
 		outputTxsChan:        make(chan *consensus.OutputTxs, options.BufferSize),
@@ -77,8 +80,12 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 //Lbft Define lbft consenter
 type Lbft struct {
 	sync.RWMutex
-	options *Options
-	stack   consensus.IStack
+	options       *Options
+	stack         consensus.IStack
+	testing       bool
+	testChan      chan struct{}
+	statistics    map[string]time.Duration
+	statisticsCnt int
 
 	function func(int, types.Transactions)
 
@@ -131,6 +138,9 @@ func (lbft *Lbft) Start() {
 	if lbft.exit != nil {
 		log.Warnf("Replica %s consenter already started", lbft.options.ID)
 		return
+	}
+	if lbft.testing {
+		lbft.testConsensus()
 	}
 	log.Infof("lbft : %s", lbft)
 	log.Infof("Replica %s consenter started", lbft.options.ID)
@@ -244,6 +254,9 @@ func (lbft *Lbft) BroadcastConsensusChannel() <-chan *consensus.BroadcastConsens
 
 //OutputTxsChannel Commit block data
 func (lbft *Lbft) OutputTxsChannel() <-chan *consensus.OutputTxs {
+	if lbft.testing {
+		return nil
+	}
 	return lbft.outputTxsChan
 }
 
@@ -422,7 +435,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				if v.PrimaryID == lbft.lastPrimaryID {
 					continue
 				}
-				if v.SeqNo != lbft.execSeqNo || v.Height != lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+				if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
 					continue
 				}
 				if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {

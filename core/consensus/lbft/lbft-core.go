@@ -185,7 +185,13 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 			return nil
 		}
 		core := lbft.getlbftCore(digest)
-		txs, etxs := lbft.stack.VerifyTxs(request.Txs)
+		var txs, etxs types.Transactions
+		if lbft.testing {
+			txs = request.Txs
+			etxs = nil
+		} else {
+			txs, etxs = lbft.stack.VerifyTxs(request.Txs)
+		}
 		core.txs = txs
 		core.errTxs = etxs
 		lbft.seqNo++
@@ -295,7 +301,13 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			lbft.sendViewChange(vc, fmt.Sprintf("wrong seqNo (%d==%d)", preprepare.SeqNo, lbft.seqNo+1))
 			return nil
 		}
-		txs, etxs := lbft.stack.VerifyTxs(preprepare.Request.Txs)
+		var txs, etxs types.Transactions
+		if lbft.testing {
+			txs = preprepare.Request.Txs
+			etxs = nil
+		} else {
+			txs, etxs = lbft.stack.VerifyTxs(preprepare.Request.Txs)
+		}
 		if !bytes.Equal(merkleRootHash(etxs).Bytes(), []byte(preprepare.MerkleRoot)) {
 			log.Errorf("Replica %s received PrePrepare from %s for consensus %s: failed to verify", lbft.options.ID, preprepare.ReplicaID, digest)
 			vc := &ViewChange{
@@ -475,6 +487,29 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		lbft.stopNewViewTimerForCore(core)
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
+		if lbft.testing {
+			cnt := len(core.prePrepare.Request.Txs)
+			if cnt != 0 {
+				if lbft.statisticsCnt != 0 && cnt != lbft.statisticsCnt {
+					var min, max, sum time.Duration
+					for _, d := range lbft.statistics {
+						sum = sum + d
+						if min == 0 || min > d {
+							min = d
+						}
+						if max < d {
+							max = d
+						}
+					}
+					log.Infof("testing ... txs:%d\tmin: %s, max: %s, avg: %s, size: %d", lbft.statisticsCnt, min, max, sum/time.Duration(len(lbft.statistics)), len(lbft.statistics))
+					lbft.statistics = make(map[string]time.Duration)
+				}
+				lbft.statisticsCnt = cnt
+				lbft.statistics[digest] = d
+			} else {
+				lbft.testChan <- struct{}{}
+			}
+		}
 		if core.txs == nil {
 			lbft.function(4, core.txs)
 		}
