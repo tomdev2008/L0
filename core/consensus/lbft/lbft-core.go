@@ -112,7 +112,7 @@ func (lbft *Lbft) startNewViewTimerForCore(core *lbftCore, replica string) {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.lastPrimaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -217,13 +217,7 @@ func (lbft *Lbft) recvRequest(request *Request) *Message {
 			Payload: utils.Serialize(preprepare),
 		})
 		lbft.recvPrePrepare(preprepare)
-
-		if request.ID == EMPTYREQUEST {
-			lbft.cnt = 0
-			lbft.height++
-		} else if lbft.cnt += len(request.Txs); lbft.cnt >= lbft.options.BlockSize {
-			lbft.sendEmptyRequest()
-		}
+		lbft.height++
 	} else {
 		log.Debugf("Replica %s received Request for consensus %s: ignore, backup", lbft.options.ID, digest)
 	}
@@ -258,7 +252,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 			PrimaryID:     lbft.options.ID,
 			SeqNo:         lbft.execSeqNo,
 			Height:        lbft.execHeight,
-			OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+			OptHash:       lbft.options.Hash(),
 			LastPrimaryID: lbft.lastPrimaryID,
 			ReplicaID:     lbft.options.ID,
 			Chain:         lbft.options.Chain,
@@ -277,7 +271,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.lastPrimaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -293,7 +287,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.lastPrimaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -316,7 +310,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.lastPrimaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -328,9 +322,7 @@ func (lbft *Lbft) recvPrePrepare(preprepare *PrePrepare) *Message {
 		core.txs = txs
 		core.errTxs = etxs
 		lbft.seqNo++
-		if preprepare.Request.ID == EMPTYREQUEST {
-			lbft.height++
-		}
+		lbft.height++
 	}
 
 	log.Debugf("Replica %s received PrePrepare from %s for consensus %s, seqNo %d", lbft.options.ID, preprepare.ReplicaID, digest, preprepare.SeqNo)
@@ -487,28 +479,26 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		lbft.stopNewViewTimerForCore(core)
 		delete(lbft.coreStore, digest)
 		d = core.endTime.Sub(core.startTime)
+		d = time.Now().Sub(core.startTime)
 		if lbft.testing {
 			cnt := len(core.prePrepare.Request.Txs)
-			if cnt != 0 {
-				if lbft.statisticsCnt != 0 && cnt != lbft.statisticsCnt {
-					var min, max, sum time.Duration
-					for _, d := range lbft.statistics {
-						sum = sum + d
-						if min == 0 || min > d {
-							min = d
-						}
-						if max < d {
-							max = d
-						}
+			if lbft.statisticsCnt != 0 && cnt != lbft.statisticsCnt {
+				var min, max, sum time.Duration
+				for _, d := range lbft.statistics {
+					sum = sum + d
+					if min == 0 || min > d {
+						min = d
 					}
-					log.Infof("testing ... txs:%d\tmin: %s, max: %s, avg: %s, size: %d", lbft.statisticsCnt, min, max, sum/time.Duration(len(lbft.statistics)), len(lbft.statistics))
-					lbft.statistics = make(map[string]time.Duration)
+					if max < d {
+						max = d
+					}
 				}
-				lbft.statisticsCnt = cnt
-				lbft.statistics[digest] = d
-			} else {
-				lbft.testChan <- struct{}{}
+				log.Infof("testing ... txs:%d\tmin: %s, max: %s, avg: %s, size: %d", lbft.statisticsCnt, min, max, sum/time.Duration(len(lbft.statistics)), len(lbft.statistics))
+				lbft.statistics = make(map[string]time.Duration)
 			}
+			lbft.statisticsCnt = cnt
+			lbft.statistics[digest] = d
+			lbft.testChan <- struct{}{}
 		}
 		if core.txs == nil {
 			lbft.function(4, core.txs)
@@ -589,19 +579,12 @@ func (lbft *Lbft) execute() {
 			if lbft.execHeight != request.Height {
 				panic(fmt.Sprintf("noreachable(%d +2 == %d)", lbft.execHeight, request.Height))
 			}
-			if lbft.outputTxs.Len() == 0 && lbft.isPrimary() {
-				lbft.blockTimer.Reset(lbft.options.BlockTimeout)
-			}
-			lbft.outputTxs = append(lbft.outputTxs, request.Txs...)
-			lbft.seqNos = append(lbft.seqNos, seqNo)
 			lbft.function(3, request.Txs)
 			lbft.function(6, request.ErrTxs)
-			if len(request.Txs) == 0 && len(request.ErrTxs) == 0 {
-				lbft.execHeight = request.Height + 1
-				lbft.processBlock(lbft.outputTxs, lbft.seqNos, fmt.Sprintf("block timeout(%s), block size(%d)", lbft.options.BlockTimeout, lbft.options.BlockSize))
-				lbft.outputTxs = nil
-				lbft.seqNos = nil
-			}
+			lbft.execHeight = request.Height + 1
+			var seqNos []uint32
+			seqNos = append(seqNos, seqNo)
+			lbft.processBlock(request.Txs, seqNos, fmt.Sprintf("block timeout(%s), block size(%d)", lbft.options.BatchTimeout, lbft.options.BatchSize))
 			nextExec = seqNo + 1
 		} else if seqNo > nextExec {
 			if seqNo-nextExec > uint32(lbft.options.K) {

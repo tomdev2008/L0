@@ -19,8 +19,6 @@
 package lbft
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -110,10 +108,7 @@ type Lbft struct {
 	coreStore         map[string]*lbftCore
 	committedRequests map[uint32]*Committed
 
-	fetched   []*Committed
-	outputTxs types.Transactions
-	seqNos    []uint32
-	cnt       int
+	fetched []*Committed
 
 	blockTimer *time.Timer
 	exit       chan struct{}
@@ -312,12 +307,6 @@ func (lbft *Lbft) processConsensusMsg(msg *Message) *Message {
 	return nil
 }
 
-func (lbft *Lbft) hash() (ret string) {
-	h1 := sha256.Sum256(utils.Serialize(lbft.outputTxs))
-	h2 := sha256.Sum256(utils.Serialize(lbft.seqNos))
-	return hex.EncodeToString(h1[:]) + ":" + hex.EncodeToString(h2[:])
-}
-
 func (lbft *Lbft) startNewViewTimer() {
 	lbft.Lock()
 	defer lbft.Unlock()
@@ -332,7 +321,7 @@ func (lbft *Lbft) startNewViewTimer() {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.primaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -361,7 +350,7 @@ func (lbft *Lbft) startViewChangePeriodTimer() {
 				PrimaryID:     lbft.options.ID,
 				SeqNo:         lbft.execSeqNo,
 				Height:        lbft.execHeight,
-				OptHash:       lbft.options.Hash() + ":" + lbft.hash(),
+				OptHash:       lbft.options.Hash(),
 				LastPrimaryID: lbft.primaryID,
 				ReplicaID:     lbft.options.ID,
 				Chain:         lbft.options.Chain,
@@ -435,7 +424,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				if v.PrimaryID == lbft.lastPrimaryID {
 					continue
 				}
-				if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+				if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash() {
 					continue
 				}
 				if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -509,7 +498,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 	// if _, ok := lbft.primaryHistory[vc.PrimaryID]; !ok && vc.PrimaryID == vc.ReplicaID {
 	// 	lbft.primaryHistory[vc.PrimaryID] = vc.Priority
 	// }
-	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash()+":"+lbft.hash(), len(vcs))
+	log.Infof("Replica %s received ViewChange(%s) from %s,  voter: %s %d %d %s, self: %d %d %s, size %d", lbft.options.ID, vc.ID, vc.ReplicaID, vc.PrimaryID, vc.SeqNo, vc.Height, vc.OptHash, lbft.execSeqNo, lbft.execHeight, lbft.options.Hash(), len(vcs))
 
 	if len(vcs) >= lbft.Quorum() {
 		lbft.stopNewViewTimer()
@@ -526,7 +515,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -542,7 +531,7 @@ func (lbft *Lbft) recvViewChange(vc *ViewChange) *Message {
 			if v.PrimaryID == lbft.lastPrimaryID {
 				continue
 			}
-			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+			if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash() {
 				continue
 			}
 			if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {
@@ -572,7 +561,6 @@ func (lbft *Lbft) newView(vc *ViewChange) {
 	lbft.height = vc.Height
 	lbft.execSeqNo = lbft.seqNo
 	lbft.execHeight = lbft.height
-	lbft.cnt = len(lbft.outputTxs)
 	delete(lbft.primaryHistory, lbft.primaryID)
 	if lbft.primaryID == lbft.options.ID {
 		lbft.priority = time.Now().UnixNano()
