@@ -27,7 +27,5 @@ func JrpcConfig() *rpc.Option {
 	option := rpc.NewDefaultOption()
 	option.Enabled = viper.GetBool("jrpc.enabled")
 	option.Port = getString("jrpc.port", option.Port)
-	option.User = getString("jrpc.user", option.User)
-	option.PassWord = getString("jrpc.password", option.PassWord)
 	return option
 }

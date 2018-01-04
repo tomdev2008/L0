@@ -9,6 +9,12 @@
 			"revisionTime": "2017-03-08T20:36:35Z"
 		},
 		{
+			"checksumSHA1": "89q70xKJ/yEA3oF2yR/0AC7Nkos=",
+			"path": "github.com/bocheninc/base/rpc",
+			"revision": "bc9769e3a40cde2281b726a8a080a7eea829dd98",
+			"revisionTime": "2017-11-09T02:41:36Z"
+		},
+		{
 			"checksumSHA1": "UI5uoh0B6+b6ElpC5iFPtFptLKs=",
 			"path": "github.com/bocheninc/msg-net/cmd",
 			"revision": "998ffad29e76411f7681bbfd8c47512c8b1ca2e8",
@@ -315,6 +321,12 @@
 			"path": "github.com/robertkrimen/otto/token",
 			"revision": "49fee9c1c0db1c366003ede4cc665f9924a97521",
 			"revisionTime": "2017-06-04T10:36:02Z"
+		},
+		{
+			"checksumSHA1": "+Z34EIEBle9LKYTGIe3Nm3PJNoQ=",
+			"path": "github.com/rs/cors",
+			"revision": "eabcc6af4bbe5ad3a949d36450326a2b0b9894b8",
+			"revisionTime": "2017-08-01T07:32:01Z"
 		},
 		{
 			"checksumSHA1": "ncB97TqhsqLzFWWZCXRO3i1NoXk=",

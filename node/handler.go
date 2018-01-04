@@ -23,8 +23,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/rpc"
-	"net/rpc/jsonrpc"
 	"strings"
 
 	"time"
@@ -45,6 +43,7 @@ import (
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
 	jrpc "github.com/bocheninc/L0/rpc"
+	"github.com/bocheninc/base/rpc"
 	"github.com/willf/bloom"
 )
 
@@ -546,15 +545,7 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		chainID, peerID := parseID(src)
 		pm.merger.HandleNetMsg(msg.Cmd, chainID.String(), peerID.String(), msg)
 		log.Debugf("mergeRecv cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
-	case msgnet.ChainRpcMsg:
-		chainID, peerID := parseID(src)
-		in := new(bytes.Buffer)
-		out := new(bytes.Buffer)
-		in.Write(msg.Payload)
-		pm.jrpcServer.ServeRequest(jsonrpc.NewServerCodec(jrpc.NewHttConn(in, out)))
-		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
-		pm.SendMsgnetMessage(pm.peerAddress(), src, msgnet.Message{Cmd: msg.Cmd, Payload: out.Bytes()})
-		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
+
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
 		// size, _ := strconv.Atoi(string(msg.Payload))

@@ -19,10 +19,8 @@
 package rpc
 
 type Option struct {
-	Enabled  bool
-	Port     string
-	User     string
-	PassWord string
+	Enabled bool
+	Port    string
 }
 
 func NewDefaultOption() *Option {
