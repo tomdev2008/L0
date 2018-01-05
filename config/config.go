@@ -28,6 +28,7 @@ import (
 	"github.com/bocheninc/L0/core/merge"
 	"github.com/bocheninc/L0/core/p2p"
 	"github.com/bocheninc/L0/core/params"
+	"github.com/bocheninc/L0/rpc"
 	"github.com/bocheninc/L0/vm"
 	"github.com/spf13/viper"
 )
@@ -86,6 +87,9 @@ type Config struct {
 	// db
 	DbConfig    *db.Config
 	NetDbConfig *db.Config
+
+	//jrpc
+	RpcConfig *rpc.Config
 
 	// profile
 	CPUFile  string
@@ -151,6 +155,7 @@ func loadConfig(cfgFile string) (conf *Config, err error) {
 	cfg.MergeConfig = MergeConfig(cfg.NodeDir)
 	cfg.readLogConfig()
 	vm.VMConf = VMConfig(cfg.LogFile, cfg.LogLevel)
+	cfg.RpcConfig = JrpcConfig(cfg.LogFile, cfgFile)
 	return cfg, nil
 }
 

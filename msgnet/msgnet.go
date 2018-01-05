@@ -30,6 +30,7 @@ const (
 	ChainMergeTxsMsg
 	ChainAckMergeTxsMsg
 	ChainAckedMergeTxsMsg
+	ChainRpcMsg
 	ChainChangeCfgMsg
 )
 

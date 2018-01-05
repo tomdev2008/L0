@@ -98,7 +98,7 @@ func NewLcnd(cfgFile string) *Lcnd {
 	consenter := consenter.NewConsenter(config.ConsenterOptions(), bc)
 	validator := validator.NewVerification(config.ValidatorConfig(cfg.PluginDir), newLedger, consenter)
 	ks = keystore.NewKeyStore(chainDb, cfg.KeyStoreDir, keystore.ScryptN, keystore.ScryptP)
-	lcnd.protocolManager = node.NewProtocolManager(chainDb, netConfig, bc, consenter, newLedger, ks, mergeConfig, cfg.LogDir)
+	lcnd.protocolManager = node.NewProtocolManager(chainDb, netConfig, bc, consenter, newLedger, ks, mergeConfig, cfg.RpcConfig, cfg.LogDir)
 
 	bc.SetBlockchainValidator(validator)
 	bc.SetBlockchainConsenter(consenter)

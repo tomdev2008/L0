@@ -23,9 +23,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-func JrpcConfig() *rpc.Option {
-	option := rpc.NewDefaultOption()
-	option.Enabled = viper.GetBool("jrpc.enabled")
-	option.Port = getString("jrpc.port", option.Port)
-	return option
+func JrpcConfig(logFilePath, cfgFilePath string) *rpc.Config {
+	config := rpc.NewDefaultConfig()
+	config.Enabled = viper.GetBool("jrpc.enabled")
+	config.Port = getString("jrpc.port", config.Port)
+	config.LogFilePath = logFilePath
+	config.ConfigFilePath = cfgFilePath
+	return config
 }

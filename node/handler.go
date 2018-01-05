@@ -31,7 +31,6 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/config"
 	"github.com/bocheninc/L0/core/accounts/keystore"
 	"github.com/bocheninc/L0/core/blockchain"
 	"github.com/bocheninc/L0/core/consensus"
@@ -57,13 +56,16 @@ type ProtocolManager struct {
 	msgnet    msgnet.Stack
 	merger    *merge.Helper
 	// msgrpc     *msgnet.RpcHelper
-	msgCh      chan *p2p.Msg
-	isStarted  bool
-	highest    uint32
-	jrpcServer *rpc.Server
+	msgCh     chan *p2p.Msg
+	isStarted bool
+	highest   uint32
 
 	filter *bloom.BloomFilter
 	jobs   chan *job
+
+	//jrpc confg
+	jrpcConfig *jrpc.Config
+	jrpcServer *rpc.Server
 }
 
 var (
@@ -75,7 +77,7 @@ var (
 func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	blockchain *blockchain.Blockchain, consenter consensus.Consenter,
 	ledger *ledger.Ledger, ks *keystore.KeyStore,
-	mergeConfig *merge.Config, logDir string) *ProtocolManager {
+	mergeConfig *merge.Config, jrpcConfig *jrpc.Config, logDir string) *ProtocolManager {
 	manager := &ProtocolManager{
 		KeyStore:   ks,
 		Ledger:     ledger,
@@ -84,6 +86,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 		msgCh:      make(chan *p2p.Msg, 100),
 		Server:     p2p.NewServer(db, netConfig),
 		filter:     bloom.NewWithEstimates(filterN, falsePositive),
+		jrpcConfig: jrpcConfig,
 	}
 	manager.Server.Protocols = append(manager.Server.Protocols, p2p.Protocol{
 		Name:    params.ProtocolName,
@@ -110,7 +113,7 @@ func (pm *ProtocolManager) Start() {
 	pm.Server.Start()
 	pm.merger.Start()
 
-	go jrpc.StartServer(pm.jrpcServer, config.JrpcConfig())
+	go jrpc.StartServer(pm.jrpcServer, pm.jrpcConfig)
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
 	go func() {
@@ -545,7 +548,15 @@ func (pm *ProtocolManager) handleMsgnetMessage(src, dst string, payload, signatu
 		chainID, peerID := parseID(src)
 		pm.merger.HandleNetMsg(msg.Cmd, chainID.String(), peerID.String(), msg)
 		log.Debugf("mergeRecv cmd : %v transaction msg from message net %v:%v ,src: %v\n", msg.Cmd, chainID, peerID, src)
-
+	case msgnet.ChainRpcMsg:
+		chainID, peerID := parseID(src)
+		in := new(bytes.Buffer)
+		out := new(bytes.Buffer)
+		in.Write(msg.Payload)
+		pm.jrpcServer.ServeRequest(rpc.NewJSONServerCodec(jrpc.NewHttConn(in, out)))
+		log.Debugf("remote rpc cmd : %v rpc msg rom message net %v:%v, src: %v\n", msg.Cmd, chainID, peerID, src)
+		pm.SendMsgnetMessage(pm.peerAddress(), src, msgnet.Message{Cmd: msg.Cmd, Payload: out.Bytes()})
+		log.Debugf("Broadcast consensus message to msg-net, result: %s", string(out.Bytes()))
 	case msgnet.ChainChangeCfgMsg:
 		id := strings.Split(src, ":")
 		// size, _ := strconv.Atoi(string(msg.Payload))

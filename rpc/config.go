@@ -18,16 +18,19 @@
 
 package rpc
 
-type Option struct {
-	Enabled bool
-	Port    string
+var jrpcCfg *Config
+
+type Config struct {
+	Enabled        bool
+	Port           string
+	LogFilePath    string
+	ConfigFilePath string
 }
 
-func NewDefaultOption() *Option {
-	option := &Option{
+func NewDefaultConfig() *Config {
+	config := &Config{
 		Enabled: true,
 		Port:    "8000",
 	}
-
-	return option
+	return config
 }
