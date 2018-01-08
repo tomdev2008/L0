@@ -181,6 +181,7 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 
 	t.pmHander.Relay(tx)
 	//<-ch
+	//startTime := time.Now()
 	//log.Debugf("BroadcastTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
 	//if errMsg != nil {
 	//	return errMsg
