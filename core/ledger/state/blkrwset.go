@@ -29,7 +29,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/ledger/contract/treap"
+	"github.com/bocheninc/L0/core/ledger/state/treap"
 )
 
 // NewBLKRWset create object
