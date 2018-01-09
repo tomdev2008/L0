@@ -1,3 +1,21 @@
+// Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
+//
+// This file is part of L0
+//
+// The L0 is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The L0 is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 package state
 
 import (
@@ -5,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
 )
 
@@ -26,9 +43,10 @@ func (asset *Asset) Update(jsonStr string) (*Asset, error) {
 	if len(jsonStr) == 0 {
 		return asset, nil
 	}
+
 	tAsset := &Asset{}
 	if err := json.Unmarshal([]byte(jsonStr), tAsset); err != nil {
-		return nil, fmt.Errorf("invalid json string for asset - %s", err)
+		return nil, fmt.Errorf("asset update failed: invalid json string for asset - %s", err)
 	}
 
 	var newVal map[string]interface{}
@@ -51,11 +69,7 @@ func (asset *Asset) Update(jsonStr string) (*Asset, error) {
 	if asset.ID != newAsset.ID ||
 		!bytes.Equal(asset.Issuer.Bytes(), newAsset.Issuer.Bytes()) ||
 		!bytes.Equal(asset.Owner.Bytes(), newAsset.Owner.Bytes()) {
-
-		log.Errorf("asset update failed, attribute mismatch, from %#v to %#v",
-			asset, newAsset)
-		return nil, fmt.Errorf("id, issuer, owner are readonly attribute, can't modified")
+		return nil, fmt.Errorf("asset update failed: id, issuer, owner are readonly attribute, can't modified -- %#v to %#v", asset, newAsset)
 	}
-
 	return newAsset, nil
 }
