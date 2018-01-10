@@ -1,361 +1,261 @@
-// Copyright (C) 2017, Beijing Bochen Technology Co.,Ltd.  All rights reserved.
-//
-// This file is part of L0
-//
-// The L0 is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The L0 is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
-// Package vm the contract execute environment
 package vm
 
 import (
 	"sync"
-	"syscall"
-
-	"math/big"
-
+	"reflect"
+	"sync/atomic"
 	"errors"
-
-	"encoding/json"
-	"fmt"
-
+	"time"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/L0/core/params"
-	"github.com/bocheninc/L0/core/types"
 )
 
-type ContractCode struct {
-	Code []byte
-	Type string
-}
+// start vm(lua and js service according to configure)
+// manage the all worker instance
 
-const (
-	contractCodeKey = "__CONTRACT_CODE_KEY__"
-)
 
 var (
-	luavmProc *VMProc
-	jsvmProc  *VMProc
-	locker    sync.Mutex
-
-	zeroAddr = accounts.Address{}
+	ErrVMAlreadyRunning = errors.New("vm have been running ...")
+	ErrVMNotRunning = errors.New("vm not running")
+	ErrJobNotFunc = errors.New("job not function")
+	ErrWorkerClosed = errors.New("worker closed")
+	ErrWorkerTimeout = errors.New("worker timeout")
 )
 
-// PreExecute execute contract but not commit change(balances and state)
-func PreExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
-	ret, err := execute(tx, cs, handler, tx.GetType(), false)
-	if err != nil {
-		return false, err
-	}
-	return ret.(bool), err
+type VirtualMachine struct {
+	name string
+	running uint32
+	pendingAsyncJobs int32
+	statusMutex sync.RWMutex
+	selects   []reflect.SelectCase
+	workers []*workerWrapper
+	jobcnt  int
 }
 
-// RealExecute execute contract and commit change(balances and state)
-func RealExecute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
-	ret, err := execute(tx, cs, handler, tx.GetType(), true)
-	if err != nil {
-		return false, err
-	}
-	return ret.(bool), err
+func (vm *VirtualMachine) isRunning() bool {
+	return (atomic.LoadUint32(&vm.running) == 1)
 }
 
-func RealExecuteRequire(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) (bool, error) {
-	ret, err := execute(tx, cs, handler, types.TypeContractInvoke, true)
-	if err != nil {
-		return false, err
+func (vm *VirtualMachine) setRunning(running bool)  {
+	if running {
+		atomic.SwapUint32(&vm.running, 1)
+	} else {
+		atomic.SwapUint32(&vm.running, 0)
 	}
-	return ret.(bool), err
 }
 
-func Query(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract) ([]byte, error) {
+func (vm *VirtualMachine) Loop() {
+	for {
+		select {
 
-	ret, err := execute(tx, cs, handler, tx.GetType(), true)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret.([]byte), err
-}
-
-func execute(tx *types.Transaction, cs *types.ContractSpec, handler ISmartConstract, executeAction uint32, realExec bool) (interface{}, error) {
-
-	contractCode, contractType, err := getContractCode(cs, executeAction, handler)
-	if err != nil {
-		return false, err
-	}
-
-	var vm *VMProc
-
-	if err := initVMProc(contractType); err != nil {
-		return false, err
-	}
-
-	// 根据不同的语言调用不同的vm
-	switch contractType {
-	case "luavm":
-		vm = luavmProc
-	case "jsvm":
-		vm = jsvmProc
-	}
-
-	cd := NewContractData(tx, cs, contractCode)
-
-	switch executeAction {
-	case types.TypeJSContractInit:
-		if realExec {
-			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "jsvm"})
-			if err != nil {
-				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
-				return nil, err
-			}
-
-			if len(cs.ContractAddr) == 0 {
-				err := handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				handler.AddState(contractCodeKey, code.Bytes()) // add js contract code into state
-			}
-			return vm.PCallRealInitContract(cd, handler)
 		}
-		return vm.PCallPreInitContract(cd, handler)
-	case types.TypeLuaContractInit:
-		if realExec {
-			code, err := ConcrateStateJson(&ContractCode{Code: cs.ContractCode, Type: "luavm"})
-			if err != nil {
-				log.Errorf("Value: %+v, ConcrateStateJson err: %+v", ContractCode{Code: cs.ContractCode, Type: "jsvm"}, err)
-				return nil, err
-			}
-			if len(cs.ContractAddr) == 0 {
-				err := handler.SetGlobalState(params.GlobalContractKey, code.Bytes())
-				if err != nil {
-					return nil, err
-				}
-			} else {
-				handler.AddState(contractCodeKey, code.Bytes()) // add lua contract code into state
-			}
-			return vm.PCallRealInitContract(cd, handler)
-		}
-		return vm.PCallPreInitContract(cd, handler)
-	case types.TypeContractInvoke:
-		if realExec {
-			return vm.PCallRealExecute(cd, handler)
-		}
-		return vm.PCallPreExecute(cd, handler)
-	case types.TypeContractQuery:
-		return vm.PCallQueryContract(cd, handler)
 	}
-
-	return false, errors.New("Transaction type error")
 }
 
-func initVMProc(contractType string) error {
-	var err error
-	switch contractType {
-	case "jsvm":
-		if jsvmProc == nil {
-			locker.Lock()
-			if jsvmProc == nil {
-				if jsvmProc, err = NewVMProc(VMConf.JSVMExeFilePath); err == nil {
-					jsvmProc.SetRequestHandle(requestHandle)
-					jsvmProc.Selector()
+func (vm *VirtualMachine) Open(name string) (*VirtualMachine, error) {
+	vm.statusMutex.Lock()
+	defer vm.statusMutex.Unlock()
+
+	if !vm.isRunning() {
+		vm.selects = make([]reflect.SelectCase, len(vm.workers))
+
+		for i, workerWrapper := range vm.workers {
+			workerWrapper.Open()
+			vm.selects[i] = reflect.SelectCase{
+				Dir: reflect.SelectRecv,
+				Chan: reflect.ValueOf(workerWrapper.readyChan),
+			}
+		}
+
+		//go vm.Loop()
+		vm.setRunning(true)
+		return vm, nil
+	}
+
+	return nil, ErrVMAlreadyRunning
+}
+
+func (vm *VirtualMachine) Close(name string) error {
+	vm.statusMutex.Lock()
+	defer vm.statusMutex.Unlock()
+	log.Debugf("vm to close, jobCnt: %d", vm.jobcnt)
+	if vm.isRunning() {
+		for _, workerWrapper := range vm.workers {
+			workerWrapper.Close()
+		}
+
+		for _, workerWrapper := range vm.workers {
+			workerWrapper.Join()
+		}
+
+		vm.setRunning(false)
+		return nil
+	}
+
+	return ErrVMNotRunning
+}
+
+func CreateVM(numWorkers int, job func(interface{}) interface{}) *VirtualMachine {
+	vm := &VirtualMachine{running: 0}
+
+	vm.workers = make([]*workerWrapper, numWorkers)
+	for i := range vm.workers {
+		newWorker := workerWrapper{
+			worker: &(VmDefaultWorker{&job}),
+		}
+		vm.workers[i] = &newWorker
+	}
+
+	return vm
+}
+
+func CreateGenericVM(numWorkers int, fn func(interface{}) interface{}) *VirtualMachine {
+	return CreateVM(numWorkers, fn)
+}
+
+func CreateCustomVM(workers []VmWorker) *VirtualMachine {
+
+	vm := &VirtualMachine{running: 0}
+	vm.workers = make([]*workerWrapper, len(workers))
+	for i := range vm.workers {
+		newWorker := workerWrapper{
+			worker: workers[i],
+		}
+		vm.workers[i] = &newWorker
+	}
+
+	return vm
+}
+
+
+func (vm *VirtualMachine) SendWorkTimed(timeout time.Duration, jobData interface{}) (interface{}, error) {
+	vm.statusMutex.Lock()
+	defer vm.statusMutex.Unlock()
+
+	if vm.isRunning() {
+		before := time.Now()
+
+		startTimeOut := time.NewTimer(timeout * time.Millisecond)
+		defer startTimeOut.Stop()
+
+		selectCases := append(vm.selects, reflect.SelectCase{
+			Dir:reflect.SelectRecv,
+			Chan:reflect.ValueOf(startTimeOut.C),
+		})
+
+		if chosen, _, ok := reflect.Select(selectCases); ok {
+			if chosen < (len(selectCases) - 1) {
+				vm.workers[chosen].jobChan <- jobData
+
+				timeoutRemain := time.NewTimer(timeout * time.Millisecond - time.Since(before))
+				defer timeoutRemain.Stop()
+
+				select {
+				case data, open := <-vm.workers[chosen].outputChan:
+					if !open {
+						return nil, ErrWorkerClosed
+					}
+
+					return data, nil
+				case <- timeoutRemain.C:
 					go func() {
-						pState, err := jsvmProc.Proc.Wait()
-						if err != nil {
-							log.Errorln(err)
-						}
-						state := pState.Sys().(syscall.WaitStatus)
-						if state.Signaled() || state.Exited() {
-							jsvmProc = nil
-							log.Debugln("jsvm is exited", pState.String())
-						}
+						vm.workers[chosen].Interrupt()
+						<-vm.workers[chosen].outputChan
 					}()
 
-				} else {
-					log.Error("create jsvm proc error", err)
+					return nil, ErrWorkerTimeout
 				}
-			}
-			locker.Unlock()
-		}
-	case "luavm":
-		// create lua vm
-		if luavmProc == nil {
-			locker.Lock()
-			if luavmProc == nil {
-				if luavmProc, err = NewVMProc(VMConf.LuaVMExeFilePath); err == nil {
-					luavmProc.SetRequestHandle(requestHandle)
-					luavmProc.Selector()
 
-					go func() {
-						pState, err := luavmProc.Proc.Wait()
-						if err != nil {
-							log.Errorln(err)
-						}
-						state := pState.Sys().(syscall.WaitStatus)
-						if state.Signaled() || state.Exited() {
-							luavmProc = nil
-							log.Debugln("lua vm is exited", pState.String())
-						}
-					}()
-
-				} else {
-					log.Error("create luavm proc error", err)
-				}
+			} else {
+				return nil, ErrWorkerTimeout
 			}
-			locker.Unlock()
+
+		} else {
+			return nil, ErrWorkerClosed
 		}
+	} else {
+		return nil, ErrVMNotRunning
 	}
+}
+
+func (vm *VirtualMachine) SendWorkTimedAsync(timeout time.Duration, jobData interface{}, callback func(interface{}, error)) {
+	atomic.AddInt32(&vm.pendingAsyncJobs, 1)
+
+	go func() {
+		defer atomic.AddInt32(&vm.pendingAsyncJobs, -1)
+		result, err := vm.SendWorkTimed(timeout, jobData)
+		if callback != nil {
+			callback(result, err)
+		}
+	}()
+}
+
+func (vm *VirtualMachine) SendWork(jobData interface{}) (interface{}, error) {
+	//vm.statusMutex.Lock()
+	//defer vm.statusMutex.Unlock()
+
+	if vm.isRunning() {
+		if chose, _, ok := reflect.Select(vm.selects); ok && chose >= 0 {
+			//log.Debugf("chose: %+v, same_cnt: %+v", chose, len(vm.selects))
+			vm.workers[chose].jobChan <- jobData
+			result, open := <-vm.workers[chose].outputChan
+
+			if !open {
+				return nil, ErrWorkerClosed
+			}
+
+			return result, nil
+		}
+
+		return nil, ErrWorkerClosed
+	}
+
+	return nil, ErrVMNotRunning
+}
+
+func (vm *VirtualMachine)SendWorkAsync(jobData interface{}, callback func(interface{}, error)) {
+	atomic.AddInt32(&vm.pendingAsyncJobs, 1)
+
+	go func() {
+		defer atomic.AddInt32(&vm.pendingAsyncJobs, -1)
+		result, err := vm.SendWork(jobData)
+		if callback != nil {
+			callback(result, err)
+		}
+	}()
+}
+
+
+func (vm *VirtualMachine) SendWorkClean(jobData interface{}) (interface{}, error) {
+	//vm.statusMutex.Lock()
+	//defer vm.statusMutex.Unlock()
+
+	if vm.isRunning() {
+		if chose, _, ok := reflect.Select(vm.selects); ok && chose >= 0 {
+			//log.Debugf("chose: %+v, same_cnt: %+v", chose, len(vm.selects))
+			vm.jobcnt ++
+			vm.workers[chose].jobChan <- jobData
+		}
+
+		return nil, ErrWorkerClosed
+	}
+
+	return nil, ErrVMNotRunning
+}
+
+
+func (vm *VirtualMachine)SendWorkCleanAsync(jobData interface{}) error {
+	atomic.AddInt32(&vm.pendingAsyncJobs, 1)
+	defer atomic.AddInt32(&vm.pendingAsyncJobs, -1)
+
+	_, err := vm.SendWorkClean(jobData)
 
 	return err
 }
 
-func getContractCode(cs *types.ContractSpec, txType uint32, handler ISmartConstract) (string, string, error) {
-	code := cs.ContractCode
-	if code != nil && len(code) > 0 {
-		if txType == types.TypeJSContractInit {
-			return string(code), "jsvm", nil
-		} else if txType == types.TypeLuaContractInit {
-			return string(code), "luavm", nil
-		}
-	}
-
-	cc := new(ContractCode)
-	var err error
-	if len(cs.ContractAddr) == 0 {
-		code, err = handler.GetGlobalState(params.GlobalContractKey)
-	} else {
-		code, err = handler.GetState(contractCodeKey)
-	}
-
-	if len(code) != 0 && err == nil {
-		contractCode, err := DoContractStateData(code)
-		if err != nil {
-			return "", "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
-		}
-		err = json.Unmarshal(contractCode, cc)
-		if err != nil {
-			return "", "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
-		}
-		return string(cc.Code), cc.Type, nil
-	} else if len(code) == 0 && err == nil {
-		return "", "", errors.New("cat't find contract code in db")
-	}
-	return "", "", err
+func (vm *VirtualMachine) NumPendingAsycnJobs() int32 {
+	return atomic.LoadInt32(&vm.pendingAsyncJobs)
 }
 
-func requestHandle(vmproc *VMProc, req *InvokeData) (interface{}, error) {
-	log.Debugf("request parent proc funcName:%s\n", req.FuncName)
-	switch req.FuncName {
-	case "GetGlobalState":
-		var key string
-		if err := req.DecodeParams(&key); err != nil {
-			return nil, err
-		}
-		return vmproc.L0Handler.GetGlobalState(key)
-	case "SetGlobalState":
-		var key string
-		var value []byte
-		if err := req.DecodeParams(&key, &value); err != nil {
-			return nil, err
-		}
-		return nil, vmproc.L0Handler.SetGlobalState(key, value)
-	case "DelGlobalState":
-		var key string
-		if err := req.DecodeParams(&key); err != nil {
-			return nil, err
-		}
-		return nil, vmproc.L0Handler.DelGlobalState(key)
-	case "GetState":
-		var key string
-		if err := req.DecodeParams(&key); err != nil {
-			return nil, err
-		}
-		return vmproc.L0Handler.GetState(key)
-
-	case "ComplexQuery":
-		var key string
-		if err := req.DecodeParams(&key); err != nil {
-			return nil, err
-		}
-		return vmproc.L0Handler.ComplexQuery(key)
-	case "PutState":
-		var key string
-		var value []byte
-		if err := req.DecodeParams(&key, &value); err != nil {
-			return nil, err
-		}
-		vmproc.L0Handler.AddState(key, value)
-		return true, nil
-
-	case "DelState":
-		var key string
-		if err := req.DecodeParams(&key); err != nil {
-			return nil, err
-		}
-		vmproc.L0Handler.DelState(key)
-		return true, nil
-	case "GetByPrefix":
-		var prefix string
-		if err := req.DecodeParams(&prefix); err != nil {
-			return nil, err
-		}
-
-		return vmproc.L0Handler.GetByPrefix(prefix), nil
-
-	case "GetByRange":
-		var startKey, limitKey string
-		if err := req.DecodeParams(&startKey, &limitKey); err != nil {
-			return nil, err
-		}
-
-		return vmproc.L0Handler.GetByRange(startKey, limitKey), nil
-
-	case "GetBalances":
-		var addr string
-		if err := req.DecodeParams(&addr); err != nil {
-			return nil, err
-		}
-		return vmproc.L0Handler.GetBalances(addr)
-
-	case "CurrentBlockHeight":
-		height := vmproc.L0Handler.CurrentBlockHeight()
-		return height, nil
-
-	case "AddTransfer":
-		var (
-			fromAddr, toAddr string
-			assetID          uint32
-			amount           int64
-			txType           uint32
-		)
-		if err := req.DecodeParams(&fromAddr, &toAddr, &assetID, &amount, &txType); err != nil {
-			return nil, err
-		}
-		vmproc.L0Handler.AddTransfer(fromAddr, toAddr, assetID, big.NewInt(amount), txType)
-		return true, nil
-
-	case "SmartContractFailed":
-		vmproc.L0Handler.SmartContractFailed()
-		return true, nil
-
-	case "SmartContractCommitted":
-		vmproc.L0Handler.SmartContractCommitted()
-		return true, nil
-
-	}
-
-	return false, errors.New("no method match:" + req.FuncName)
+func (vm *VirtualMachine) NumWorkers() int {
+	return len(vm.workers)
 }

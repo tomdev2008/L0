@@ -2,7 +2,7 @@ package luavm
 
 import (
 	"testing"
-	"github.com/bocheninc/L0/nvm"
+	"github.com/bocheninc/L0/vm"
 	"time"
 	"fmt"
 	"github.com/pborman/uuid"
@@ -11,9 +11,9 @@ import (
 	"github.com/bocheninc/L0/components/log"
 )
 
-var VMEnv = make(map[string]*nvm.VirtualMachine)
-func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
-	env := nvm.CreateCustomVM(worker)
+var VMEnv = make(map[string]*vm.VirtualMachine)
+func AddNewEnv(name string, worker []vm.VmWorker) *vm.VirtualMachine {
+	env := vm.CreateCustomVM(worker)
 	env.Open(name)
 	VMEnv[name] = env
 
@@ -22,11 +22,11 @@ func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
 
 
 func TestVMFunction(t *testing.T) {
-	nvm.VMConf = nvm.DefaultConfig()
+	vm.VMConf = vm.DefaultConfig()
 	workCnt := 1
-	luaWorkers := make([]nvm.VmWorker, workCnt)
+	luaWorkers := make([]vm.VmWorker, workCnt)
 	for i:=0; i<workCnt; i++ {
-		luaWorkers[i] = NewLuaWorker(nvm.DefaultConfig())
+		luaWorkers[i] = NewLuaWorker(vm.DefaultConfig())
 	}
 
 	luaVm := AddNewEnv("lua", luaWorkers)
@@ -40,10 +40,10 @@ func TestVMFunction(t *testing.T) {
 
 	l0Handler := NewL0Handler()
 
-	initccd := func() *nvm.WorkerProc {
+	initccd := func() *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{uid, amount, uid}),
 			PreMethod: "RealInitContract",
 			L0Handler: l0Handler,
@@ -53,10 +53,10 @@ func TestVMFunction(t *testing.T) {
 	}
 
 
-	invokeccd := func() *nvm.WorkerProc {
+	invokeccd := func() *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{"send", uid, amount, uid}),
 			PreMethod: "RealInvokeExecute",
 			L0Handler: l0Handler,
@@ -66,7 +66,7 @@ func TestVMFunction(t *testing.T) {
 	}
 
 	time.Sleep(time.Second)
-	luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd(),
 		Fn:fn,
 	})
@@ -74,7 +74,7 @@ func TestVMFunction(t *testing.T) {
 	log.Info("==============start=================")
 	startTime := time.Now()
 	for i := 0; i<8; i++ {
-		luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+		luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: invokeccd(),
 			Fn:fn,
 		})
@@ -82,7 +82,7 @@ func TestVMFunction(t *testing.T) {
 	fmt.Println("WorkThread: ",workCnt, " Exec time: ", time.Now().Sub(startTime))
 	log.Info("==============end=================")
 
-	luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd(),
 		Fn:fn,
 	})

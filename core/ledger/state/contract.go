@@ -24,7 +24,7 @@ import (
 	"errors"
 
 	"github.com/bocheninc/L0/core/accounts"
-	"github.com/bocheninc/base/utils"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 var (

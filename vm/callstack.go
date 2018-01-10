@@ -60,7 +60,7 @@ func (ss *stateQueue) poll() *stateOpfunc {
 }
 
 type transferOpfunc struct {
-	txType uint32
+	fee int64
 	from   string
 	to     string
 	id     uint32

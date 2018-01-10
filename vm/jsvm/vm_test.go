@@ -2,7 +2,7 @@ package jsvm
 
 import (
 	"testing"
-	"github.com/bocheninc/L0/nvm"
+	"github.com/bocheninc/L0/vm"
 	"time"
 	"fmt"
 	"github.com/pborman/uuid"
@@ -10,9 +10,9 @@ import (
 	"strconv"
 )
 
-var VMEnv = make(map[string]*nvm.VirtualMachine)
-func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
-	env := nvm.CreateCustomVM(worker)
+var VMEnv = make(map[string]*vm.VirtualMachine)
+func AddNewEnv(name string, worker []vm.VmWorker) *vm.VirtualMachine {
+	env := vm.CreateCustomVM(worker)
 	env.Open(name)
 	VMEnv[name] = env
 
@@ -21,11 +21,11 @@ func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
 
 
 func TestVMFunction(t *testing.T) {
-	nvm.VMConf = nvm.DefaultConfig()
+	vm.VMConf = vm.DefaultConfig()
 	workCnt := 2
-	luaWorkers := make([]nvm.VmWorker, workCnt)
+	luaWorkers := make([]vm.VmWorker, workCnt)
 	for i:=0; i<workCnt; i++ {
-		luaWorkers[i] = NewJsWorker(nvm.DefaultConfig())
+		luaWorkers[i] = NewJsWorker(vm.DefaultConfig())
 	}
 
 	luaVm := AddNewEnv("js", luaWorkers)
@@ -35,15 +35,15 @@ func TestVMFunction(t *testing.T) {
 	fn := func(data interface{}) interface{} {
 		//fmt.Println(data)
 		cnt ++
-		return nil
+		return true
 	}
 
 	l0Handler := NewL0Handler()
 
-	initccd := func() *nvm.WorkerProc {
+	initccd := func() *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{uid, amount, uid}),
 			PreMethod: "RealInitContract",
 			L0Handler: l0Handler,
@@ -52,10 +52,10 @@ func TestVMFunction(t *testing.T) {
 		return workerProc
 	}
 
-	invokeccd := func() *nvm.WorkerProc {
+	invokeccd := func() *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{"send", uid, amount, uid}),
 			PreMethod: "RealInvokeExecute",
 			L0Handler: l0Handler,
@@ -64,7 +64,7 @@ func TestVMFunction(t *testing.T) {
 		return workerProc
 	}
 
-	luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd(),
 		Fn:fn,
 	})
@@ -74,7 +74,7 @@ func TestVMFunction(t *testing.T) {
 	for i := 0; i<8; i++ {
 		invokeData := invokeccd()
 		//fmt.Println("contract code: ", len(invokeData.ContractData.ContractCode))
-		luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+		luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: invokeData,
 			Fn:fn,
 		})
@@ -82,7 +82,7 @@ func TestVMFunction(t *testing.T) {
 
 
 	fmt.Println("WorkThread: ",workCnt, " Exec time: ", time.Now().Sub(startTime))
-	luaVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	luaVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd(),
 		Fn:fn,
 	})

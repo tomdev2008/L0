@@ -18,7 +18,7 @@
 
 // vm config load from vm.yaml
 
-package nvm
+package vm
 
 import "encoding/json"
 
@@ -49,11 +49,11 @@ func DefaultConfig() *Config {
 		VMCallStackSize:            64,
 		VMMaxMem:                   200,
 		ExecLimitStackDepth:        100,
-		ExecLimitMaxOpcodeCount:    10000000000000,
-		ExecLimitMaxRunTime:        2000,
+		ExecLimitMaxOpcodeCount:    10000,
+		ExecLimitMaxRunTime:        1000,
 		ExecLimitMaxScriptSize:     10240, //5K
 		ExecLimitMaxStateValueSize: 10240, //5K
-		ExecLimitMaxStateItemCount: 10000000000,
+		ExecLimitMaxStateItemCount: 1000,
 		ExecLimitMaxStateKeyLength: 256,
 		LuaVMExeFilePath:           "bin/luavm",
 		JSVMExeFilePath:            "bin/jsvm",

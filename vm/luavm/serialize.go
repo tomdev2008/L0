@@ -161,12 +161,14 @@ func kvsToLValue(kvs []*db.KeyValue) (lua.LValue, error) {
 }
 
 func objToLValue(balance *state.Balance) lua.LValue {
-	tb := new(lua.LTable)
+	//tb := new(lua.LTable)
 	amountTb := new(lua.LTable)
 	for k, v := range balance.Amounts {
 		amountTb.RawSetInt(int(k), lua.LString(v.String()))
 	}
-	tb.RawSet(lua.LString("Amounts"), amountTb)
-	tb.RawSet(lua.LString("Nonce"), lua.LNumber(balance.Nonce))
-	return tb
+	//tb.RawSet(lua.LString("Amounts"), amountTb)
+	//tb.RawSet(lua.LString("Nonce"), lua.LNumber(balance.Nonce))
+	//return tb
+
+	return amountTb
 }

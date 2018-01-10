@@ -29,17 +29,20 @@ import (
 	"github.com/bocheninc/L0/core/accounts"
 )
 
+const (
+	ContractCodeKey = "__CONTRACT_CODE_KEY__"
+)
+
 func CheckStateKey(key string) error {
-	if contractCodeKey == key {
-		return errors.New("state key illegal:" + key)
-	}
+	//if ContractCodeKey == key {
+	//	return errors.New("state key illegal:" + key)
+	//}
 
 	if len(key) > VMConf.ExecLimitMaxStateKeyLength {
 		return errors.New("state key size illegal " +
 			strconv.Itoa(len(key)) +
 			" , max length is:" + strconv.Itoa(VMConf.ExecLimitMaxStateKeyLength))
 	}
-
 	return nil
 }
 
@@ -86,16 +89,6 @@ func CheckAddr(addr string) error {
 	return nil
 }
 
-func CheckContractCode(code string) error {
-	if len(code) == 0 || len(code) > VMConf.ExecLimitMaxScriptSize {
-		return errors.New("contract script code size illegal " +
-			strconv.Itoa(len(code)) +
-			"byte , max size is:" +
-			strconv.Itoa(VMConf.ExecLimitMaxScriptSize) + " byte")
-	}
-
-	return nil
-}
 
 func CheckVmMem(mem int) error {
 	if mem < 200 {

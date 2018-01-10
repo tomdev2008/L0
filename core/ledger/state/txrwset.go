@@ -28,7 +28,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/base/utils"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 // NewTXRWset create object

@@ -24,68 +24,141 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/vm"
 	"github.com/robertkrimen/otto"
+	"github.com/bocheninc/L0/vm"
+	"strconv"
+	"github.com/bocheninc/L0/core/params"
+	"encoding/json"
+	"github.com/bocheninc/L0/core/ledger/state"
 )
 
-var vmproc *vm.VMProc
+type JsWorker struct {
+	isInit bool
+	isCanRedo bool
+	VMConf *vm.Config
+	workerProc *vm.WorkerProc
+	ottoVM *otto.Otto
+}
 
-// Start start jsvm process
-func Start(name string) error {
-	log.Info("begin start jsvm proc")
-	var err error
-	if vmproc, err = vm.FindVMProcess(name); err != nil {
-		return err
+
+func NewJsWorker(conf *vm.Config) *JsWorker {
+	worker := &JsWorker{isInit: false}
+	worker.workerInit(true, conf)
+
+	return worker
+}
+
+// VmJob handler main work
+func (worker *JsWorker) VmJob(data interface{}) interface{} {
+	worker.isCanRedo = false
+	return worker.ExecJob(data)
+}
+
+// Exec worker
+func (worker *JsWorker) ExecJob(data interface{}) interface{} {
+	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
+	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
+	if err != nil {
+		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
 	}
-	log.Info("find jsvm proc pid:", vmproc.Proc.Pid)
 
-	vmproc.SetRequestHandle(requestHandle)
-	vmproc.Selector()
+	res := workerProcWithCallback.Fn(&state.VMExecResponse{
+		IsCanRedo: !worker.isCanRedo,
+		Err: err,
+	})
+
+	if !res.(bool) && !worker.isCanRedo {
+		worker.isCanRedo = true
+		worker.ExecJob(data)
+	}
+
 	return nil
 }
 
-// PreInitContract preset call L0Init not commit change
-func PreInitContract(cd *vm.ContractData) (interface{}, error) {
-	resetProc(cd)
-	return execContract(cd, "L0Init")
+// Block until worker ready
+func (worker *JsWorker) VmReady() bool {
+	return true
+}
+
+// initialize worker when started
+func (worker *JsWorker) VmInitialize() {
+	if !worker.isInit {
+		worker.workerInit(true, vm.DefaultConfig())
+	}
+}
+
+// terminate and clean resource when terminated
+func (worker *JsWorker) VmTerminate() {
+	//pass
+}
+
+// handler all request
+func (worker *JsWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
+	// log.Debug("call jsvm FuncName:", req.FuncName
+
+	switch wp.PreMethod {
+	case "PreInitContract":
+		return worker.InitContract(wp)
+	case "RealInitContract":
+		return worker.InitContract(wp)
+	case "PreInvokeExecute":
+		return worker.InvokeExecute(wp)
+	case "RealInvokeExecute":
+		return worker.InvokeExecute(wp)
+	case "QueryContract":
+		return worker.QueryContract(wp)
+	}
+	return nil, errors.New("luavm no method match:" + wp.PreMethod)
 }
 
 // RealInitContract real call L0Init and commit all change
-func RealInitContract(cd *vm.ContractData) (interface{}, error) {
-	resetProc(cd)
-	ok, err := execContract(cd, "L0Init")
+func (worker *JsWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
+	err := wp.L0Handler.Transfer(wp.ContractData.Transaction)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+	}
+
+	worker.resetProc(wp)
+	worker.StoreContractCode()
+	ok, err := worker.execContract(wp.ContractData, "L0Init")
 	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
-	err = vmproc.CCallCommit()
+	err = worker.workerProc.CCallCommit()
 	if err != nil {
-		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", vmproc.ContractData.ContractAddr, err.Error())
-		vmproc.CCallSmartContractFailed()
+		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
+		worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 
 	return ok, err
 }
 
-// PreExecute preset call L0Invoke not commit change
-func PreExecute(cd *vm.ContractData) (interface{}, error) {
-	resetProc(cd)
-	return execContract(cd, "L0Invoke")
-}
-
 // RealExecute real call L0Invoke and commit all change
-func RealExecute(cd *vm.ContractData) (interface{}, error) {
-	resetProc(cd)
-	ok, err := execContract(cd, "L0Invoke")
+func (worker *JsWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
+	err := wp.L0Handler.Transfer(wp.ContractData.Transaction)
+	if err != nil {
+		return nil, errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+	}
+
+	worker.resetProc(wp)
+	code, err := worker.GetContractCode()
+	if err != nil {
+		log.Errorf("can't get contract code")
+		return nil, errors.New("can't get contract code")
+	}
+
+	wp.ContractData.ContractCode = string(code)
+	ok, err := worker.execContract(wp.ContractData, "L0Invoke")
 	if !ok.(bool) || err != nil {
 		return ok, err
 	}
 
-	err = vmproc.CCallCommit()
+	err = worker.workerProc.CCallCommit()
 	if err != nil {
-		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", vmproc.ContractData.ContractAddr, err.Error())
-		vmproc.CCallSmartContractFailed()
+		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
+		worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 
@@ -93,26 +166,35 @@ func RealExecute(cd *vm.ContractData) (interface{}, error) {
 }
 
 // QueryContract call L0Query not commit change
-func QueryContract(cd *vm.ContractData) ([]byte, error) {
-	resetProc(cd)
-	result, err := execContract(cd, "L0Query")
+func (worker *JsWorker)QueryContract(wp *vm.WorkerProc) ([]byte, error) {
+	worker.resetProc(wp)
+	result, err := worker.execContract(wp.ContractData, "L0Query")
 	if err != nil {
 		return nil, err
 	}
 	return []byte(result.(string)), nil
 }
 
-func resetProc(cd *vm.ContractData) {
-	vmproc.ContractData = cd
-	vmproc.StateChangeQueue = vm.NewStateQueue()
-	vmproc.TransferQueue = vm.NewTransferQueue()
+func (worker *JsWorker) resetProc(wp *vm.WorkerProc) {
+	worker.workerProc = wp
+	exporter(worker.ottoVM, worker.workerProc)
+	wp.StateChangeQueue = vm.NewStateQueue()
+	wp.TransferQueue = vm.NewTransferQueue()
 }
 
+func (worker *JsWorker)workerInit(isInit bool, vmconf *vm.Config) {
+	worker.VMConf = vmconf
+	worker.workerProc = &vm.WorkerProc{}
+	worker.ottoVM = otto.New()
+	worker.ottoVM.SetOPCodeLimit(worker.VMConf.ExecLimitMaxOpcodeCount)
+	worker.ottoVM.SetStackDepthLimit(worker.VMConf.ExecLimitStackDepth)
+	worker.ottoVM.Interrupt = make(chan func(), 1) // The buffer prevents blocking
+	worker.isInit = true
+}
+
+
 // execContract start a js vm and execute smart contract script
-func execContract(cd *vm.ContractData, funcName string) (result interface{}, err error) {
-
-	var val otto.Value
-
+func (worker *JsWorker)execContract(cd *vm.ContractData, funcName string) (result interface{}, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			result = false
@@ -120,30 +202,32 @@ func execContract(cd *vm.ContractData, funcName string) (result interface{}, err
 		}
 	}()
 
-	code := cd.ContractCode
-	if err = vm.CheckContractCode(code); err != nil {
+	var val otto.Value
+	if err = worker.CheckContractCode(cd.ContractCode); err != nil {
 		return false, err
 	}
 
-	ottoVM := otto.New()
-	ottoVM.SetOPCodeLimit(vm.VMConf.ExecLimitMaxOpcodeCount)
-	ottoVM.SetStackDepthLimit(vm.VMConf.ExecLimitStackDepth)
-	exporter(ottoVM)                        //export go func
-	ottoVM.Interrupt = make(chan func(), 1) // The buffer prevents blocking
-	timeOut := time.Duration(vm.VMConf.ExecLimitMaxRunTime) * time.Millisecond
+	timeOut := time.Duration(worker.VMConf.ExecLimitMaxRunTime) * time.Millisecond
+	timeOutChann := make(chan bool, 1)
+	defer func() {
+		timeOutChann <- true
+	}()
 	go func() {
-		time.Sleep(timeOut)
-		ottoVM.Interrupt <- func() {
-			panic(fmt.Errorf("code run: %v,time out", timeOut))
+		select {
+		case <-timeOutChann:
+		case <-time.After(timeOut):
+			worker.ottoVM.Interrupt <- func() {
+				panic(fmt.Errorf("code run: %v,time out", timeOut))
+			}
 		}
 	}()
 
-	_, err = ottoVM.Run(code)
+	_, err = worker.ottoVM.Run(cd.ContractCode)
 	if err != nil {
 		return false, err
 	}
 
-	val, err = callJSFunc(ottoVM, cd, funcName)
+	val, err = callJSFunc(worker.ottoVM, cd, funcName)
 	if err != nil {
 		return false, err
 	}
@@ -152,6 +236,58 @@ func execContract(cd *vm.ContractData, funcName string) (result interface{}, err
 		return val.ToBoolean()
 	}
 	return val.ToString()
+}
+
+func (worker *JsWorker) GetContractCode() (string, error) {
+	var err error
+	cc := new(vm.ContractCode)
+	var code []byte
+	if len(worker.workerProc.ContractData.ContractAddr) == 0 {
+		code, err = worker.workerProc.L0Handler.GetGlobalState(params.GlobalContractKey)
+	} else {
+		code, err = worker.workerProc.L0Handler.GetState(vm.ContractCodeKey)
+	}
+
+	if len(code) != 0 && err == nil {
+		contractCode, err := vm.DoContractStateData(code)
+		if err != nil {
+			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+		}
+		err = json.Unmarshal(contractCode, cc)
+		if err != nil {
+			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+		}
+
+		return string(cc.Code), nil
+	} else {
+		return "", errors.New("cat't find contract code in db")
+	}
+}
+
+func (worker *JsWorker) StoreContractCode() error {
+	code, err := vm.ConcrateStateJson(&vm.ContractCode{Code: []byte(worker.workerProc.ContractData.ContractCode), Type: "jsvm"})
+	if err != nil {
+		log.Errorf("Can't concrate contract code")
+	}
+
+	if len(worker.workerProc.ContractData.ContractAddr) == 0 {
+		err = worker.workerProc.CCallPutState(params.GlobalContractKey, code.Bytes())
+	} else {
+		err = worker.workerProc.CCallPutState(vm.ContractCodeKey, code.Bytes()) // add js contract code into state
+	}
+
+	return  err
+}
+
+func (worker *JsWorker)CheckContractCode(code string) error {
+	if len(code) == 0 || len(code) > worker.VMConf.ExecLimitMaxScriptSize {
+		return errors.New("contract script code size illegal " +
+			strconv.Itoa(len(code)) +
+			"byte , max size is:" +
+			strconv.Itoa(worker.VMConf.ExecLimitMaxScriptSize) + " byte")
+	}
+
+	return nil
 }
 
 func callJSFunc(ottoVM *otto.Otto, cd *vm.ContractData, funcName string) (val otto.Value, err error) {
@@ -172,27 +308,4 @@ func callJSFunc(ottoVM *otto.Otto, cd *vm.ContractData, funcName string) (val ot
 		}
 	}
 	return
-}
-
-func requestHandle(vmproc *vm.VMProc, req *vm.InvokeData) (interface{}, error) {
-	// log.Debug("call jsvm FuncName:", req.FuncName)
-
-	cd := new(vm.ContractData)
-	if err := req.DecodeParams(cd); err != nil {
-		return nil, err
-	}
-
-	switch req.FuncName {
-	case "PreInitContract":
-		return PreInitContract(cd)
-	case "RealInitContract":
-		return RealInitContract(cd)
-	case "PreExecute":
-		return PreExecute(cd)
-	case "RealExecute":
-		return RealExecute(cd)
-	case "QueryContract":
-		return QueryContract(cd)
-	}
-	return false, errors.New("luavm no method match:" + req.FuncName)
 }

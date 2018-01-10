@@ -1,4 +1,4 @@
-package nvm
+package vm
 
 import (
 	"time"

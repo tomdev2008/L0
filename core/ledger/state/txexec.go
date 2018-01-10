@@ -35,6 +35,12 @@ import (
 
 var permissionPrefix = "permission."
 
+type VMExecResponse struct {
+	IsCanRedo bool
+	Err error
+}
+
+
 func (tx *TXRWSet) verifyPermission(key string) error {
 	var dataAdmin []byte
 	var err error

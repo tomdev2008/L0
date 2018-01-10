@@ -180,7 +180,6 @@ func kvsToJSValue(kvs []*db.KeyValue, ottoVM *otto.Otto) (otto.Value, error) {
 }
 
 func objToLValue(balance *state.Balance, ottoVM *otto.Otto) (otto.Value, error) {
-	mp := make(map[string]interface{})
 	amountsMp := make(map[string]interface{})
 	for k, v := range balance.Amounts {
 		value, err := ottoVM.ToValue(v.String())
@@ -195,12 +194,5 @@ func objToLValue(balance *state.Balance, ottoVM *otto.Otto) (otto.Value, error) 
 		return otto.NullValue(), err
 	}
 
-	mp["Amounts"] = amounts
-
-	nonce, err := ottoVM.ToValue(balance.Nonce)
-	if err != nil {
-		return otto.NullValue(), err
-	}
-	mp["Nonce"] = nonce
-	return ottoVM.ToValue(mp)
+	return amounts, nil
 }

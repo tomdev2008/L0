@@ -19,32 +19,24 @@
 package vm
 
 import (
-	"bytes"
 	"encoding/hex"
+	"github.com/bocheninc/L0/core/types"
 	"math/big"
-
-	"errors"
-
+	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/components/utils"
-	"github.com/bocheninc/L0/core/ledger/state"
-	"github.com/bocheninc/L0/core/types"
+	"errors"
 )
 
-// request, response type
-const (
-	InvokeTypeRequest  = byte(1)
-	InvokeTypeResponse = byte(2)
+var (
+	ErrNoValidParamsCnt = errors.New("invalid param count")
 )
 
-// InvokeData request and response data
-type InvokeData struct {
-	Type      byte
-	FuncName  string
-	SessionID uint32
-	Params    []byte
+type ContractCode struct {
+	Code []byte
+	Type string
 }
+
 
 type ContractData struct {
 	ContractCode   string
@@ -63,40 +55,56 @@ func NewContractData(tx *types.Transaction, cs *types.ContractSpec, contractCode
 	return cd
 }
 
+type WorkerProc struct {
+	ContractData     *ContractData
+	PreMethod	     string
+	L0Handler        ISmartConstract
+	StateChangeQueue *stateQueue
+	TransferQueue    *transferQueue
+}
+
+
+type WorkerProcWithCallback struct {
+	WorkProc *WorkerProc
+	Fn func(interface{}) interface{}
+}
 /************************** call for parent proc (L0 proc) ******************************/
-
-func (p *VMProc) PCallPreInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
-	var success bool
-	err := p.pcall("PreInitContract", cd, handler, &success)
-	return success, err
-}
-
-func (p *VMProc) PCallRealInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
-	var success bool
-	err := p.pcall("RealInitContract", cd, handler, &success)
-	return success, err
-}
-
-func (p *VMProc) PCallPreExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
-	var success bool
-	err := p.pcall("PreExecute", cd, handler, &success)
-	return success, err
-}
-
-func (p *VMProc) PCallRealExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
-	var success bool
-	err := p.pcall("RealExecute", cd, handler, &success)
-	return success, err
-}
-
-func (p *VMProc) PCallQueryContract(cd *ContractData, handler ISmartConstract) ([]byte, error) {
-	var result []byte
-	err := p.pcall("QueryContract", cd, handler, &result)
-	return result, err
-}
+//
+//func PCallPreInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
+//	var success bool
+//	err := pcall("PreInitContract", cd, handler, &success)
+//	return success, err
+//}
+//
+//func PCallRealInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
+//	var success bool
+//	err := pcall("RealInitContract", cd, handler, &success)
+//	return success, err
+//}
+//
+//func PCallPreExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
+//	var success bool
+//	err := pcall("PreExecute", cd, handler, &success)
+//	return success, err
+//}
+//
+//func PCallRealExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
+//	var success bool
+//	err := pcall("RealExecute", cd, handler, &success)
+//	return success, err
+//}
+//
+//func  PCallQueryContract(cd *ContractData, handler ISmartConstract) ([]byte, error) {
+//	err := pcall("QueryContract", cd, handler, &result)
+//	return result, err
+//}
+//
+//func pcall(preMethod string, cd *ContractData, handler ISmartConstract) {//, callback func(data interface{}) interface{}) {
+//
+//}
 
 /************************** call for child proc (vm proc) ******************************/
-func (p *VMProc) CCallGetGlobalState(key string) ([]byte, error) {
+func (p *WorkerProc) CCallGetGlobalState(key string) ([]byte, error) {
 	if err := CheckStateKey(key); err != nil {
 		return nil, err
 	}
@@ -105,39 +113,39 @@ func (p *VMProc) CCallGetGlobalState(key string) ([]byte, error) {
 		return v, nil
 	}
 
-	// call parent proc
-	var result []byte
-	err := p.ccall("GetGlobalState", &result, key)
-	return result, err
+	result, err := p.ccall("GetGlobalState", key)
+	return result.([]byte), err
 }
 
-func (p *VMProc) CCallSetGlobalState(key string, value []byte) error {
+func (p *WorkerProc) CCallSetGlobalState(key string, value []byte) error {
 	if err := CheckStateKeyValue(key, value); err != nil {
 		return err
 	}
 
-	if err := p.ccall("SetGlobalState", nil, key, value); err != nil {
+	if  _, err := p.ccall("SetGlobalState", key, value); err != nil {
 		return err
 	}
 
 	p.StateChangeQueue.stateMap[key] = value
+	p.StateChangeQueue.offer(&stateOpfunc{stateOpTypePut, key, value})
 	return nil
 }
 
-func (p *VMProc) CCallDelGlobalState(key string) error {
+func (p *WorkerProc) CCallDelGlobalState(key string) error {
 	if err := CheckStateKey(key); err != nil {
 		return err
 	}
 
-	if err := p.ccall("DelGlobalState", nil, key); err != nil {
+	if _, err := p.ccall("DelGlobalState", key); err != nil {
 		return err
 	}
 
 	p.StateChangeQueue.stateMap[key] = nil
+	p.StateChangeQueue.offer(&stateOpfunc{stateOpTypeDelete, key, nil})
 	return nil
 }
 
-func (p *VMProc) CCallGetState(key string) ([]byte, error) {
+func (p *WorkerProc) CCallGetState(key string) ([]byte, error) {
 	if err := CheckStateKey(key); err != nil {
 		return nil, err
 	}
@@ -145,24 +153,11 @@ func (p *VMProc) CCallGetState(key string) ([]byte, error) {
 		return v, nil
 	}
 
-	// call parent proc
-	var result []byte
-	err := p.ccall("GetState", &result, key)
-	return result, err
+	result, err := p.ccall("GetState", key)
+	return result.([]byte), err
 }
 
-func (p *VMProc) CCallComplexQuery(key string) ([]byte, error) {
-	if err := CheckStateKey(key); err != nil {
-		return nil, err
-	}
-
-	// call parent proc
-	var result []byte
-	err := p.ccall("ComplexQuery", &result, key)
-	return result, err
-}
-
-func (p *VMProc) CCallPutState(key string, value []byte) error {
+func (p *WorkerProc) CCallPutState(key string, value []byte) error {
 	if err := CheckStateKeyValue(key, value); err != nil {
 		return err
 	}
@@ -172,7 +167,7 @@ func (p *VMProc) CCallPutState(key string, value []byte) error {
 	return nil
 }
 
-func (p *VMProc) CCallDelState(key string) error {
+func (p *WorkerProc) CCallDelState(key string) error {
 	if err := CheckStateKey(key); err != nil {
 		return err
 	}
@@ -182,18 +177,16 @@ func (p *VMProc) CCallDelState(key string) error {
 	return nil
 }
 
-func (p *VMProc) CCallGetByPrefix(key string) ([]*db.KeyValue, error) {
+func (p *WorkerProc) CCallGetByPrefix(key string) ([]*db.KeyValue, error) {
 	if err := CheckStateKey(key); err != nil {
 		return nil, err
 	}
 
-	// call parent proc
-	var result []*db.KeyValue
-	err := p.ccall("GetByPrefix", &result, key)
-	return result, err
+	result, err := p.ccall("GetByPrefix", key)
+	return result.([]*db.KeyValue), err
 }
 
-func (p *VMProc) CCallGetByRange(startKey string, limitKey string) ([]*db.KeyValue, error) {
+func (p *WorkerProc) CCallGetByRange(startKey string, limitKey string) ([]*db.KeyValue, error) {
 	if err := CheckStateKey(startKey); err != nil {
 		return nil, err
 	}
@@ -202,13 +195,33 @@ func (p *VMProc) CCallGetByRange(startKey string, limitKey string) ([]*db.KeyVal
 		return nil, err
 	}
 
-	// call parent proc
-	var result []*db.KeyValue
-	err := p.ccall("GetByRange", &result, startKey, limitKey)
-	return result, err
+	result, err := p.ccall("GetByRange", startKey, limitKey)
+	return result.([]*db.KeyValue), err
 }
 
-func (p *VMProc) CCallGetBalances(addr string) (*state.Balance, error) {
+func (p *WorkerProc) CCallComplexQuery(key string) ([]byte, error) {
+	if err := CheckStateKey(key); err != nil {
+		return nil, err
+	}
+
+	result, err := p.ccall("ComplexQuery", key)
+	return result.([]byte), err
+}
+
+func (p *WorkerProc) CCallGetBalance(addr string, assetID uint32) (*big.Int, error) {
+	if err := CheckAddr(addr); err != nil {
+		return nil, err
+	}
+	if v, ok := p.TransferQueue.balancesMap[addr]; ok {
+		return v.Amounts[assetID], nil
+	}
+
+	result, err := p.ccall("GetBalance", addr, assetID)
+	return result.(*big.Int), err
+}
+
+
+func (p *WorkerProc) CCallGetBalances(addr string) (*state.Balance, error) {
 	if err := CheckAddr(addr); err != nil {
 		return nil, err
 	}
@@ -216,20 +229,17 @@ func (p *VMProc) CCallGetBalances(addr string) (*state.Balance, error) {
 		return v, nil
 	}
 
-	// call parent proc
-	var result *state.Balance
-	err := p.ccall("GetBalances", &result, addr)
-	return result, err
+	result, err := p.ccall("GetBalances", addr)
+	return result.(*state.Balance), err
 }
 
-func (p *VMProc) CCallCurrentBlockHeight() (uint32, error) {
-	var result uint32
-	err := p.ccall("CurrentBlockHeight", &result)
-	return result, err
+func (p *WorkerProc) CCallCurrentBlockHeight() (uint32, error) {
+	result, err := p.ccall("CurrentBlockHeight")
+	return result.(uint32), err
 }
 
-func (p *VMProc) CCallTransfer(recipientAddr string, id, amount int64, txType uint32) error {
-	log.Debugf("CCallTransfer recipientAddr:%s, id:%d, amount:%d, type:%d\n", recipientAddr, id, amount, txType)
+func (p *WorkerProc) CCallTransfer(recipientAddr string, id, amount int64, fee int64) error {
+	log.Debugf("CCallTransfer recipientAddr:%s, id:%d, amount:%d, fee:%d\n", recipientAddr, id, amount, fee)
 	if err := CheckAddr(recipientAddr); err != nil {
 		return err
 	}
@@ -242,10 +252,11 @@ func (p *VMProc) CCallTransfer(recipientAddr string, id, amount int64, txType ui
 	if v, ok := p.TransferQueue.balancesMap[contractAddr]; ok { // get contract balances from cache
 		contractBalances = v
 	} else { // get contract balances from parent proc
-		err := p.ccall("GetBalances", &contractBalances, contractAddr)
+		result, err := p.ccall("GetBalances", contractAddr)
 		if err != nil {
 			return errors.New("get balances error")
 		}
+		contractBalances = result.(*state.Balance)
 	}
 
 	if contractBalances.Amounts[uint32(id)].Int64() < amount {
@@ -256,10 +267,11 @@ func (p *VMProc) CCallTransfer(recipientAddr string, id, amount int64, txType ui
 	if v, ok := p.TransferQueue.balancesMap[recipientAddr]; ok { // get recipient balances from cache
 		recipientBalances = v
 	} else { // get recipient balances from parent proc
-		err := p.ccall("GetBalances", &recipientBalances, recipientAddr)
+		result, err := p.ccall("GetBalances", recipientAddr)
 		if err != nil {
 			return errors.New("get balances error")
 		}
+		recipientBalances = result.(*state.Balance)
 	}
 
 	contractBalances.Amounts[uint32(id)].Sub(contractBalances.Amounts[uint32(id)], big.NewInt(amount))
@@ -270,20 +282,22 @@ func (p *VMProc) CCallTransfer(recipientAddr string, id, amount int64, txType ui
 	}
 	recipientBalances.Amounts[uint32(id)].Add(recipientBalances.Amounts[uint32(id)], big.NewInt(amount))
 	p.TransferQueue.balancesMap[recipientAddr] = recipientBalances
-	p.TransferQueue.offer(&transferOpfunc{txType, contractAddr, recipientAddr, uint32(id), amount})
+	p.TransferQueue.offer(&transferOpfunc{fee, contractAddr, recipientAddr, uint32(id), amount})
 
 	return nil
 }
 
-func (p *VMProc) CCallSmartContractFailed() error {
-	return p.ccall("SmartContractFailed", nil)
+func (p *WorkerProc) CCallSmartContractFailed() error {
+	_, err := p.ccall("SmartContractFailed")
+	return err
 }
 
-func (p *VMProc) CCallSmartContractCommitted() error {
-	return p.ccall("SmartContractCommitted", nil)
+func (p *WorkerProc) CCallSmartContractCommitted() error {
+	_, err := p.ccall("SmartContractCommitted")
+	return err
 }
 
-func (p *VMProc) CCallCommit() error {
+func (p *WorkerProc) CCallCommit() error {
 	for {
 		txOP := p.TransferQueue.poll()
 		if txOP == nil {
@@ -291,7 +305,7 @@ func (p *VMProc) CCallCommit() error {
 		}
 
 		// call parent proc for real transfer
-		if err := p.ccall("AddTransfer", nil, txOP.from, txOP.to, txOP.id, txOP.amount, txOP.txType); err != nil {
+		if _, err := p.ccall("AddTransfer", txOP.from, txOP.to, txOP.id, txOP.amount, txOP.fee); err != nil {
 			return err
 		}
 		// log.Debugf("commit -> AddTransfer from:%s, to:%s, amount:%d, type:%d\n", txOP.from, txOP.to, txOP.amount, txOP.txType)
@@ -304,105 +318,118 @@ func (p *VMProc) CCallCommit() error {
 		}
 
 		if stateOP.optype == stateOpTypePut {
-			if err := p.ccall("PutState", nil, stateOP.key, stateOP.value); err != nil {
+			if _, err := p.ccall("PutState", stateOP.key, stateOP.value); err != nil {
 				return err
 			}
-			// log.Debugf("commit -> AddState key:%s", stateOP.key)
 		} else if stateOP.optype == stateOpTypeDelete {
-			if err := p.ccall("DelState", nil, stateOP.key); err != nil {
-				return err
-			}
-			// log.Debugf("commit -> DelState key:%s", stateOP.key)
-		}
-	}
-
-	return p.CCallSmartContractCommitted()
-}
-
-func (data *InvokeData) SetParams(params ...interface{}) {
-	buf := new(bytes.Buffer)
-
-	if params != nil && len(params) > 0 {
-		buf.WriteByte(byte(len(params)))
-		for _, p := range params {
-			bt := utils.Serialize(p)
-			buf.Write(bt)
-		}
-	}
-
-	data.Params = buf.Bytes()
-}
-
-func (data *InvokeData) DecodeParams(dataObj ...interface{}) error {
-	reader := bytes.NewBuffer(data.Params)
-
-	count, err := reader.ReadByte()
-	if err != nil {
-		return err
-	}
-
-	if count > byte(len(dataObj)) {
-		count = byte(len(dataObj))
-	}
-
-	if reader.Len() > 0 {
-		for i := byte(0); i < count; i++ {
-			err = utils.VarDecode(reader, dataObj[i])
-			if err != nil {
+			if _, err := p.ccall("DelState", nil, stateOP.key); err != nil {
 				return err
 			}
 		}
 	}
+
 	return nil
 }
 
-func (p *VMProc) pcall(funcName string, cd *ContractData, handler ISmartConstract, ret interface{}) error {
-	p.ContractData = cd
-	p.L0Handler = handler
+func (p *WorkerProc) ccall(funcName string, params ...interface{}) (interface{}, error) {
+	//log.Debugf("request parent proc funcName:%s, params(%d): %+v \n", funcName, len(params), params)
+	switch funcName {
+	case "GetGlobalState":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		return p.L0Handler.GetGlobalState(params[0].(string))
+	case "SetGlobalState":
+		if !p.checkParamsCnt(2, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		key := params[0].(string)
+		value := params[1].([]byte)
+		return nil, p.L0Handler.PutGlobalState(key, value)
+	case "DelGlobalState":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		return nil, p.L0Handler.DelGlobalState(params[0].(string))
+	case "GetState":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		return p.L0Handler.GetState(params[0].(string))
 
-	result, err := p.request(funcName, cd)
-	if err != nil {
-		return err
+	case "ComplexQuery":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		return p.L0Handler.ComplexQuery(params[0].(string))
+	case "PutState":
+		if !p.checkParamsCnt(2, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		key := params[0].(string)
+		value := params[1].([]byte)
+		p.L0Handler.PutState(key, value)
+		return true, nil
+
+	case "DelState":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+		p.L0Handler.DelState(params[0].(string))
+		return true, nil
+	case "GetByPrefix":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+
+		prefix := params[0].(string)
+		return p.L0Handler.GetByPrefix(prefix)
+
+	case "GetByRange":
+		if !p.checkParamsCnt(2, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+
+		startKey := params[0].(string)
+		limitKey := params[1].(string)
+
+		return p.L0Handler.GetByRange(startKey, limitKey)
+
+	case "GetBalances":
+		if !p.checkParamsCnt(1, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+
+		addr := params[0].(string)
+		return p.L0Handler.GetBalances(addr)
+
+	case "CurrentBlockHeight":
+		height := p.L0Handler.GetCurrentBlockHeight()
+		return height, nil
+
+	case "AddTransfer":
+		if !p.checkParamsCnt(5, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+
+		fromAddr := params[0].(string)
+		toAddr := params[1].(string)
+		assetID := params[2].(uint32)
+		amount := params[3].(int64)
+		fee := params[4].(int64)
+
+		p.L0Handler.AddTransfer(fromAddr, toAddr, assetID, big.NewInt(amount), big.NewInt(fee))
+		return true, nil
 	}
 
-	var errmsg string
-	err = result.DecodeParams(&errmsg, ret)
-	if err != nil {
-		log.Error("DecodeParams error: ", err)
-		return err
-	} else if len(errmsg) > 0 {
-		return errors.New(errmsg)
-	}
-	return nil
+	return false, errors.New("no method match:" + funcName)
 }
 
-func (p *VMProc) ccall(funcName string, ret interface{}, params ...interface{}) error {
-	result, err := p.request(funcName, params...)
-	if err != nil {
-		return err
+func (p *WorkerProc)checkParamsCnt( wanted int, params ...interface{}) bool {
+	if len(params) != wanted {
+		log.Errorf("invalid param count, wanted: %+v, actual: %+v", wanted, len(params))
+		return false
 	}
 
-	var errmsg string
-	if ret != nil {
-		err = result.DecodeParams(&errmsg, ret)
-	} else {
-		err = result.DecodeParams(&errmsg)
-	}
-	if err != nil {
-		return err
-	} else if len(errmsg) > 0 {
-		return errors.New(errmsg)
-	}
-	return nil
-}
-
-func (p *VMProc) request(funcName string, params ...interface{}) (*InvokeData, error) {
-	data := new(InvokeData)
-	data.FuncName = funcName
-	data.Type = InvokeTypeRequest
-	data.SetParams(params...)
-
-	ch := p.SendRequest(data)
-	result := <-ch
-	return result, nil
+	return true
 }

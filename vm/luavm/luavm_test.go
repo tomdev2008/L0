@@ -1,7 +1,7 @@
 package luavm
 
 import (
-	"github.com/bocheninc/L0/nvm"
+	"github.com/bocheninc/L0/vm"
 	"github.com/bocheninc/L0/core/types"
 	"math/big"
 	"fmt"
@@ -37,7 +37,7 @@ func (hd *L0Handler)GetGlobalState(key string) ([]byte, error) {
 	return []byte{}, errors.New("Not found")
 }
 
-func (hd *L0Handler)SetGlobalState(key string, value []byte) error {
+func (hd *L0Handler)PutGlobalState(key string, value []byte) error {
 	hd.Lock()
 	defer hd.Unlock()
 
@@ -53,11 +53,7 @@ func (hd *L0Handler)DelGlobalState(key string) error {
 	return nil
 }
 
-func (hd *L0Handler) ComplexQuery(key string) ([]byte, error) {
-	return []byte{}, errors.New("Not found")
-}
-
-func (hd *L0Handler)GetState(key string) ([]byte, error) {
+func (hd *L0Handler) GetState(key string) ([]byte, error) {
 	hd.Lock()
 	defer hd.Unlock()
 
@@ -67,26 +63,36 @@ func (hd *L0Handler)GetState(key string) ([]byte, error) {
 	return []byte{}, errors.New("Not found")
 }
 
-func (hd *L0Handler) AddState(key string, value []byte) {
+func (hd *L0Handler) PutState(key string, value []byte) error {
 	hd.Lock()
 	defer hd.Unlock()
 
 	hd.cache[key] = value
-	//fmt.Println(hd.cache)
+	return nil
 }
 
-func (hd *L0Handler) DelState(key string) {
+func (hd *L0Handler) DelState(key string) error {
 	hd.Lock()
 	defer hd.Unlock()
 
 	delete(hd.cache, key)
+	return nil
 }
 
-func (hd *L0Handler)GetByPrefix(prefix string) []*db.KeyValue {
-	return []*db.KeyValue{}
+func (hd *L0Handler) ComplexQuery(key string) ([]byte, error) {
+	return []byte{}, errors.New("Not found")
 }
-func (hd *L0Handler)GetByRange(startKey, limitKey string) []*db.KeyValue {
-	return []*db.KeyValue{}
+
+func (hd *L0Handler) GetByPrefix(prefix string) ([]*db.KeyValue, error) {
+	return []*db.KeyValue{}, nil
+}
+
+func (hd *L0Handler) GetByRange(startKey, limitKey string) ([]*db.KeyValue, error) {
+	return []*db.KeyValue{}, nil
+}
+
+func (hd *L0Handler) GetBalance(addr string, assetID uint32) (*big.Int, error) {
+	return big.NewInt(100), nil
 }
 
 func (hd *L0Handler) GetBalances(addr string) (*state.Balance, error) {
@@ -94,18 +100,24 @@ func (hd *L0Handler) GetBalances(addr string) (*state.Balance, error) {
 	defer hd.Unlock()
 
 	balance := state.NewBalance()
-	balance.Add(0, big.NewInt(100))
+	balance.Amounts[0] = big.NewInt(100)
+	balance.Amounts[1] = big.NewInt(50)
 	return balance, nil
 }
 
-func (hd *L0Handler) CurrentBlockHeight() uint32 {
+func (hd *L0Handler) GetCurrentBlockHeight() uint32 {
 	return 100
 }
 
-func (hd *L0Handler) AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, txType uint32) {
+func (hd *L0Handler) AddTransfer(fromAddr, toAddr string, assetID uint32, amount *big.Int, fee *big.Int) error {
 	hd.Lock()
 	defer hd.Unlock()
-	fmt.Printf("AddTransfer from:%s to:%s amount:%d txType:%d", fromAddr, toAddr, amount.Int64(), txType)
+	fmt.Printf("AddTransfer from:%s to:%s amount:%d txType:%d", fromAddr, toAddr, amount.Int64(), fee.Int64())
+	return nil
+}
+
+func (hd *L0Handler) Transfer(tx *types.Transaction) error {
+	return nil
 }
 
 func (hd *L0Handler) SmartContractFailed() {
@@ -115,6 +127,11 @@ func (hd *L0Handler) SmartContractFailed() {
 func (hd *L0Handler) SmartContractCommitted() {
 
 }
+
+func (hd *L0Handler) CombineAndValidRwSet(interface{}) interface{} {
+	return nil
+}
+
 var fileMap = make(map[string][]byte)
 var fileLock sync.Mutex
 func CreateContractSpec(args []string, fileName string) *types.ContractSpec {
@@ -155,18 +172,16 @@ func getRandFile() string {
 	num := rand.Intn(2)
 
 	if num % 2 == 0 {
-		fmt.Println("0")
 		return "l0coin.lua"
 	} else {
-		fmt.Println("2")
 		return "l0coin2.lua"
 	}
 }
 
-func CreateContractData(args []string) *nvm.ContractData {
+func CreateContractData(args []string) *vm.ContractData {
 	tx := &types.Transaction{}
 	cs := CreateContractSpec(args, getRandFile())
-	return nvm.NewContractData(tx, cs, string(cs.ContractCode))
+	return vm.NewContractData(tx, cs, string(cs.ContractCode))
 }
 
 //

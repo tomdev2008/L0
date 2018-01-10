@@ -98,7 +98,7 @@ func TestObjToLValue(t *testing.T) {
 	balance.Amounts[1] = big.NewInt(-1)
 	balance.Amounts[2] = big.NewInt(2)
 
-	balance.Nonce = 100
+	//balance.Nonce = 100
 
 	v := objToLValue(balance)
 
