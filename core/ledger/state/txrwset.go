@@ -31,8 +31,8 @@ import (
 	"github.com/bocheninc/base/utils"
 )
 
-// NewTXRWset create object
-func NewTXRWset(blk *BLKRWSet) *TXRWSet {
+// NewTXRWSet create object
+func NewTXRWSet(blk *BLKRWSet) *TXRWSet {
 	return &TXRWSet{
 		block: blk,
 	}
@@ -166,7 +166,7 @@ func (tx *TXRWSet) GetBalanceState(addr string, assetID uint32, committed bool) 
 func (tx *TXRWSet) GetBalanceStates(addr string, committed bool) (map[uint32]*big.Int, error) {
 	tx.balanceRW.RLock()
 	defer tx.balanceRW.RUnlock()
-	balances, err := tx.block.GetBalances(addr, committed)
+	balances, err := tx.block.GetBalanceStates(addr, committed)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +266,7 @@ func (tx *TXRWSet) GetAssetStates(committed bool) (map[uint32]*Asset, error) {
 	tx.assetRW.RLock()
 	defer tx.assetRW.RUnlock()
 
-	assets, err := tx.block.GetAssets(committed)
+	assets, err := tx.block.GetAssetStates(committed)
 	if err != nil {
 		return nil, err
 	}

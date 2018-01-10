@@ -20,6 +20,7 @@ package state
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -33,8 +34,8 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-// NewBLKRWset create object
-func NewBLKRWset(db *db.BlockchainDB) *BLKRWSet {
+// NewBLKRWSet create object
+func NewBLKRWSet(db *db.BlockchainDB) *BLKRWSet {
 	return &BLKRWSet{
 		chainCodeCF: "scontract",
 		balanceCF:   "balance",
@@ -188,9 +189,9 @@ func (blk *BLKRWSet) GetBalanceState(addr string, assetID uint32, committed bool
 	return amount.SetBytes(value), nil
 }
 
-// GetBalances get balances for address. If committed is false, this first looks in memory
+// GetBalanceStates get balances for address. If committed is false, this first looks in memory
 // and if missing, pulls from db.  If committed is true, this pulls from the db only.
-func (blk *BLKRWSet) GetBalances(addr string, committed bool) (map[uint32]*big.Int, error) {
+func (blk *BLKRWSet) GetBalanceStates(addr string, committed bool) (map[uint32]*big.Int, error) {
 	blk.balanceRW.RLock()
 	defer blk.balanceRW.RUnlock()
 	prefix := ConstructCompositeKey(addr, "")
@@ -295,9 +296,9 @@ func (blk *BLKRWSet) GetAssetState(assetID uint32, committed bool) (*Asset, erro
 	return assetInfo, nil
 }
 
-// GetAssets get assets. If committed is false, this first looks in memory
+// GetAssetStates get assets. If committed is false, this first looks in memory
 // and if missing, pulls from db.  If committed is true, this pulls from the db only.
-func (blk *BLKRWSet) GetAssets(committed bool) (map[uint32]*Asset, error) {
+func (blk *BLKRWSet) GetAssetStates(committed bool) (map[uint32]*Asset, error) {
 	blk.assetRW.RLock()
 	defer blk.assetRW.RUnlock()
 	prefix := ConstructCompositeKey(assetIDKeyPrefix, "")
@@ -463,4 +464,35 @@ func (blk *BLKRWSet) RegisterColumn(mdb *mongodb.Mdb) {
 	mdb.RegisterCollection(blk.chainCodeCF)
 	mdb.RegisterCollection(blk.assetCF)
 	mdb.RegisterCollection(blk.balanceCF)
+}
+
+func (blk *BLKRWSet) GetChainCodeCF() string {
+	return blk.chainCodeCF
+}
+
+func (blk *BLKRWSet) GetAssetCF() string {
+	return blk.assetCF
+}
+
+func (blk *BLKRWSet) GetBalanceCF() string {
+	return blk.balanceCF
+}
+
+func (blk *BLKRWSet) ComplexQuery(key string) ([]byte, error) {
+	return nil, errors.New("vp can't support complex qery")
+}
+
+func (blk *BLKRWSet) GetBalances(addr string) (*Balance, error) {
+	ret, err := blk.GetBalanceStates(addr, false)
+	return &Balance{ret}, err
+}
+
+func (blk *BLKRWSet) GetAsset(assetID uint32) (*Asset, error) {
+	ret, err := blk.GetAssetState(assetID, false)
+	return ret, err
+}
+
+func (blk *BLKRWSet) GetAssets() (map[uint32]*Asset, error) {
+	ret, err := blk.GetAssetStates(false)
+	return ret, err
 }

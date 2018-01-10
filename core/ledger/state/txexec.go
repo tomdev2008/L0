@@ -167,9 +167,10 @@ func (tx *TXRWSet) GetBalance(addr string, assetID uint32) (*big.Int, error) {
 	return tx.GetBalanceState(addr, assetID, false)
 }
 
-func (tx *TXRWSet) GetBalances(addr string) (map[uint32]*big.Int, error) {
+func (tx *TXRWSet) GetBalances(addr string) (*Balance, error) {
 	log.Debugf("GetBalances addr=[%s]", addr)
-	return tx.GetBalanceStates(addr, false)
+	ret, err := tx.GetBalanceStates(addr, false)
+	return &Balance{ret}, err
 }
 
 func (tx *TXRWSet) GetCurrentBlockHeight() uint32 {
@@ -204,6 +205,38 @@ func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
 	assetID := ttx.AssetID()
 	amount := ttx.Amount()
 	fee := ttx.Fee()
+	tp := ttx.GetType()
+	if tp == types.TypeIssue {
+		if asset, err := tx.GetAssetState(assetID, false); asset != nil || err != nil {
+			if err != nil {
+				return fmt.Errorf("asset id %d failed to get -- %s", assetID, err)
+			}
+			return fmt.Errorf("asset id %d alreay exist", assetID)
+		}
+		asset := &Asset{
+			ID:     assetID,
+			Issuer: ttx.Sender(),
+			Owner:  ttx.Recipient(),
+		}
+		asset, err := asset.Update(string(ttx.Payload))
+		if err != nil {
+			return fmt.Errorf("asset id %d failed to update -- %s", assetID, err)
+		}
+		tx.SetAssetState(assetID, asset)
+	} else if tp == types.TypeIssueUpdate {
+		asset, err := tx.GetAssetState(assetID, false)
+		if asset == nil {
+			if err != nil {
+				return fmt.Errorf("asset id %d failed to get -- %s", assetID, err)
+			}
+			return fmt.Errorf("asset id %d not exist", assetID)
+		}
+		asset, err = asset.Update(string(ttx.Payload))
+		if err != nil {
+			return fmt.Errorf("asset id %d failed to update -- %s", assetID, err)
+		}
+		tx.SetAssetState(assetID, asset)
+	}
 
 	sbalance, err := tx.GetBalanceState(sender, assetID, false)
 	if err != nil {
@@ -223,8 +256,10 @@ func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
 	tamount := big.NewInt(0)
 	tamount.Add(amount, fee)
 	sbalance.Sub(sbalance, tamount)
-	if sbalance.Sign() < 0 {
-		return ErrNegativeBalance
+	if tp != types.TypeIssue && tp != types.TypeIssueUpdate {
+		if sbalance.Sign() < 0 {
+			return ErrNegativeBalance
+		}
 	}
 	rbalance.Add(rbalance, tamount)
 	tx.SetBalacneState(sender, assetID, sbalance)
