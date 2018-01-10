@@ -26,6 +26,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"errors"
+	"github.com/bytom/blockchain/asset"
 )
 
 var (
@@ -212,7 +213,7 @@ func (p *WorkerProc) CCallGetByRange(startKey string, limitKey string) ([]*db.Ke
 	return result.([]*db.KeyValue), err
 }
 
-func (p *WorkerProc) CCallGetBalances(addr string) (*state.Balance, error) {
+func (p *WorkerProc) CCallGetBalances(addr string) (map[uint32]*big.Int, error) {
 	if err := CheckAddr(addr); err != nil {
 		return nil, err
 	}
@@ -222,7 +223,20 @@ func (p *WorkerProc) CCallGetBalances(addr string) (*state.Balance, error) {
 
 	// call parent proc
 	result, err := p.ccall("GetBalances", addr)
-	return result.(*state.Balance), err
+	return result.(map[uint32]*big.Int), err
+}
+
+func (p *WorkerProc) CCallGetBalance(addr string, assetID uint32) (*big.Int, error) {
+	if err := CheckAddr(addr); err != nil {
+		return nil, err
+	}
+	if v, ok := p.TransferQueue.balancesMap[addr]; ok {
+		return v, nil
+	}
+
+	// call parent proc
+	result, err := p.ccall("GetBalance", addr, assetID)
+	return result.(*big.Int), err
 }
 
 func (p *WorkerProc) CCallCurrentBlockHeight() (uint32, error) {

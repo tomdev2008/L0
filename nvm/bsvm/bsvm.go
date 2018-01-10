@@ -93,7 +93,6 @@ func (worker *BsWorker) GetInvokeType(wpwc *nvm.WorkerProcWithCallback) (string,
 	var err error
 	cc := new(nvm.ContractCode)
 	var code []byte
-	log.Debugf("caddr: %+v", wpwc.WorkProc.ContractData.ContractAddr)
 	if len(wpwc.WorkProc.ContractData.ContractAddr) == 0 {
 		code, err = wpwc.WorkProc.L0Handler.GetGlobalState(params.GlobalContractKey)
 	} else {
@@ -136,5 +135,13 @@ func (worker *BsWorker) isCommonTransaction(wpwc *nvm.WorkerProcWithCallback) bo
 }
 
 func (worker *BsWorker) HandleCommonTransaction(wpwc *nvm.WorkerProcWithCallback) {
-	//pass
+	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
+	if err != nil {
+		log.Debugf("Transaction Exec fail, tx_hash: %+v", wpwc.WorkProc.ContractData.Transaction.Hash())
+	}
+
+	res := wpwc.Fn(err)
+	if res.(bool) == true {
+
+	}
 }

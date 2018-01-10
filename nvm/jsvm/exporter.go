@@ -22,10 +22,10 @@ import (
 	//"bytes"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
-	"github.com/robertkrimen/otto"
-	"github.com/bocheninc/L0/nvm"
 	"bytes"
+	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/nvm"
+	"github.com/robertkrimen/otto"
 )
 
 func exporter(ottoVM *otto.Otto, workerProc *nvm.WorkerProc) (*otto.Object, error) {
@@ -39,144 +39,27 @@ func exporter(ottoVM *otto.Otto, workerProc *nvm.WorkerProc) (*otto.Object, erro
 		}
 	}`)
 
-	exporterFuncs.Set("Account", accountFunc(workerProc))
-	exporterFuncs.Set("Transfer", transferFunc(workerProc))
-	exporterFuncs.Set("CurrentBlockHeight", currentBlockHeightFunc(workerProc))
 	exporterFuncs.Set("GetGlobalState", getGlobalStateFunc(workerProc))
-	exporterFuncs.Set("SetGlobalState", setGlobalStateFunc(workerProc))
+	exporterFuncs.Set("PutGlobalState", putGlobalStateFunc(workerProc))
 	exporterFuncs.Set("DelGlobalState", delGlobalStateFunc(workerProc))
 	exporterFuncs.Set("GetState", getStateFunc(workerProc))
 	exporterFuncs.Set("PutState", putStateFunc(workerProc))
 	exporterFuncs.Set("DelState", delStateFunc(workerProc))
+
 	exporterFuncs.Set("GetByPrefix", getByPrefixFunc(workerProc))
 	exporterFuncs.Set("GetByRange", getByRangeFunc(workerProc))
 	exporterFuncs.Set("ComplexQuery", complexQueryFunc(workerProc))
+
+	exporterFuncs.Set("GetBalance", getBalanceFunc(workerProc))
+	exporterFuncs.Set("GetBalances", getBalancesFunc(workerProc))
+	exporterFuncs.Set("Account", accountFunc(workerProc))
+	exporterFuncs.Set("Transfer", transferFunc(workerProc))
+
+	exporterFuncs.Set("CurrentBlockHeight", currentBlockHeightFunc(workerProc))
 	exporterFuncs.Set("Sleep", sleepFunc(workerProc))
 
 	return exporterFuncs, nil
 }
-
-func sleepFunc(workerProc *nvm.WorkerProc) interface{} {
-	return func(fc otto.FunctionCall) otto.Value {
-		if len(fc.ArgumentList) != 1 {
-			log.Error("sleepFunc -> param illegality when invoke Transfer")
-			return fc.Otto.MakeCustomError("sleepFunc", "param illegality when invoke Sleep")
-		}
-
-		n, err := fc.Argument(0).ToInteger()
-		if err != nil {
-			log.Errorf("sleepFunc -> get duration error")
-			return fc.Otto.MakeCustomError("sleepFunc", err.Error())
-		}
-		time.Sleep(time.Duration(n) * time.Millisecond)
-		val, _ := otto.ToValue(true)
-		return val
-	}
-}
-
-func accountFunc(workerProc *nvm.WorkerProc) interface{} {
-	return func(fc otto.FunctionCall) otto.Value {
-		var addr, sender, recipient string
-		var amount int64
-		var err error
-		if len(fc.ArgumentList) == 1 {
-		addr, err = fc.Argument(0).ToString()
-	} else {
-		addr = workerProc.ContractData.ContractAddr
-	}
-
-		balances, err := workerProc.CCallGetBalances(addr)
-		if err != nil {
-		log.Error("accountFunc -> call CCallGetBalances error", err)
-		return fc.Otto.MakeCustomError("accountFunc", "call CCallGetBalances error:"+err.Error())
-	}
-
-		balancesValue, err := objToLValue(balances, fc.Otto)
-		if err != nil {
-		log.Error("accountFunc -> call objToLValue error", err)
-		return fc.Otto.MakeCustomError("accountFunc", "call objToLValue error:"+err.Error())
-	}
-
-		sender = workerProc.ContractData.Transaction.Sender().String()
-		recipient = workerProc.ContractData.Transaction.Recipient().String()
-
-		amount = workerProc.ContractData.Transaction.Amount().Int64()
-		amountValue, err := fc.Otto.ToValue(amount)
-		if err != nil {
-		log.Error("accountFunc -> call amount ToLValue error", err)
-		return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
-	}
-
-		mp := make(map[string]interface{}, 3)
-		mp["Address"] = addr
-		mp["Balances"] = balancesValue
-		mp["Sender"] = sender
-		mp["Recipient"] = recipient
-		mp["Amount"] = amountValue
-
-		val, err := fc.Otto.ToValue(mp)
-		if err != nil {
-		log.Error("accountFunc -> otto ToValue error", err)
-		return fc.Otto.MakeCustomError("accountFunc", "otto ToValue error:"+err.Error())
-	}
-		return val
-	}
-}
-
-
-func transferFunc(workerProc *nvm.WorkerProc) interface{} {
-	return func(fc otto.FunctionCall) otto.Value {
-		if len(fc.ArgumentList) != 3 {
-			log.Error("transferFunc -> param illegality when invoke Transfer")
-			return fc.Otto.MakeCustomError("transferFunc", "param illegality when invoke Transfer")
-		}
-
-		recipientAddr, err := fc.Argument(0).ToString()
-		if err != nil {
-			log.Errorf("transferFunc -> get recipientAddr arg error")
-			return fc.Otto.MakeCustomError("transferFunc", err.Error())
-		}
-
-		id, err := fc.Argument(1).ToInteger()
-		if err != nil {
-			log.Errorf("transferFunc -> get id arg error")
-			return fc.Otto.MakeCustomError("transferFunc", err.Error())
-		}
-
-		amout, err := fc.Argument(2).ToInteger()
-		if err != nil {
-			log.Errorf("transferFunc -> get amout arg error")
-			return fc.Otto.MakeCustomError("transferFunc", err.Error())
-		}
-		txType := uint32(0)
-		err = workerProc.CCallTransfer(recipientAddr, id, amout, txType)
-		if err != nil {
-			log.Errorf("transferFunc -> contract do transfer error recipientAddr:%s, amout:%d, txType:%d  err:%s", recipientAddr, amout, txType, err)
-			return fc.Otto.MakeCustomError("transferFunc", err.Error())
-		}
-
-		val, _ := otto.ToValue(true)
-		return val
-	}
-}
-
-
-func currentBlockHeightFunc(workerProc *nvm.WorkerProc) interface{} {
-	return func(fc otto.FunctionCall) otto.Value {
-		height, err := workerProc.CCallCurrentBlockHeight()
-		if err != nil {
-			log.Error("currentBlockHeightFunc -> get currentBlockHeight error")
-			return fc.Otto.MakeCustomError("currentBlockHeightFunc", "get currentBlockHeight error:"+err.Error())
-		}
-
-		val, err := otto.ToValue(height)
-		if err != nil {
-			return otto.NullValue()
-		}
-		return val
-	}
-}
-
 
 func getGlobalStateFunc(workerProc *nvm.WorkerProc) interface{} {
 	return func(fc otto.FunctionCall) otto.Value {
@@ -206,7 +89,7 @@ func getGlobalStateFunc(workerProc *nvm.WorkerProc) interface{} {
 	}
 }
 
-func setGlobalStateFunc(workerProc *nvm.WorkerProc) interface{} {
+func putGlobalStateFunc(workerProc *nvm.WorkerProc) interface{} {
 	return func(fc otto.FunctionCall) otto.Value {
 		if len(fc.ArgumentList) != 2 {
 			log.Error("param illegality when invoke SetGlobalState")
@@ -407,6 +290,178 @@ func complexQueryFunc(workerProc *nvm.WorkerProc) interface{} {
 		if err != nil {
 			log.Error("byteToJSvalue error", err)
 			return fc.Otto.MakeCustomError("complexQueryFunc", "byteToJSvalue error:"+err.Error())
+		}
+		return val
+	}
+}
+
+func getBalanceFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		if len(fc.ArgumentList) != 2 {
+			log.Error("param illegality when invoke getBalanceFunc")
+			return fc.Otto.MakeCustomError("getBalanceFunc", "param illegality when invoke getBalanceFunc")
+		}
+
+		addr, err := fc.Argument(0).ToString()
+		assetID, err := fc.Argument(1).ToInteger()
+		if err != nil {
+			log.Errorf("getBalance error addr:%s, assetID: %d,  err:%s", addr, assetID, err)
+			return fc.Otto.MakeCustomError("getBalance", "getBalance error:"+err.Error())
+		}
+
+		res, err := workerProc.CCallGetBalance(addr, uint32(assetID))
+		if err != nil {
+			log.Errorf("CCallGetBalance Error, addr: %s, assetID: %d, err: %s", addr, assetID, err)
+			return fc.Otto.MakeCustomError("getBalance", "getBalance error:"+err.Error())
+		}
+
+		val, err := otto.ToValue(res.Int64())
+		if err != nil {
+			log.Errorf("CCallGetBalance Error, addr: %s, assetID: %d, err: %s", addr, assetID, err)
+			return fc.Otto.MakeCustomError("getBalance", "getBalance error:"+err.Error())
+		}
+
+		return val
+	}
+}
+
+func getBalancesFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		if len(fc.ArgumentList) != 2 {
+			log.Error("param illegality when invoke getBalancesFunc")
+			return fc.Otto.MakeCustomError("getBalancesFunc", "param illegality when invoke getBalancesFunc")
+		}
+
+		addr, err := fc.Argument(0).ToString()
+		if err != nil {
+			log.Errorf("getBalances error addr:%s, err:%s", addr, err)
+			return fc.Otto.MakeCustomError("getBalances", "getBalances error:"+err.Error())
+		}
+
+		res, err := workerProc.CCallGetBalances(addr)
+		if err != nil {
+			log.Errorf("CCallGetBalance Error, addr: %s, assetID: %d, err: %s", addr, assetID, err)
+			return fc.Otto.MakeCustomError("getBalance", "getBalance error:"+err.Error())
+		}
+
+	}
+}
+
+
+func accountFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		var addr, sender, recipient string
+		var amount int64
+		var err error
+		if len(fc.ArgumentList) == 1 {
+			addr, err = fc.Argument(0).ToString()
+		} else {
+			addr = workerProc.ContractData.ContractAddr
+		}
+
+		balances, err := workerProc.CCallGetBalances(addr)
+		if err != nil {
+			log.Error("accountFunc -> call CCallGetBalances error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call CCallGetBalances error:"+err.Error())
+		}
+
+		balancesValue, err := objToLValue(balances, fc.Otto)
+		if err != nil {
+			log.Error("accountFunc -> call objToLValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call objToLValue error:"+err.Error())
+		}
+
+		sender = workerProc.ContractData.Transaction.Sender().String()
+		recipient = workerProc.ContractData.Transaction.Recipient().String()
+
+		amount = workerProc.ContractData.Transaction.Amount().Int64()
+		amountValue, err := fc.Otto.ToValue(amount)
+		if err != nil {
+			log.Error("accountFunc -> call amount ToLValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
+		}
+
+		mp := make(map[string]interface{}, 3)
+		mp["Address"] = addr
+		mp["Balances"] = balancesValue
+		mp["Sender"] = sender
+		mp["Recipient"] = recipient
+		mp["Amount"] = amountValue
+
+		val, err := fc.Otto.ToValue(mp)
+		if err != nil {
+			log.Error("accountFunc -> otto ToValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "otto ToValue error:"+err.Error())
+		}
+		return val
+	}
+}
+
+func transferFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		if len(fc.ArgumentList) != 3 {
+			log.Error("transferFunc -> param illegality when invoke Transfer")
+			return fc.Otto.MakeCustomError("transferFunc", "param illegality when invoke Transfer")
+		}
+
+		recipientAddr, err := fc.Argument(0).ToString()
+		if err != nil {
+			log.Errorf("transferFunc -> get recipientAddr arg error")
+			return fc.Otto.MakeCustomError("transferFunc", err.Error())
+		}
+
+		id, err := fc.Argument(1).ToInteger()
+		if err != nil {
+			log.Errorf("transferFunc -> get id arg error")
+			return fc.Otto.MakeCustomError("transferFunc", err.Error())
+		}
+
+		amout, err := fc.Argument(2).ToInteger()
+		if err != nil {
+			log.Errorf("transferFunc -> get amout arg error")
+			return fc.Otto.MakeCustomError("transferFunc", err.Error())
+		}
+		txType := uint32(0)
+		err = workerProc.CCallTransfer(recipientAddr, id, amout, txType)
+		if err != nil {
+			log.Errorf("transferFunc -> contract do transfer error recipientAddr:%s, amout:%d, txType:%d  err:%s", recipientAddr, amout, txType, err)
+			return fc.Otto.MakeCustomError("transferFunc", err.Error())
+		}
+
+		val, _ := otto.ToValue(true)
+		return val
+	}
+}
+
+func sleepFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		if len(fc.ArgumentList) != 1 {
+			log.Error("sleepFunc -> param illegality when invoke Transfer")
+			return fc.Otto.MakeCustomError("sleepFunc", "param illegality when invoke Sleep")
+		}
+
+		n, err := fc.Argument(0).ToInteger()
+		if err != nil {
+			log.Errorf("sleepFunc -> get duration error")
+			return fc.Otto.MakeCustomError("sleepFunc", err.Error())
+		}
+		time.Sleep(time.Duration(n) * time.Millisecond)
+		val, _ := otto.ToValue(true)
+		return val
+	}
+}
+
+func currentBlockHeightFunc(workerProc *nvm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		height, err := workerProc.CCallCurrentBlockHeight()
+		if err != nil {
+			log.Error("currentBlockHeightFunc -> get currentBlockHeight error")
+			return fc.Otto.MakeCustomError("currentBlockHeightFunc", "get currentBlockHeight error:"+err.Error())
+		}
+
+		val, err := otto.ToValue(height)
+		if err != nil {
+			return otto.NullValue()
 		}
 		return val
 	}

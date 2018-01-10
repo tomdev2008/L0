@@ -99,7 +99,7 @@ func (worker *JsWorker) InitContract(wp *nvm.WorkerProc) (interface{}, error) {
 		return ok, err
 	}
 
-	err = worker.workerProc.CCallCommit()
+	err = worker.workerProc.CCall Commit()
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
 		worker.workerProc.CCallSmartContractFailed()
