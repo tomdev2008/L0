@@ -64,9 +64,9 @@ type Blockchain struct {
 
 // load loads local blockchain data
 func (bc *Blockchain) load() {
-
+	log.Debugf("========start load========")
 	t := time.Now()
-	bc.ledger.VerifyChain()
+	//bc.ledger.VerifyChain()
 	delay := time.Since(t)
 
 	height, err := bc.ledger.Height()
@@ -190,6 +190,9 @@ func (bc *Blockchain) Synced() bool {
 	return bc.synced
 }
 
+var allProcessBlock time.Duration
+var allBlockCnt int64
+var allTransactionCnt int64
 // StartConsensusService starts consensus service
 func (bc *Blockchain) StartConsensusService() {
 	go bc.consenter.Start()
@@ -197,7 +200,7 @@ func (bc *Blockchain) StartConsensusService() {
 		for {
 			select {
 			case commitedTxs := <-bc.consenter.OutputTxsChannel():
-
+				startTime := time.Now()
 				//add lo
 				log.Infof("Outputs StartConsensusService len=%d", len(commitedTxs.Txs))
 
@@ -226,9 +229,22 @@ func (bc *Blockchain) StartConsensusService() {
 					if bc.orphans.Len() > 100 {
 						bc.orphans.Remove(bc.orphans.Front())
 					}
+					//bc.orphans.PushBack(commitedTxs)
 				} /*else if bc.synced {
 					log.Panicf("Height %d already exist in ledger", commitedTxs.Height)
 				}*/
+
+				oneBlockTime := time.Now().Sub(startTime)
+				allProcessBlock += oneBlockTime
+				allBlockCnt += 1
+				allTransactionCnt += int64(len(commitedTxs.Txs))
+				if allBlockCnt % 10 == 0 {
+					avg_blk_time := allProcessBlock.Nanoseconds() / allBlockCnt /1000 /1000
+					avg_tx_time := allProcessBlock.Nanoseconds() / allTransactionCnt /1000 /1000
+					log.Debugf("WriteLedger, blockCnt: %d, txCnt: %d, avg_blk_time: %d, avg_tx_time: %d", allBlockCnt, allTransactionCnt, avg_blk_time, avg_tx_time)
+				}
+				log.Debugf("WriteLedger, blk_ht: %+v , tx_nums: %+v, time: %s", height, len(commitedTxs.Txs), oneBlockTime)
+
 			}
 		}
 	}()

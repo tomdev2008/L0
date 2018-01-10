@@ -83,6 +83,7 @@ func NewLcnd(cfgFile string) *Lcnd {
 
 	mergeConfig = cfg.MergeConfig
 
+	log.Debugf("===start: db.NewDB=====")
 	chainDb = db.NewDB(cfg.DbConfig)
 	if params.Nvp && params.Mongodb {
 
@@ -93,7 +94,9 @@ func NewLcnd(cfgFile string) *Lcnd {
 		}
 	}
 
+	log.Debugf("===start: ledger.NewLedger===")
 	newLedger = ledger.NewLedger(chainDb, &ledger.Config{ExceptBlockDir: cfg.WriteExceptionBlockDir})
+	log.Debugf("===start: blockchain.NewBlockchain===")
 	bc = blockchain.NewBlockchain(newLedger)
 	consenter := consenter.NewConsenter(config.ConsenterOptions(), bc)
 	validator := validator.NewVerification(config.ValidatorConfig(cfg.PluginDir), newLedger, consenter)

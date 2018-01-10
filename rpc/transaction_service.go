@@ -32,6 +32,8 @@ import (
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/core/blockchain/validator"
+	"strings"
 )
 
 type IBroadcast interface {
@@ -170,10 +172,12 @@ func (t *Transaction) Broadcast(txHex string, reply *BroadcastReply) error {
 	})
 
 	t.pmHander.Relay(tx)
-	<-ch
-	if errMsg != nil {
-		return errMsg
-	}
+	//<-ch
+	//startTime := time.Now()
+	//log.Debugf("BroadcastTransaction, tx_hash: %+v time: %s", tx.Hash(), time.Now().Sub(startTime))
+	//if errMsg != nil {
+	//	return errMsg
+	//}
 
 	if tp := tx.GetType(); tp == types.TypeLuaContractInit || tp == types.TypeJSContractInit || tp == types.TypeContractInvoke || tp == types.TypeSecurity {
 		contractSpec := new(types.ContractSpec)
@@ -227,4 +231,22 @@ func (t *Transaction) Query(args *ContractQueryArgs, reply *string) error {
 
 	return nil
 
+}
+
+func (t *Transaction) GetTxPool(req *string, resp *string) error {
+	if len(*req) > 5 {
+		ok := validator.GetTxPoolTransacton(crypto.HexToHash(*req))
+		if ok {
+			*resp = "true"
+		} else {
+			*resp = "false"
+		}
+
+		return nil
+	}
+
+	txs := validator.GetTxPoolTransactions()
+	*resp = strings.Join(txs, " Hash: ")
+
+	return nil
 }

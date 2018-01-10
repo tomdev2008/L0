@@ -181,9 +181,13 @@ func (lbft *Lbft) maybePassCommit(core *lbftCore) bool {
 func (lbft *Lbft) recvRequest(request *Request) *Message {
 	digest := request.Name()
 	if lbft.isPrimary() {
+		lbft.rwVcStore.Lock()
 		if _, ok := lbft.vcStore[digest]; ok {
+			lbft.rwVcStore.Unlock()
 			return nil
 		}
+
+		lbft.rwVcStore.Unlock()
 		core := lbft.getlbftCore(digest)
 		var txs, etxs types.Transactions
 		if lbft.testing {
@@ -429,6 +433,8 @@ func (lbft *Lbft) recvCommit(commit *Commit) *Message {
 	return nil
 }
 
+var allProcessBlock time.Duration
+var allBlockCnt int64
 func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 	if committed.Chain != lbft.options.Chain {
 		log.Debugf("Replica %s received Committed from %s for consensus %s: ignore diff chain", lbft.options.ID, committed.ReplicaID, committed.Digest)
@@ -518,6 +524,11 @@ func (lbft *Lbft) recvCommitted(committed *Committed) *Message {
 		delete(lbft.vcStore, key)
 	}
 	lbft.rwVcStore.Unlock()
+	allProcessBlock += d
+	allBlockCnt += 1
+	if allBlockCnt % 100 == 0 {
+		log.Infof("execute consensusDelay blk_cnt: %+v, avg_time: %+v, lastOne: %+v", allBlockCnt, allProcessBlock.Nanoseconds() / allBlockCnt /1000 /1000, d)
+	}
 	log.Infof("Replica %s execute for consensus %s: seqNo:%d height:%d, duration: %s", lbft.options.ID, committed.Digest, committed.SeqNo, committed.Height, d)
 	lbft.execute()
 

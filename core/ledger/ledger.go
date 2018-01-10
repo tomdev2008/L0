@@ -584,6 +584,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
 			}
 			syncTxs = append(syncTxs, tx)
+			notify.PublishTransaction(tx)
 		case types.TypeSecurity:
 			adminData, err = ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
 			if err != nil {
@@ -635,6 +636,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				goto ctu
 			}
 			syncTxs = append(syncTxs, tx)
+			notify.PublishTransaction(tx)
 		default:
 			if err = ledger.executeTransaction(tx, false); err != nil {
 				errTxs = append(errTxs, tx)
@@ -645,6 +647,7 @@ func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]
 				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
 				goto ctu
 			}
+			notify.PublishTransaction(tx)
 
 			ledger.registerBalance(tx)
 			syncTxs = append(syncTxs, tx)

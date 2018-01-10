@@ -57,7 +57,7 @@ func (ct *Contract) invokeContract(typ, contractPath string, initArgs, invokeArg
 	txConf := common.NewContractTxConf([]byte{0}, []byte{0}, big.NewInt(100), big.NewInt(0), privkeyHex)
 	contractConf := common.NewContractConf(filepath.Join(ct.dirPath, contractPath), "invoke", false, initArgs, invokeArgs)
 	tx := common.CreateContractTransaction(txConf, contractConf)
-
+	fmt.Println(invokeArgs)
 	return tx
 }
 

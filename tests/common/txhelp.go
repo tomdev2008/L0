@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"time"
-
 	"github.com/bocheninc/L0/components/crypto"
 	L0Utils "github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -137,7 +136,6 @@ func CreateContractTransaction(txconf *TxConf, conf *ContractConf) *types.Transa
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
 	txconf.receiver = accounts.NewAddress(contractSpec.ContractAddr)
-
 	return tx
 }
 
