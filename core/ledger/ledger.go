@@ -25,8 +25,6 @@ import (
 	"math/big"
 	"path/filepath"
 
-	"fmt"
-
 	"errors"
 	"strconv"
 	"strings"
@@ -37,12 +35,10 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger/block_storage"
-	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/merge"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/notify"
@@ -56,8 +52,6 @@ var (
 )
 
 type ValidatorHandler interface {
-	UpdateAccount(tx *types.Transaction) bool
-	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	SecurityPluginDir() string
 }
@@ -66,9 +60,8 @@ type ValidatorHandler interface {
 type Ledger struct {
 	dbHandler *db.BlockchainDB
 	block     *block_storage.Blockchain
-	state     *state.State
+	state     *state.BLKRWSet
 	storage   *merge.Storage
-	contract  *contract.SmartConstract
 	Validator ValidatorHandler
 	conf      *Config
 	mdb       *mongodb.Mdb
@@ -81,10 +74,9 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 		ledgerInstance = &Ledger{
 			dbHandler: kvdb,
 			block:     block_storage.NewBlockchain(kvdb),
-			state:     state.NewState(kvdb),
+			state:     state.NewBLKRWSet(kvdb),
 			storage:   merge.NewStorage(kvdb),
 		}
-		ledgerInstance.contract = contract.NewSmartConstract(kvdb, ledgerInstance)
 		_, err := ledgerInstance.Height()
 		if err != nil {
 			if params.Nvp && params.Mongodb {
@@ -111,13 +103,11 @@ func (ledger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.Wr
 	for _, batch := range batches {
 		columnName := batch.CfName
 		batchKey := batch.Key
-		if 0 == strings.Compare(batch.CfName, ledger.contract.GetColumnFamily()) {
-			keys := strings.SplitN(string(batch.Key), "|", 2)
-			if len(keys) != 2 {
-				continue
-			}
-			columnName = "contract|" + keys[0]
-			batchKey = []byte(keys[1])
+		if 0 == strings.Compare(batch.CfName, ledger.state.GetChainCodeCF()) {
+			k, v := state.DecodeCompositeKey(string(batch.Key))
+
+			columnName = "contract|" + k
+			batchKey = []byte(v)
 		}
 
 		if _, ok := reBatches[columnName]; !ok {
@@ -159,7 +149,7 @@ Out:
 					var value interface{}
 					if batch.Operation == db.OperationPut {
 						if contractCol {
-							contractData, err := contract.DoContractStateData(batch.Value)
+							contractData, err := state.DoContractStateData(batch.Value)
 							if err != nil || contractData == nil && err == nil {
 								log.Warnf("state data parse error, key: %+v, value: %+v", string(batch.Key), batch.Value)
 							}
@@ -194,7 +184,7 @@ Out:
 								bal, _ := json.Marshal(balance)
 								json.Unmarshal(bal, &value)
 								log.Infof("balance: %+v", balance)
-							case ledger.contract.GetColumnFamily():
+							case ledger.state.GetChainCodeCF():
 							case ledger.block.GetBlockCF():
 								var blockHeader types.BlockHeader
 								utils.Deserialize(batch.Value, &blockHeader)
@@ -276,19 +266,17 @@ Out:
 func (ledger *Ledger) VerifyChain() {
 	height, err := ledger.Height()
 	if err != nil {
-		panic(err)
+		log.Panicf("VerifyChain -- Height %s", err)
 	}
 	currentBlockHeader, err := ledger.block.GetBlockByNumber(height)
 	for i := height; i >= 1; i-- {
 		previousBlockHeader, err := ledger.block.GetBlockByNumber(i - 1) // storage
 		if previousBlockHeader != nil && err != nil {
-
-			log.Debug("get block err")
-			panic(err)
+			log.Panicf("VerifyChain -- GetBlockByNumber %s", err)
 		}
 		// verify previous block
 		if !previousBlockHeader.Hash().Equal(currentBlockHeader.PreviousHash) {
-			panic(fmt.Errorf("block [%d], veifychain breaks", i))
+			log.Panicf("VerifyChain -- block [%d] mismatch, veifychain breaks", i)
 		}
 		currentBlockHeader = previousBlockHeader
 	}
@@ -296,7 +284,6 @@ func (ledger *Ledger) VerifyChain() {
 
 // GetGenesisBlock returns the genesis block of the ledger
 func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
-
 	genesisBlockHeader, err := ledger.GetBlockByNumber(0)
 	if err != nil {
 		panic(err)
@@ -312,38 +299,34 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		errTxs        types.Transactions
 	)
 
-	bh, _ := ledger.Height()
-	ledger.contract.StartConstract(bh)
+	// bh, _ := ledger.Height()
+	// ledger.state.SetHeight(bh)
 
-	txWriteBatchs, block.Transactions, errTxs = ledger.executeTransactions(block.Transactions, flag)
-	if len(errTxs) != 0 {
-		ledger.Validator.RemoveTxsInVerification(errTxs)
-	}
+	// txWriteBatchs, block.Transactions, errTxs = ledger.executeTransactions(block.Transactions, flag)
 
-	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
-	writeBatchs := ledger.block.AppendBlock(block)
-	writeBatchs = append(writeBatchs, txWriteBatchs...)
-	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
-	if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
-		return err
-	}
-	if params.Nvp && params.Mongodb {
-		ledger.mdbChan <- writeBatchs
-	}
+	// block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
+	// writeBatchs := ledger.block.AppendBlock(block)
+	// writeBatchs = append(writeBatchs, txWriteBatchs...)
+	// writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
+	// if err := ledger.dbHandler.AtomicWrite(writeBatchs); err != nil {
+	// 	return err
+	// }
+	// if params.Nvp && params.Mongodb {
+	// 	ledger.mdbChan <- writeBatchs
+	// }
 
-	ledger.Validator.RemoveTxsInVerification(block.Transactions)
+	// ledger.Validator.RemoveTxsInVerification(errTxs)
+	// ledger.Validator.RemoveTxsInVerification(block.Transactions)
 
-	ledger.contract.StopContract(bh)
-
-	for _, tx := range block.Transactions {
-		if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {
-			txs = append(txs, tx)
-		}
-	}
-	if err := ledger.storage.ClassifiedTransaction(txs); err != nil {
-		return err
-	}
-	log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions))
+	// for _, tx := range block.Transactions {
+	// 	if (tx.GetType() == types.TypeMerged && !ledger.checkCoordinate(tx)) || tx.GetType() == types.TypeAcrossChain {
+	// 		txs = append(txs, tx)
+	// 	}
+	// }
+	// if err := ledger.storage.ClassifiedTransaction(txs); err != nil {
+	// 	return err
+	// }
+	// log.Infoln("blockHeight: ", block.Height(), "need merge Txs len : ", len(txs), "all Txs len: ", len(block.Transactions))
 
 	return nil
 }
@@ -380,7 +363,7 @@ func (ledger *Ledger) Height() (uint32, error) {
 
 //ComplexQuery com
 func (ledger *Ledger) ComplexQuery(key string) ([]byte, error) {
-	return ledger.contract.ComplexQuery(key)
+	return ledger.state.ComplexQuery(key)
 }
 
 //GetLastBlockHash returns last block hash
@@ -426,14 +409,19 @@ func (ledger *Ledger) GetTxByTxHash(txHashBytes []byte) (*types.Transaction, err
 	return ledger.block.GetTransactionByTxHash(txHashBytes)
 }
 
-// GetBalanceFromDB returns balance by account
-func (ledger *Ledger) GetBalanceFromDB(addr accounts.Address) (*state.Balance, error) {
-	return ledger.state.GetBalance(addr)
+// GetBalances returns balance by account
+func (ledger *Ledger) GetBalances(addr accounts.Address) (*state.Balance, error) {
+	return ledger.state.GetBalances(addr.String())
 }
 
-// GetAssetFromDB returns asset
-func (ledger *Ledger) GetAssetFromDB(id uint32) (*state.Asset, error) {
+// GetAsset returns asset
+func (ledger *Ledger) GetAsset(id uint32) (*state.Asset, error) {
 	return ledger.state.GetAsset(id)
+}
+
+// GetAssets returns assets
+func (ledger *Ledger) GetAssets() (map[uint32]*state.Asset, error) {
+	return ledger.state.GetAssets()
 }
 
 //GetMergedTransaction returns merged transaction within a specified period of time
@@ -471,7 +459,7 @@ func (ledger *Ledger) GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transa
 
 //QueryContract processes new contract query transaction
 func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
-	return ledger.contract.QueryContract(tx)
+	return ledger.state.QueryContract(tx)
 }
 
 // init generates the genesis block
@@ -485,11 +473,30 @@ func (ledger *Ledger) init() error {
 
 	genesisBlock := new(types.Block)
 	genesisBlock.Header = blockHeader
-	writeBatchs := ledger.block.AppendBlock(genesisBlock)
-	if err := ledger.state.UpdateAsset(0, accounts.Address{}, accounts.Address{}, "{}"); err != nil {
-		panic(err)
+
+	for _, addr := range params.PublicAddress {
+		sender := accounts.HexToAddress(addr)
+		issueTx := types.NewTransaction{
+			params.ChainID,
+			params.ChainID,
+			types.TypeIssue,
+			uint32(0),
+			sender,
+			sender,
+			uint32(0),
+			big.NewInt(0),
+			big.NewInt(0),
+			uint32(0),
+		}
+		issueCoin := make(map[string]interface{})
+		issueCoin["id"] = uint32(0)
+		tx.Payload, _ = json.Marshal(issueCoin)
+		sig, _ := issueKey.Sign(tx.SignHash().Bytes())
+		genesisBlock.Transactions = append(genesisBlock.Transactions, issueTx)
+		break
 	}
-	writeBatchs = append(writeBatchs, ledger.state.WriteBatchs()...)
+
+	writeBatchs := ledger.block.AppendBlock(genesisBlock)
 
 	// admin address
 	buf, err := contract.ConcrateStateJson(contract.DefaultAdminAddr)
@@ -528,233 +535,6 @@ func (ledger *Ledger) init() error {
 
 }
 
-func (ledger *Ledger) executeTransactions(txs types.Transactions, flag bool) ([]*db.WriteBatch, types.Transactions, types.Transactions) {
-	var (
-		err                error
-		adminData          []byte
-		pluginData         *plugins.Plugin
-		errTxs             types.Transactions
-		syncTxs            types.Transactions
-		syncContractGenTxs types.Transactions
-		writeBatchs        []*db.WriteBatch
-	)
-
-	for _, tx := range txs {
-		switch tp := tx.GetType(); tp {
-		case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
-			if err = ledger.executeTransaction(tx, false); err != nil {
-				errTxs = append(errTxs, tx)
-				//rollback Validator balance cache
-				if ledger.Validator != nil {
-					ledger.Validator.RollBackAccount(tx)
-				}
-				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				goto ctu
-			}
-			var ttxs types.Transactions
-			ttxs, err = ledger.executeSmartContractTx(tx)
-			if err != nil {
-				errTxs = append(errTxs, tx)
-				//rollback Validator balance cache
-				if ledger.Validator != nil {
-					ledger.Validator.RollBackAccount(tx)
-					log.Errorf("execute contract Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-					goto ctu
-				}
-			} else {
-				var tttxs types.Transactions
-				for _, tt := range ttxs {
-					if err = ledger.executeTransaction(tt, false); err != nil {
-						break
-					}
-					tttxs = append(tttxs, tt)
-				}
-				if len(tttxs) != len(ttxs) {
-					for _, tt := range tttxs {
-						ledger.executeTransaction(tt, true)
-					}
-					errTxs = append(errTxs, tx)
-					//rollback Validator balance cache
-					if ledger.Validator != nil {
-						ledger.Validator.RollBackAccount(tx)
-					}
-					log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-					goto ctu
-				}
-				syncContractGenTxs = append(syncContractGenTxs, tttxs...)
-			}
-			syncTxs = append(syncTxs, tx)
-			notify.PublishTransaction(tx)
-		case types.TypeSecurity:
-			adminData, err = ledger.contract.GetContractStateData(params.GlobalStateKey, params.AdminKey)
-			if err != nil {
-				log.Error(err)
-				goto ctu
-			}
-
-			if len(adminData) == 0 {
-				log.Error("need admin address")
-				goto ctu
-			}
-
-			var adminAddr accounts.Address
-			err = json.Unmarshal(adminData, &adminAddr)
-			if err != nil {
-				log.Error(err)
-				goto ctu
-			}
-
-			if tx.Sender() != adminAddr {
-				err = errors.New("deploy security plugin, permission denied")
-				log.Error(err)
-				goto ctu
-			}
-
-			pluginData, err = plugins.Make(tx.Payload)
-			if err != nil {
-				err = errors.New("invalid security plugin data, " + err.Error())
-				log.Error(err)
-				goto ctu
-			}
-
-			if len(pluginData.Name) == 0 {
-				err = errors.New("name of security plugin is empty")
-				log.Error(err)
-				goto ctu
-			}
-
-			path := filepath.Join(ledger.Validator.SecurityPluginDir(), pluginData.Name)
-			if utils.FileExist(path) {
-				err = fmt.Errorf("security plugin %s already existed", pluginData.Name)
-				log.Error(err)
-				goto ctu
-			}
-
-			err = ioutil.WriteFile(path, pluginData.Code, 0644)
-			if err != nil {
-				log.Error(err)
-				goto ctu
-			}
-			syncTxs = append(syncTxs, tx)
-			notify.PublishTransaction(tx)
-		default:
-			if err = ledger.executeTransaction(tx, false); err != nil {
-				errTxs = append(errTxs, tx)
-				//rollback Validator balance cache
-				if ledger.Validator != nil {
-					ledger.Validator.RollBackAccount(tx)
-				}
-				log.Errorf("execute Tx hash: %s, type: %d,err: %v", tx.Hash(), tp, err)
-				goto ctu
-			}
-			notify.PublishTransaction(tx)
-
-			ledger.registerBalance(tx)
-			syncTxs = append(syncTxs, tx)
-		}
-		continue
-	ctu:
-		notify.TxNotify(tx, err)
-	}
-
-	for _, tx := range syncContractGenTxs {
-		if ledger.Validator != nil {
-			ledger.Validator.UpdateAccount(tx)
-		}
-	}
-	writeBatchs, err = ledger.contract.AddChangesForPersistence(writeBatchs)
-	if err != nil {
-		panic(err)
-	}
-	if flag {
-		syncTxs = append(syncTxs, syncContractGenTxs...)
-	}
-	return writeBatchs, syncTxs, errTxs
-}
-
-func (ledger *Ledger) registerBalance(tx *types.Transaction) {
-
-	senderBalance, _ := ledger.state.GetTmpBalance(tx.Sender())
-	recipientBalance, _ := ledger.state.GetTmpBalance(tx.Recipient())
-
-	sb := big.NewInt(0)
-	rb := big.NewInt(0)
-	sb.Set(senderBalance.Get(tx.AssetID()))
-	rb.Set(recipientBalance.Get(tx.AssetID()))
-	notify.Register(tx.Hash(), tx.AssetID(), sb, rb, func(interface{}) {})
-}
-
-func (ledger *Ledger) executeTransaction(tx *types.Transaction, rollback bool) error {
-	tp := tx.GetType()
-	if tp == types.TypeIssue {
-		if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Sender(), tx.Recipient(), string(tx.Payload)); err != nil {
-			return err
-		}
-	} else if tp == types.TypeIssueUpdate {
-		if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Sender(), tx.Recipient(), string(tx.Payload)); err != nil {
-			if err := ledger.state.UpdateAsset(tx.AssetID(), tx.Recipient(), tx.Sender(), string(tx.Payload)); err != nil {
-				return err
-			}
-		}
-	}
-	plusAmount := big.NewInt(tx.Amount().Int64())
-	plusFee := big.NewInt(tx.Fee().Int64())
-	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
-	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
-	if rollback {
-		plusAmount, plusFee, subAmount, subFee = subAmount, subFee, plusAmount, plusFee
-	}
-	assetID := tx.AssetID()
-	if fromChainID := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes(); bytes.Equal(fromChainID, params.ChainID) {
-		sender := tx.Sender()
-		if err := ledger.state.UpdateBalance(sender, assetID, subAmount, tx.Nonce()); err != nil {
-			if (tx.GetType() == types.TypeIssue || tx.GetType() == types.TypeIssueUpdate) && err == state.ErrNegativeBalance {
-
-			} else {
-				ledger.state.UpdateBalance(sender, assetID, plusAmount, tx.Nonce())
-				return err
-			}
-		}
-		if err := ledger.state.UpdateBalance(sender, assetID, subFee, tx.Nonce()); err != nil {
-			if (tx.GetType() == types.TypeIssue || tx.GetType() == types.TypeIssueUpdate) && err == state.ErrNegativeBalance {
-
-			} else {
-				ledger.state.UpdateBalance(sender, assetID, plusAmount, tx.Nonce())
-				ledger.state.UpdateBalance(sender, assetID, plusFee, 0)
-				return err
-			}
-		}
-		if tx.GetType() == types.TypeDistribut { //???
-			chainAddress := accounts.ChainCoordinateToAddress(coordinate.HexToChainCoordinate(tx.ToChain()))
-			ledger.state.UpdateBalance(chainAddress, assetID, plusAmount, 0)
-			ledger.state.UpdateBalance(chainAddress, assetID, plusFee, 0)
-		}
-	}
-
-	if toChainID := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes(); bytes.Equal(toChainID, params.ChainID) {
-		recipient := tx.Recipient()
-		if err := ledger.state.UpdateBalance(recipient, assetID, plusAmount, 0); err != nil {
-			ledger.state.UpdateBalance(recipient, assetID, subAmount, 0)
-			return err
-		}
-		if err := ledger.state.UpdateBalance(recipient, assetID, plusFee, 0); err != nil {
-			ledger.state.UpdateBalance(recipient, assetID, subAmount, 0)
-			ledger.state.UpdateBalance(recipient, assetID, subFee, 0)
-			return err
-		}
-		if tx.GetType() == types.TypeBackfront { //???
-			chainAddress := accounts.ChainCoordinateToAddress(coordinate.HexToChainCoordinate(tx.ToChain()))
-			ledger.state.UpdateBalance(chainAddress, assetID, subAmount, 0)
-			ledger.state.UpdateBalance(chainAddress, assetID, subFee, 0)
-		}
-	}
-	return nil
-}
-
-func (ledger *Ledger) executeSmartContractTx(tx *types.Transaction) (types.Transactions, error) {
-	return ledger.contract.ExecuteSmartContractTx(tx)
-}
-
 func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {
 	fromChainID := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes()
 	toChainID := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes()
@@ -762,16 +542,6 @@ func (ledger *Ledger) checkCoordinate(tx *types.Transaction) bool {
 		return true
 	}
 	return false
-}
-
-//GetTmpBalance get balance
-func (ledger *Ledger) GetTmpBalance(addr accounts.Address) (*state.Balance, error) {
-	balance, err := ledger.state.GetTmpBalance(addr)
-	if err != nil {
-		log.Error("can't get balance from db")
-	}
-
-	return balance, err
 }
 
 func (ledger *Ledger) writeBlock(data interface{}) error {
