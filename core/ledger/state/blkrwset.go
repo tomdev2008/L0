@@ -30,6 +30,7 @@ import (
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
+	"github.com/bocheninc/L0/core/types"
 )
 
 // NewBLKRWset create object
@@ -59,7 +60,11 @@ type BLKRWSet struct {
 	balanceCF   string
 	assetCF     string
 
-	BlockNum uint64
+	txs         types.Transactions
+	transferTxs types.Transactions
+
+	BlockIndex uint32
+	TxIndex    uint32
 }
 
 // GetChainCodeState get state for chaincode address and key. If committed is false, this first looks in memory
@@ -401,7 +406,7 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
 	return writeBatchs, nil
 }
 
-func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet *KVRWSet) error {
+func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet *KVRWSet, tx *types.Transaction, ttxs types.Transactions) error {
 	blk.chainCodeRW.Lock()
 	defer blk.chainCodeRW.Unlock()
 	blk.assetRW.Lock()
@@ -447,6 +452,9 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 	for ckey, wset := range balanceSet.Writes {
 		blk.balanceSet.Writes[ckey] = wset
 	}
+
+	blk.txs = append(blk.txs, tx)
+	blk.transferTxs = append(blk.transferTxs, ttxs...)
 
 	return nil
 }

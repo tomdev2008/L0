@@ -43,7 +43,7 @@ type IKVRWSet interface {
 	GetBalanceState(addr string, assetID uint32, committed bool) (*big.Int, error)
 	// GetBalances get balances for address. If committed is false, this first looks in memory
 	// and if missing, pulls from db.  If committed is true, this pulls from the db only.
-	GetBalances(addr string, committed bool) (map[uint32]*big.Int, error)
+	GetBalanceStates(addr string, committed bool) (map[uint32]*big.Int, error)
 	// SetBalacneState set balance to given value for chaincode address and key. Does not immideatly writes to DB
 	SetBalacneState(addr string, assetID uint32, amount *big.Int) error
 	// DelBalanceState tracks the deletion of balance for chaincode address and key. Does not immediately writes to DB
@@ -54,7 +54,7 @@ type IKVRWSet interface {
 	GetAssetState(assetID uint32, committed bool) (*Asset, error)
 	// GetAssets get assets. If committed is false, this first looks in memory
 	// and if missing, pulls from db.  If committed is true, this pulls from the db only.
-	GetAssets(committed bool) (map[uint32]*Asset, error)
+	GetAssetStates(committed bool) (map[uint32]*Asset, error)
 	// SetAssetState set balance to given value for assetID. Does not immideatly writes to DB
 	SetAssetState(assetID uint32, assetInfo *Asset) error
 	// DelAssetState tracks the deletion of asset for assetID. Does not immediately writes to DB

@@ -27,6 +27,7 @@ import (
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
+	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/base/utils"
 )
 
@@ -46,9 +47,10 @@ type TXRWSet struct {
 	assetSet     *KVRWSet
 	assetRW      sync.RWMutex
 
-	block *BLKRWSet
-
-	TxNum uint64
+	block       *BLKRWSet
+	currentTx   *types.Transaction
+	transferTxs types.Transactions
+	TxIndex     uint32
 }
 
 // GetChainCodeState get state for chaincode address and key. If committed is false, this first looks in memory
@@ -159,9 +161,9 @@ func (tx *TXRWSet) GetBalanceState(addr string, assetID uint32, committed bool) 
 	return tx.block.GetBalanceState(addr, assetID, committed)
 }
 
-// GetBalances get balances for address. If committed is false, this first looks in memory
+// GetBalanceStates get balances for address. If committed is false, this first looks in memory
 // and if missing, pulls from db.  If committed is true, this pulls from the db only.
-func (tx *TXRWSet) GetBalances(addr string, committed bool) (map[uint32]*big.Int, error) {
+func (tx *TXRWSet) GetBalanceStates(addr string, committed bool) (map[uint32]*big.Int, error) {
 	tx.balanceRW.RLock()
 	defer tx.balanceRW.RUnlock()
 	balances, err := tx.block.GetBalances(addr, committed)
@@ -258,9 +260,9 @@ func (tx *TXRWSet) GetAssetState(assetID uint32, committed bool) (*Asset, error)
 	return tx.block.GetAssetState(assetID, committed)
 }
 
-// GetAssets get assets. If committed is false, this first looks in memory
+// GetAssetStates get assets. If committed is false, this first looks in memory
 // and if missing, pulls from db.  If committed is true, this pulls from the db only.
-func (tx *TXRWSet) GetAssets(committed bool) (map[uint32]*Asset, error) {
+func (tx *TXRWSet) GetAssetStates(committed bool) (map[uint32]*Asset, error) {
 	tx.assetRW.RLock()
 	defer tx.assetRW.RUnlock()
 
@@ -338,10 +340,11 @@ func (tx *TXRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
 	tx.balanceRW.RLock()
 	defer tx.balanceRW.RUnlock()
 
-	err := tx.block.merge(tx.chainCodeSet, tx.assetSet, tx.balanceSet)
+	err := tx.block.merge(tx.chainCodeSet, tx.assetSet, tx.balanceSet, tx.currentTx, tx.transferTxs)
 
 	tx.assetSet = &KVRWSet{}
 	tx.balanceSet = &KVRWSet{}
 	tx.chainCodeSet = &KVRWSet{}
+	tx.transferTxs = nil
 	return nil, err
 }
