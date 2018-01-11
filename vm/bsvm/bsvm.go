@@ -107,7 +107,7 @@ func (worker *BsWorker) GetInvokeType(wpwc *vm.WorkerProcWithCallback) (string, 
 		if err != nil {
 			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
 		}
-
+		wpwc.WorkProc.ContractData.ContractCode = string(cc.Code)
 		return cc.Type, nil
 	} else {
 		return "", errors.New("cat't find contract code in db")
