@@ -60,14 +60,25 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 	log.Debugf("worker thread id: %+v, start tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
 	defer log.Debugf("worker thread id: %+v, finish tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
 
+	callback := func() {
+		err := workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
+			IsCanRedo: !worker.isCanRedo,
+			Err: err,
+		})
+		if err != nil  && !worker.isCanRedo {
+			log.Errorf("tx redo, tx_hash: %+v, err: %+v", workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
+			worker.isCanRedo = true
+			worker.VmJob(data)
+		}
+	}
+
 	if !worker.isCommonTransaction(workerProcWithCallback) {
 		if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
 			txType, err = worker.GetInvokeType(workerProcWithCallback)
 			if err != nil {
 				log.Errorf("can't execute contract, tx_hash: %s, err_msg: %+v",
 					workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err.Error())
-				workerProcWithCallback.Fn(err)
-				return nil
+				callback()
 			}
 		} else {
 			txType = worker.GetInitType(workerProcWithCallback)
@@ -78,9 +89,15 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 		worker.ExecCommonTransaction(workerProcWithCallback)
 	} else if strings.Contains(txType, "lua"){
 		worker.luaWorker.VmJob(workerProcWithCallback)
-	} else {
+	} else if strings.Contains(txType, "js") {
 		worker.jsWorker.VmJob(workerProcWithCallback)
+	} else {
+		log.Errorf("can't find tx type: %+v, %+v",
+			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(),
+				workerProcWithCallback.WorkProc.ContractData.Transaction.GetType())
+		callback()
 	}
+
 	return nil
 }
 
@@ -116,6 +133,7 @@ func (worker *BsWorker) GetInvokeType(wpwc *vm.WorkerProcWithCallback) (string, 
 			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
 		}
 		wpwc.WorkProc.ContractData.ContractCode = string(cc.Code)
+		log.Debugf("contract type: %+v", cc.Type)
 		return cc.Type, nil
 	} else {
 		return "", errors.New("cat't find contract code in db")

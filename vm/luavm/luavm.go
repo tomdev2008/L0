@@ -71,7 +71,8 @@ func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
 	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
 	if err != nil {
-		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
+		log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
+			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
 	}
 
 	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{

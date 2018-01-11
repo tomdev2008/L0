@@ -163,20 +163,23 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		}
 	}
 
-	log.Debugf("appendBlock ...........")
+	//log.Debugf("appendBlock cnt: %+v ...........", len(block.Transactions))
 	for idx, tx := range block.Transactions {
-		
+
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
 			Fn:       fn,
 		})
 	}
 
-	writeBatches, oktxs, _, err := ledger.state.ApplyChanges()
-	if err != nil {
+	writeBatches, oktxs, errtxs, err := ledger.state.ApplyChanges()
+	if err != nil || len(errtxs) != 0 {
 		//TODO
-		log.Errorf("AppendBlock err: %s", err)
+		log.Errorf("AppendBlock Err: %s, errtxs: %+v", err, len(errtxs))
 	}
+
+	log.Debugf("appendBlock cnt: %+v, oktxs: %+v, errtxs: %+v ...........", len(block.Transactions), len(oktxs), len(errtxs))
+
 
 	block.Transactions = oktxs
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)

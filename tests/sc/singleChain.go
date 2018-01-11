@@ -70,9 +70,9 @@ func sendTx() {
 func generateContract() {
 	ct := &Contract{}
 	txChan <- ct.init()
-	//time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second)
 	txChan <- ct.createInitTransaction()
-	//time.Sleep(2 * time.Second)
+	time.Sleep(2 * time.Second)
 	for {
 		time.Sleep(5 * time.Millisecond)
 		txChan <- ct.createInvokeTransaction()

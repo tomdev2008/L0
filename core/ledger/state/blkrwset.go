@@ -45,7 +45,7 @@ func NewBLKRWSet(db *db.BlockchainDB) *BLKRWSet {
 		balanceCF:    "balance",
 		assetCF:      "asset",
 		dbHandler:    db,
-		exit:         make(chan struct{}),
+		exit:         make(chan struct{}, 1),
 	}
 }
 
@@ -482,6 +482,7 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 	}
 	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	blk.waitingRW.Lock()
+	log.Debugf("BLKRWSet merge lock blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	blk.TxIndex--
 	if blk.waiting && blk.TxIndex == 0 {
 		blk.exit <- struct{}{}
@@ -545,7 +546,7 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	log.Debugf("BLKRWSet SetBlock blockHeight:%d, txNum:%d", blkIndex, txNum)
 	blk.BlockIndex = blkIndex
 	blk.TxIndex = txNum
-	blk.exit = make(chan struct{})
+	blk.exit = make(chan struct{}, 1)
 	blk.assetSet = NewKVRWSet()
 	blk.balanceSet = NewKVRWSet()
 	blk.chainCodeSet = NewKVRWSet()

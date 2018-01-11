@@ -68,7 +68,7 @@ vm:
   execLimitStackDepth: 100
 
   # maximum allow execute opcode count
-  execLimitMaxOpcodeCount: 10000
+  execLimitMaxOpcodeCount: 10000000000
 
   # the contract maximum run time (millisecond)
   execLimitMaxRunTime: 1000

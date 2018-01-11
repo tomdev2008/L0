@@ -277,9 +277,9 @@ type CallBackResponse struct {
 func (tx *TXRWSet) CallBack(res *CallBackResponse) error {
 	log.Debugf("TXRWSet CallBack %v", res)
 	if res.Err != nil {
-		tx.assetSet = &KVRWSet{}
-		tx.balanceSet = &KVRWSet{}
-		tx.chainCodeSet = &KVRWSet{}
+		tx.assetSet = NewKVRWSet()
+		tx.balanceSet = NewKVRWSet()
+		tx.chainCodeSet = NewKVRWSet()
 		tx.transferTxs = nil
 		if res.IsCanRedo {
 			return res.Err
