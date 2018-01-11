@@ -41,6 +41,7 @@ func NewBLKRWSet(db *db.BlockchainDB) *BLKRWSet {
 		balanceCF:   "balance",
 		assetCF:     "asset",
 		dbHandler:   db,
+		exit:        make(chan struct{}),
 	}
 }
 
@@ -63,9 +64,14 @@ type BLKRWSet struct {
 
 	txs         types.Transactions
 	transferTxs types.Transactions
+	errTxs      types.Transactions
 
 	BlockIndex uint32
 	TxIndex    uint32
+
+	waiting   bool
+	waitingRW sync.RWMutex
+	exit      chan struct{}
 }
 
 // GetChainCodeState get state for chaincode address and key. If committed is false, this first looks in memory
@@ -368,7 +374,8 @@ func (blk *BLKRWSet) DelAssetState(assetID uint32) {
 }
 
 // ApplyChanges merges delta
-func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
+func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types.Transactions, error) {
+	blk.wait()
 	blk.chainCodeRW.RLock()
 	defer blk.chainCodeRW.RUnlock()
 	blk.assetRW.RLock()
@@ -401,10 +408,15 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
 		}
 	}
 
+	errTxs := blk.errTxs
+	txs := blk.txs
+	txs = append(txs, blk.transferTxs...)
 	blk.assetSet = &KVRWSet{}
 	blk.balanceSet = &KVRWSet{}
 	blk.chainCodeSet = &KVRWSet{}
-	return writeBatchs, nil
+	blk.txs = nil
+	blk.transferTxs = nil
+	return writeBatchs, txs, errTxs, nil
 }
 
 func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet *KVRWSet, tx *types.Transaction, ttxs types.Transactions) error {
@@ -454,9 +466,16 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.balanceSet.Writes[ckey] = wset
 	}
 
-	blk.txs = append(blk.txs, tx)
-	blk.transferTxs = append(blk.transferTxs, ttxs...)
-
+	if chainCodeSet == nil && assetSet == nil && balanceSet.Reads == nil && ttxs == nil {
+		blk.errTxs = append(blk.errTxs, tx)
+	} else {
+		blk.txs = append(blk.txs, tx)
+		blk.transferTxs = append(blk.transferTxs, ttxs...)
+	}
+	blk.TxIndex--
+	if blk.TxIndex == 0 && blk.isWaiting() {
+		close(blk.exit)
+	}
 	return nil
 }
 
@@ -495,4 +514,17 @@ func (blk *BLKRWSet) GetAsset(assetID uint32) (*Asset, error) {
 func (blk *BLKRWSet) GetAssets() (map[uint32]*Asset, error) {
 	ret, err := blk.GetAssetStates(false)
 	return ret, err
+}
+
+func (blk *BLKRWSet) wait() {
+	blk.waitingRW.Lock()
+	blk.waiting = true
+	blk.waitingRW.Unlock()
+	<-blk.exit
+}
+
+func (blk *BLKRWSet) isWaiting() bool {
+	blk.waitingRW.RLock()
+	defer blk.waitingRW.RUnlock()
+	return blk.waiting
 }

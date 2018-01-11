@@ -267,9 +267,20 @@ func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
 	return nil
 }
 
-func (tx *TXRWSet) Complete() error {
-	if _, err := tx.ApplyChanges(); err != nil {
-		return err
+type CallBackResponse struct {
+	IsCanRedo bool
+	Err       error
+}
+
+func (tx *TXRWSet) CallBack(res *CallBackResponse) error {
+	if res.Err != nil {
+		tx.assetSet = &KVRWSet{}
+		tx.balanceSet = &KVRWSet{}
+		tx.chainCodeSet = &KVRWSet{}
+		tx.transferTxs = nil
 	}
-	return nil
+	if res.IsCanRedo {
+		return nil
+	}
+	return tx.ApplyChanges()
 }

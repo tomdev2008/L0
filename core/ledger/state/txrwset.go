@@ -25,7 +25,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/base/utils"
@@ -332,7 +331,7 @@ func (tx *TXRWSet) DelAssetState(assetID uint32) {
 }
 
 // ApplyChanges merges delta
-func (tx *TXRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
+func (tx *TXRWSet) ApplyChanges() error {
 	tx.chainCodeRW.RLock()
 	defer tx.chainCodeRW.RUnlock()
 	tx.assetRW.RLock()
@@ -346,5 +345,5 @@ func (tx *TXRWSet) ApplyChanges() ([]*db.WriteBatch, error) {
 	tx.balanceSet = &KVRWSet{}
 	tx.chainCodeSet = &KVRWSet{}
 	tx.transferTxs = nil
-	return nil, err
+	return err
 }
