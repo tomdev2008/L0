@@ -486,7 +486,6 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		close(blk.exit)
 	}
 	blk.waitingRW.Unlock()
-	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	return nil
 }
 

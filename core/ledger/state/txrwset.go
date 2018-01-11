@@ -25,10 +25,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/base/log"
 )
 
 // NewTXRWSet create object
@@ -338,7 +338,7 @@ func (tx *TXRWSet) SetAssetState(assetID uint32, assetInfo *Asset) error {
 	ckey := ConstructCompositeKey(assetIDKeyPrefix, strconv.FormatUint(uint64(assetID), 10)+assetIDKeySuffix)
 	tx.assetSet.Writes[ckey] = &KVWrite{
 		Value:    value,
-		IsDelete: true,
+		IsDelete: false,
 	}
 	return nil
 }
