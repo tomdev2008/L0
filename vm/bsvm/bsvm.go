@@ -30,10 +30,12 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"encoding/json"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"math/rand"
 )
 
 type BsWorker struct {
 	isCanRedo bool
+	workerID  int
 	jsWorker *jsvm.JsWorker
 	luaWorker *luavm.LuaWorker
 	//can't use lock
@@ -44,6 +46,7 @@ func NewBsWorker(conf *vm.Config) *BsWorker {
 	bsWorker := &BsWorker{
 		jsWorker: jsvm.NewJsWorker(conf),
 		luaWorker:luavm.NewLuaWorker(conf),
+		workerID: rand.Int(),
 	}
 
 	return bsWorker
@@ -54,12 +57,15 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 	txType := "common"
 	var err error
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
+	log.Debugf("worker thread id: %+v, start tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
+	defer log.Debugf("worker thread id: %+v, finish tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
 
 	if !worker.isCommonTransaction(workerProcWithCallback) {
 		if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
 			txType, err = worker.GetInvokeType(workerProcWithCallback)
 			if err != nil {
-				log.Errorf("can't execute contract, err_msg: %+v", err.Error())
+				log.Errorf("can't execute contract, tx_hash: %s, err_msg: %+v",
+					workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err.Error())
 				workerProcWithCallback.Fn(err)
 				return nil
 			}
@@ -152,6 +158,7 @@ func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback)
 	})
 
 	if err != nil  && !worker.isCanRedo {
+		log.Errorf("tx redo, tx_hash: %+v, err: %+v", wpwc.WorkProc.ContractData.Transaction.Hash().String(), err)
 		worker.isCanRedo = true
 		worker.HandleCommonTransaction(wpwc)
 	}

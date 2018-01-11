@@ -81,6 +81,8 @@ func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
 	})
 
 	if err != nil && !worker.isCanRedo {
+		log.Errorf("tx redo, tx_hash: %+v, err: %+v",
+			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
 		worker.isCanRedo = true
 		worker.ExecJob(data)
 	}

@@ -480,12 +480,14 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.txs = append(blk.txs, tx)
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
 	}
+	log.Debugf("BLKRWSet merge 1 txIdx: %+v", blk.TxIndex)
 	blk.waitingRW.Lock()
 	blk.TxIndex--
-	if blk.waiting {
-		close(blk.exit)
+	if blk.waiting && blk.TxIndex == 0 {
+		blk.exit <- struct{}{}
 	}
 	blk.waitingRW.Unlock()
+	log.Debugf("BLKRWSet merge 2 txIdx: %+v", blk.TxIndex)
 	return nil
 }
 

@@ -46,7 +46,6 @@ import (
 	"github.com/bocheninc/L0/msgnet"
 	jrpc "github.com/bocheninc/L0/rpc"
 	"github.com/willf/bloom"
-	"math/rand"
 )
 
 // ProtocolManager manages the protocol
@@ -143,15 +142,15 @@ func (pm *ProtocolManager) handle(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 }
 
 func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
-	threadRandNum := rand.Int()
+	//threadRandNum := rand.Int()
 	for {
 		m, err := rw.ReadMsg()
 		if err != nil {
 			return err
 		}
 
-		log.Debugf("handleMsg [thread: %d], cmd: %d, peer_addr: %s, remote_addr: %s", threadRandNum, m.Cmd, p.Address, p.Conn.RemoteAddr())
-		startTime := time.Now()
+		//log.Debugf("handleMsg [thread: %d], cmd: %d, peer_addr: %s, remote_addr: %s", threadRandNum, m.Cmd, p.Address, p.Conn.RemoteAddr())
+		//startTime := time.Now()
 		switch m.Cmd {
 		case statusMsg:
 			return fmt.Errorf("should not appear status message")
@@ -176,7 +175,7 @@ func (pm *ProtocolManager) handleMsg(p *p2p.Peer, rw p2p.MsgReadWriter) error {
 		default:
 			log.Error("Unknown message")
 		}
-		log.Debugf("handleMsg [thread: %d], cmd: %d, time: %s", threadRandNum, m.Cmd, time.Now().Sub(startTime))
+		//log.Debugf("handleMsg [thread: %d], cmd: %d, time: %s", threadRandNum, m.Cmd, time.Now().Sub(startTime))
 	}
 }
 

@@ -165,6 +165,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 
 	log.Debugf("appendBlock ...........")
 	for idx, tx := range block.Transactions {
+		
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
 			Fn:       fn,
