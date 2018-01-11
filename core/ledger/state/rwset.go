@@ -41,3 +41,10 @@ type KVRWSet struct {
 	Reads  map[string]*KVRead
 	Writes map[string]*KVWrite
 }
+
+func NewKVRWSet() *KVRWSet {
+	return &KVRWSet{
+		Reads:  make(map[string]*KVRead),
+		Writes: make(map[string]*KVWrite),
+	}
+}

@@ -25,17 +25,20 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/L0/components/utils"
 )
 
 // NewTXRWSet create object
 func NewTXRWSet(blk *BLKRWSet, tx *types.Transaction, txIndex uint32) *TXRWSet {
 	return &TXRWSet{
-		block: blk,
-		currentTx:tx,
-		TxIndex:txIndex,
+		chainCodeSet: NewKVRWSet(),
+		balanceSet:   NewKVRWSet(),
+		assetSet:     NewKVRWSet(),
+		block:        blk,
+		currentTx:    tx,
+		TxIndex:      txIndex,
 	}
 }
 
@@ -69,7 +72,13 @@ func (tx *TXRWSet) GetChainCodeState(chaincodeAddr string, key string, committed
 			return kvr.Value, nil
 		}
 	}
-	return tx.block.GetChainCodeState(chaincodeAddr, key, committed)
+	val, err := tx.block.GetChainCodeState(chaincodeAddr, key, committed)
+	if err == nil {
+		tx.chainCodeSet.Reads[ckey] = &KVRead{
+			Value: val,
+		}
+	}
+	return val, err
 }
 
 // GetChainCodeStateByRange get state for chaincode address and key. If committed is false, this first looks in memory
@@ -159,7 +168,13 @@ func (tx *TXRWSet) GetBalanceState(addr string, assetID uint32, committed bool) 
 			return amount.SetBytes(kvr.Value), nil
 		}
 	}
-	return tx.block.GetBalanceState(addr, assetID, committed)
+	val, err := tx.block.GetBalanceState(addr, assetID, committed)
+	if err == nil {
+		tx.chainCodeSet.Reads[ckey] = &KVRead{
+			Value: val.Bytes(),
+		}
+	}
+	return val, err
 }
 
 // GetBalanceStates get balances for address. If committed is false, this first looks in memory
@@ -258,7 +273,13 @@ func (tx *TXRWSet) GetAssetState(assetID uint32, committed bool) (*Asset, error)
 			return assetInfo, nil
 		}
 	}
-	return tx.block.GetAssetState(assetID, committed)
+	val, err := tx.block.GetAssetState(assetID, committed)
+	if err == nil {
+		tx.chainCodeSet.Reads[ckey] = &KVRead{
+			Value: utils.Serialize(val),
+		}
+	}
+	return val, err
 }
 
 // GetAssetStates get assets. If committed is false, this first looks in memory

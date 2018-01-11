@@ -37,11 +37,14 @@ import (
 // NewBLKRWSet create object
 func NewBLKRWSet(db *db.BlockchainDB) *BLKRWSet {
 	return &BLKRWSet{
-		chainCodeCF: "scontract",
-		balanceCF:   "balance",
-		assetCF:     "asset",
-		dbHandler:   db,
-		exit:        make(chan struct{}),
+		chainCodeSet: NewKVRWSet(),
+		balanceSet:   NewKVRWSet(),
+		assetSet:     NewKVRWSet(),
+		chainCodeCF:  "scontract",
+		balanceCF:    "balance",
+		assetCF:      "asset",
+		dbHandler:    db,
+		exit:         make(chan struct{}),
 	}
 }
 
