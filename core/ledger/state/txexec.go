@@ -200,6 +200,7 @@ func (tx *TXRWSet) AddTransfer(fromAddr, toAddr string, assetID uint32, amount *
 }
 
 func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
+	log.Debugf("TXRWSet Transfer")
 	sender := ttx.Sender().String()
 	receiver := ttx.Recipient().String()
 	assetID := ttx.AssetID()
