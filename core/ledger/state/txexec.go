@@ -270,6 +270,7 @@ func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
 type CallBackResponse struct {
 	IsCanRedo bool
 	Err       error
+	Result    interface{}
 }
 
 func (tx *TXRWSet) CallBack(res *CallBackResponse) error {

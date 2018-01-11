@@ -77,6 +77,7 @@ func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
 	res := workerProcWithCallback.Fn(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
+		Result: result,
 	})
 
 	if !res.(bool) && !worker.isCanRedo {
@@ -118,6 +119,11 @@ func (worker *LuaWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
 
 func (worker *LuaWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 	worker.resetProc(wp)
+	err := worker.txTransfer()
+	if err != nil {
+		return nil, err
+	}
+
 	worker.StoreContractCode()
 	ok, err := worker.execContract(wp.ContractData, "L0Init")
 	if err != nil {
@@ -140,13 +146,18 @@ func (worker *LuaWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 
 func (worker *LuaWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
 	worker.resetProc(wp)
-	//TODO to code >>> wp.ContractData
-	code, err := worker.GetContractCode()
+	err := worker.txTransfer()
 	if err != nil {
-		log.Errorf("can't get contract code")
+		return nil, err
+	}
+	if len(wp.ContractData.ContractCode) == 0 {
+		code, err := worker.GetContractCode()
+		if err != nil {
+			return nil, errors.New("can't get contract code")
+		}
+		wp.ContractData.ContractCode = string(code)
 	}
 
-	wp.ContractData.ContractCode = string(code)
 	ok, err := worker.execContract(wp.ContractData, "L0Invoke")
 	if err != nil {
 		return false, err
@@ -179,6 +190,15 @@ func (worker *LuaWorker)QueryContract(wp *vm.WorkerProc) ([]byte, error) {
 	}
 
 	return []byte(result), nil
+}
+
+func (worker *LuaWorker) txTransfer() error {
+	err := worker.workerProc.L0Handler.Transfer(worker.workerProc.ContractData.Transaction)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+	}
+
+	return nil
 }
 
 func (worker *LuaWorker) resetProc(wp *vm.WorkerProc) {

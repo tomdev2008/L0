@@ -65,6 +65,7 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 	res := workerProcWithCallback.Fn(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
+		Result: result,
 	})
 
 	if !res.(bool) && !worker.isCanRedo {
@@ -72,7 +73,7 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 		worker.ExecJob(data)
 	}
 
-	return nil
+	return result
 }
 
 // Block until worker ready
@@ -108,9 +109,9 @@ func (worker *JsWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
 
 // RealInitContract real call L0Init and commit all change
 func (worker *JsWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
-	err := wp.L0Handler.Transfer(wp.ContractData.Transaction)
+	err := worker.txTransfer()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+		return nil, err
 	}
 
 	worker.resetProc(wp)
@@ -131,18 +132,21 @@ func (worker *JsWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 
 // RealExecute real call L0Invoke and commit all change
 func (worker *JsWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
-	err := wp.L0Handler.Transfer(wp.ContractData.Transaction)
+	err := worker.txTransfer()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+		return nil, err
 	}
 
 	worker.resetProc(wp)
-	code, err := worker.GetContractCode()
-	if err != nil {
-		return nil, errors.New("can't get contract code")
+	if len(wp.ContractData.ContractCode) == 0 {
+		code, err := worker.GetContractCode()
+		if err != nil {
+			return nil, errors.New("can't get contract code")
+		}
+		wp.ContractData.ContractCode = string(code)
 	}
 
-	wp.ContractData.ContractCode = string(code)
+
 	ok, err := worker.execContract(wp.ContractData, "L0Invoke")
 	if !ok.(bool) || err != nil {
 		return ok, err
@@ -172,6 +176,15 @@ func (worker *JsWorker) resetProc(wp *vm.WorkerProc) {
 	exporter(worker.ottoVM, worker.workerProc)
 	wp.StateChangeQueue = vm.NewStateQueue()
 	wp.TransferQueue = vm.NewTransferQueue()
+}
+
+func (worker *JsWorker) txTransfer() error {
+	err := worker.workerProc.L0Handler.Transfer(worker.workerProc.ContractData.Transaction)
+	if err != nil {
+		return errors.New(fmt.Sprintf("Transfer failed..., err_msg: %s", err))
+	}
+
+	return nil
 }
 
 func (worker *JsWorker)workerInit(isInit bool, vmconf *vm.Config) {
