@@ -62,13 +62,13 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
 	}
 
-	res := workerProcWithCallback.Fn(&state.CallBackResponse{
+	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
 		Result: result,
 	})
 
-	if !res.(bool) && !worker.isCanRedo {
+	if err != nil && !worker.isCanRedo {
 		worker.isCanRedo = true
 		worker.ExecJob(data)
 	}

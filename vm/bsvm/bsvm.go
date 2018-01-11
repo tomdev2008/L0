@@ -29,9 +29,11 @@ import (
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/core/params"
 	"encoding/json"
+	"github.com/bocheninc/L0/core/ledger/state"
 )
 
 type BsWorker struct {
+	isCanRedo bool
 	jsWorker *jsvm.JsWorker
 	luaWorker *luavm.LuaWorker
 	//can't use lock
@@ -67,7 +69,7 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 	}
 
 	if strings.Contains(txType, "common") {
-		worker.HandleCommonTransaction(workerProcWithCallback)
+		worker.ExecCommonTransaction(workerProcWithCallback)
 	} else if strings.Contains(txType, "lua"){
 		worker.luaWorker.VmJob(workerProcWithCallback)
 	} else {
@@ -133,14 +135,24 @@ func (worker *BsWorker) isCommonTransaction(wpwc *vm.WorkerProcWithCallback) boo
 	return true
 }
 
+func (worker *BsWorker) ExecCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
+	worker.isCanRedo = false
+	worker.HandleCommonTransaction(wpwc)
+}
+
 func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
 	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
 	if err != nil {
 		log.Errorf("Transaction Exec fail, tx_hash: %+v, err: %s", wpwc.WorkProc.ContractData.Transaction.Hash(), err)
 	}
 
-	res := wpwc.Fn(err)
-	if res.(bool) == true {
+	err = wpwc.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
+		IsCanRedo: !worker.isCanRedo,
+		Err: err,
+	})
 
+	if err != nil  && !worker.isCanRedo {
+		worker.isCanRedo = true
+		worker.HandleCommonTransaction(wpwc)
 	}
 }
