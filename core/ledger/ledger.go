@@ -85,6 +85,7 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 			}
 			ledgerInstance.init()
 		}
+		ledgerInstance.initVmEnv()
 	}
 
 	return ledgerInstance
@@ -161,6 +162,8 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 			L0Handler:    state.NewTXRWSet(ledger.state, tx, uint32(txIdx)),
 		}
 	}
+
+	log.Debugf("appendBlock ...........")
 	for idx, tx := range block.Transactions {
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),

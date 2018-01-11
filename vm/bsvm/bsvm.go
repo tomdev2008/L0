@@ -136,7 +136,7 @@ func (worker *BsWorker) isCommonTransaction(wpwc *vm.WorkerProcWithCallback) boo
 func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
 	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
 	if err != nil {
-		log.Debugf("Transaction Exec fail, tx_hash: %+v", wpwc.WorkProc.ContractData.Transaction.Hash())
+		log.Errorf("Transaction Exec fail, tx_hash: %+v, err: %s", wpwc.WorkProc.ContractData.Transaction.Hash(), err)
 	}
 
 	res := wpwc.Fn(err)
