@@ -480,14 +480,14 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.txs = append(blk.txs, tx)
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
 	}
-	log.Debugf("BLKRWSet merge 1 txIdx: %+v", blk.TxIndex)
+	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	blk.waitingRW.Lock()
 	blk.TxIndex--
 	if blk.waiting && blk.TxIndex == 0 {
 		blk.exit <- struct{}{}
 	}
 	blk.waitingRW.Unlock()
-	log.Debugf("BLKRWSet merge 2 txIdx: %+v", blk.TxIndex)
+	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	return nil
 }
 
@@ -545,6 +545,7 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	log.Debugf("BLKRWSet SetBlock blockHeight:%d, txNum:%d", blkIndex, txNum)
 	blk.BlockIndex = blkIndex
 	blk.TxIndex = txNum
+	blk.exit = make(chan struct{})
 	blk.assetSet = NewKVRWSet()
 	blk.balanceSet = NewKVRWSet()
 	blk.chainCodeSet = NewKVRWSet()

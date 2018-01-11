@@ -30,7 +30,6 @@ import (
 	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/ledger"
-	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -223,41 +222,41 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 			}
 		}
 
-		assetID := tx.AssetID()
-		asset, _ := v.ledger.GetAsset(assetID)
-		if tx.GetType() != types.TypeIssue {
-			if asset == nil {
-				etxs = append(etxs, tx)
-				log.Errorf("[validator] tx_hash: %s, asset %d not exist", tx.Hash().String(), tx.AssetID())
-				continue
-			}
-			if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
-				_, err := asset.Update(string(tx.Payload))
-				if err != nil {
-					etxs = append(etxs, tx)
-					log.Errorf("[validator] tx_hash: %s, update asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
-					continue
-				}
-			}
-		} else {
-			if asset == nil {
-				asset := &state.Asset{
-					ID:     assetID,
-					Issuer: tx.Sender(),
-					Owner:  tx.Recipient(),
-				}
-				_, err := asset.Update(string(tx.Payload))
-				if err != nil {
-					etxs = append(etxs, tx)
-					log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
-					continue
-				}
-			} else {
-				etxs = append(etxs, tx)
-				log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- already exist", tx.Hash().String(), assetID, string(tx.Payload))
-				continue
-			}
-		}
+		// assetID := tx.AssetID()
+		// asset, _ := v.ledger.GetAsset(assetID)
+		// if tx.GetType() != types.TypeIssue {
+		// 	if asset == nil {
+		// 		etxs = append(etxs, tx)
+		// 		log.Errorf("[validator] tx_hash: %s, asset %d not exist", tx.Hash().String(), tx.AssetID())
+		// 		continue
+		// 	}
+		// 	if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
+		// 		_, err := asset.Update(string(tx.Payload))
+		// 		if err != nil {
+		// 			etxs = append(etxs, tx)
+		// 			log.Errorf("[validator] tx_hash: %s, update asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
+		// 			continue
+		// 		}
+		// 	}
+		// } else {
+		// 	if asset == nil {
+		// 		asset := &state.Asset{
+		// 			ID:     assetID,
+		// 			Issuer: tx.Sender(),
+		// 			Owner:  tx.Recipient(),
+		// 		}
+		// 		_, err := asset.Update(string(tx.Payload))
+		// 		if err != nil {
+		// 			etxs = append(etxs, tx)
+		// 			log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
+		// 			continue
+		// 		}
+		// 	} else {
+		// 		etxs = append(etxs, tx)
+		// 		log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- already exist", tx.Hash().String(), assetID, string(tx.Payload))
+		// 		continue
+		// 	}
+		// }
 
 		ttxs = append(ttxs, tx)
 	}
