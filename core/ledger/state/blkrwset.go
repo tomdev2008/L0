@@ -419,9 +419,9 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types
 	errTxs := blk.errTxs
 	txs := blk.txs
 	txs = append(txs, blk.transferTxs...)
-	blk.assetSet = &KVRWSet{}
-	blk.balanceSet = &KVRWSet{}
-	blk.chainCodeSet = &KVRWSet{}
+	blk.assetSet = nil
+	blk.balanceSet = nil
+	blk.chainCodeSet = nil
 	blk.txs = nil
 	blk.transferTxs = nil
 	return writeBatchs, txs, errTxs, nil
@@ -543,4 +543,7 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	log.Debugf("BLKRWSet SetBlock blockHeight:%d, txNum:%d", blkIndex, txNum)
 	blk.BlockIndex = blkIndex
 	blk.TxIndex = txNum
+	blk.assetSet = NewKVRWSet()
+	blk.balanceSet = NewKVRWSet()
+	blk.chainCodeSet = NewKVRWSet()
 }
