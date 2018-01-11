@@ -1,9 +1,9 @@
 
 all:
-	@go install -tags=embed ../vm/jsvm/main
-	go build -tags=embed -o ./bin/jsvm ../vm/jsvm/main
-	@go install -tags=embed ../vm/luavm/main
-	go build -tags=embed -o ./bin/luavm ../vm/luavm/main
+	#@go install -tags=embed ../vm/jsvm/main
+	#go build -tags=embed -o ./bin/jsvm ../vm/jsvm/main
+	#@go install -tags=embed ../vm/luavm/main
+	#go build -tags=embed -o ./bin/luavm ../vm/luavm/main
 	@go install -tags=embed ../cmd/lcnd/
 	go build -tags=embed -o ./bin/lcnd ../cmd/lcnd/
 

@@ -36,5 +36,5 @@ type ISmartConstract interface {
 
 	Transfer(tx *types.Transaction) error
 
-	CombineAndValidRwSet(interface{}) interface{}
+	CallBack(response *state.CallBackResponse) error
 }

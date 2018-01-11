@@ -152,22 +152,18 @@ func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
 }
 
 
-
-func (ledger *Ledger) AppendBlock(block *types.Block, flag bool ) error {
-	ledger.execTransaction(block.Transactions)
-}
 // AppendBlock appends a new block to the ledger,flag = true pack up block ,flag = false sync block
-func (ledger *Ledger) execTransaction(txs types.Transactions) error {
+func (ledger *Ledger)AppendBlock(block *types.Block, flag bool) error {
 	//var (
 	//	txWriteBatchs []*db.WriteBatch
 	//	txs           types.Transactions
 	//	errTxs        types.Transactions
 	//)
+	go ledger.Validator.RemoveTxsInVerification(block.Transactions)
 
 	fn := func(data interface{}) interface{} {
 		return true
 	}
-
 
 	wokerData := func(tx *types.Transaction, txIdx int) *vm.WorkerProc {
 		return &vm.WorkerProc{
@@ -175,12 +171,27 @@ func (ledger *Ledger) execTransaction(txs types.Transactions) error {
 			L0Handler: state.NewTXRWSet(ledger.state, tx, uint32(txIdx)),
 		}
 	}
-	for idx, tx := range txs {
+	for idx, tx := range block.Transactions {
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
 			Fn:fn,
 		})
 	}
+
+	writeBatches, oktxs, _, err := ledger.state.ApplyChanges()
+	if err != nil {
+		//TODO
+		log.Errorf("AppendBlock err: %s", err)
+	}
+
+	block.Transactions = oktxs
+	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
+	blkWriteBatches := ledger.block.AppendBlock(block)
+	writeBatches = append(writeBatches, blkWriteBatches...)
+
+	 if err := ledger.dbHandler.AtomicWrite(writeBatches); err != nil {
+	 	return err
+	 }
 
 
 	// bh, _ := ledger.Height()
@@ -343,7 +354,8 @@ func (ledger *Ledger) GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transa
 
 //QueryContract processes new contract query transaction
 func (ledger *Ledger) QueryContract(tx *types.Transaction) ([]byte, error) {
-	return ledger.state.QueryContract(tx)
+	//return ledger.state.QueryContract(tx)
+	return nil, nil
 }
 
 // init generates the genesis block

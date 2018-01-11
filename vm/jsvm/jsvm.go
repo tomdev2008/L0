@@ -62,7 +62,7 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
 	}
 
-	res := workerProcWithCallback.Fn(&state.VMExecResponse{
+	res := workerProcWithCallback.Fn(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
 	})
