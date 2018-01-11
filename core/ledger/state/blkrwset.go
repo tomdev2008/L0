@@ -300,6 +300,9 @@ func (blk *BLKRWSet) GetAssetState(assetID uint32, committed bool) (*Asset, erro
 	if err != nil {
 		return nil, err
 	}
+	if value == nil {
+		return nil, nil
+	}
 	if err := utils.Deserialize(value, assetInfo); err != nil {
 		return nil, err
 	}
@@ -477,11 +480,13 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.txs = append(blk.txs, tx)
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
 	}
+	blk.waitingRW.Lock()
 	blk.TxIndex--
-	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
-	if blk.TxIndex == 0 && blk.isWaiting() {
+	if blk.waiting {
 		close(blk.exit)
 	}
+	blk.waitingRW.Unlock()
+	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	return nil
 }
 
@@ -524,15 +529,15 @@ func (blk *BLKRWSet) GetAssets() (map[uint32]*Asset, error) {
 
 func (blk *BLKRWSet) wait() {
 	blk.waitingRW.Lock()
-	blk.waiting = true
+	if blk.TxIndex != 0 {
+		blk.waiting = true
+	} else {
+		blk.waiting = false
+	}
 	blk.waitingRW.Unlock()
-	<-blk.exit
-}
-
-func (blk *BLKRWSet) isWaiting() bool {
-	blk.waitingRW.RLock()
-	defer blk.waitingRW.RUnlock()
-	return blk.waiting
+	if blk.waiting {
+		<-blk.exit
+	}
 }
 
 func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
