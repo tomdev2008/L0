@@ -150,6 +150,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	//)
 	go ledger.Validator.RemoveTxsInVerification(block.Transactions)
 
+	ledger.state.SetBlock(block.Height(), uint32(len(block.Transactions)))
 	fn := func(data interface{}) interface{} {
 		return true
 	}

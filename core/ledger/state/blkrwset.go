@@ -528,3 +528,8 @@ func (blk *BLKRWSet) isWaiting() bool {
 	defer blk.waitingRW.RUnlock()
 	return blk.waiting
 }
+
+func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
+	blk.BlockIndex = blkIndex
+	blk.TxIndex = txNum
+}

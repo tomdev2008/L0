@@ -42,7 +42,7 @@ func NewLbft(options *Options, stack consensus.IStack) *Lbft {
 	lbft := &Lbft{
 		options:    options,
 		stack:      stack,
-		testing:    true,
+		testing:    false,
 		testChan:   make(chan struct{}),
 		statistics: make(map[string]time.Duration),
 
