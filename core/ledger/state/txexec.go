@@ -273,7 +273,7 @@ func (tx *TXRWSet) Transfer(ttx *types.Transaction) error {
 	return nil
 }
 
-func (tx *TXRWSet) Complete() error {
+func (tx *TXRWSet) CombineAndValidRwSet(data interface{}) interface{} {
 	if _, err := tx.ApplyChanges(); err != nil {
 		return err
 	}

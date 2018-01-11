@@ -45,6 +45,11 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"gopkg.in/mgo.v2/bson"
+	"github.com/bocheninc/testcases/L0/tx"
+	"github.com/bocheninc/testcases/L0/contract"
+	"github.com/bocheninc/L0/vm"
+	"github.com/bocheninc/L0/vm/bsvm"
+	"github.com/go-kit/kit/examples/shipping/cargo"
 )
 
 var (
@@ -66,6 +71,7 @@ type Ledger struct {
 	conf      *Config
 	mdb       *mongodb.Mdb
 	mdbChan   chan []*db.WriteBatch
+	vmEnv     map[string]*vm.VirtualMachine
 }
 
 // NewLedger returns the ledger instance
@@ -85,7 +91,6 @@ func NewLedger(kvdb *db.BlockchainDB, conf *Config) *Ledger {
 				ledgerInstance.state.RegisterColumn(ledgerInstance.mdb)
 				ledgerInstance.mdbChan = make(chan []*db.WriteBatch)
 				ledgerInstance.conf = conf
-				go ledgerInstance.PutIntoMongoDB()
 			}
 			ledgerInstance.init()
 		}
@@ -98,168 +103,23 @@ func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
 }
 
-func (ledger *Ledger) reOrgBatches(batches []*db.WriteBatch) map[string][]*db.WriteBatch {
-	reBatches := make(map[string][]*db.WriteBatch)
-	for _, batch := range batches {
-		columnName := batch.CfName
-		batchKey := batch.Key
-		if 0 == strings.Compare(batch.CfName, ledger.state.GetChainCodeCF()) {
-			k, v := state.DecodeCompositeKey(string(batch.Key))
 
-			columnName = "contract|" + k
-			batchKey = []byte(v)
-		}
-
-		if _, ok := reBatches[columnName]; !ok {
-			reBatches[columnName] = make([]*db.WriteBatch, 0)
-		}
-
-		reBatches[columnName] = append(reBatches[columnName], db.NewWriteBatch(columnName, batch.Operation, batchKey, batch.Value, batch.Typ))
+func (ledger *Ledger) initVmEnv() {
+	ledger.vmEnv = make(map[string]*vm.VirtualMachine)
+	bsWorkers := make([]vm.VmWorker, vm.VMConf.BsWorkerCnt)
+	for i:=0; i<vm.VMConf.BsWorkerCnt; i++ {
+		bsWorkers[i] = bsvm.NewBsWorker(vm.VMConf)
 	}
 
-	return reBatches
-}
+	addNewEnv := func(name string, worker []vm.VmWorker) *vm.VirtualMachine {
+		env := vm.CreateCustomVM(worker)
+		env.Open(name)
+		ledger.vmEnv[name] = env
 
-func (ledger *Ledger) PutIntoMongoDB() {
-	contractCol := false
-	var err error
-	batchesBlockChan := make(chan []*db.WriteBatch, 1)
-
-Out:
-	for {
-		select {
-		case batches := <-ledger.mdbChan:
-			log.Infof("all data len: %+v", len(batches))
-
-			reBatches := ledger.reOrgBatches(batches)
-			for colName, colBatches := range reBatches {
-				contractCol = false
-				if strings.Contains(colName, "contract") {
-					contractCol = true
-					cols := strings.SplitN(colName, "|", 2)
-					if len(cols) == 2 {
-						colName = cols[1]
-					}
-				}
-				bulk := ledger.mdb.Coll(colName).Bulk()
-
-				log.Infof("colName: %+v, start -----", colName)
-				writeBatchCnt := 0
-				for _, batch := range colBatches {
-					var value interface{}
-					if batch.Operation == db.OperationPut {
-						if contractCol {
-							contractData, err := state.DoContractStateData(batch.Value)
-							if err != nil || contractData == nil && err == nil {
-								log.Warnf("state data parse error, key: %+v, value: %+v", string(batch.Key), batch.Value)
-							}
-
-							if ok := IsJson(contractData); ok {
-								err := json.Unmarshal(contractData, &value)
-								if err != nil {
-									log.Errorf("state data not unmarshal json, key: %+v, value: %+v", string(batch.Key), string(batch.Value))
-								}
-								log.Debugf("exec start store key:: %+v, %+v, %+v", string(batch.Key), reflect.TypeOf(value), batch.Value)
-
-								switch value.(type) {
-								case map[string]interface{}:
-									bulk.Upsert(bson.M{"_id": string(batch.Key)}, value)
-								default:
-									bulk.Upsert(bson.M{"_id": string(batch.Key)}, bson.M{"data": value})
-								}
-							} else {
-								log.Errorf("state data not json %+v, %+v", string(contractData), contractData)
-								break Out
-							}
-						} else {
-							switch colName {
-							case ledger.state.GetAssetCF():
-								var asset state.Asset
-								utils.Deserialize(batch.Value, &asset)
-								bal, _ := json.Marshal(asset)
-								json.Unmarshal(bal, &value)
-							case ledger.state.GetBalanceCF():
-								var balance state.Balance
-								utils.Deserialize(batch.Value, &balance)
-								bal, _ := json.Marshal(balance)
-								json.Unmarshal(bal, &value)
-								log.Infof("balance: %+v", balance)
-							case ledger.state.GetChainCodeCF():
-							case ledger.block.GetBlockCF():
-								var blockHeader types.BlockHeader
-								utils.Deserialize(batch.Value, &blockHeader)
-								bal, _ := json.Marshal(blockHeader)
-								json.Unmarshal(bal, &value)
-							case ledger.block.GetTransactionCF():
-								var tx types.Transaction
-								utils.Deserialize(batch.Value, &tx)
-								bal, _ := json.Marshal(tx)
-								json.Unmarshal(bal, &value)
-								switch tp := tx.GetType(); tp {
-								case types.TypeJSContractInit, types.TypeLuaContractInit, types.TypeContractInvoke:
-								case types.TypeSecurity:
-								default:
-									balance, err := notify.GetBalanceByTxInCallbacks(&tx)
-									if err != nil {
-										log.Errorf("GetBalanceByTxInCallbacks, err: %+v", err)
-										batchesBlockChan <- batches
-										break Out
-									}
-
-									notify.RemoveTxInCallbacks(&tx)
-									value.(map[string]interface{})["sender_balance"] = balance.Sender.Int64()
-									value.(map[string]interface{})["receiver_balance"] = balance.Recipient.Int64()
-								}
-
-							case ledger.block.GetIndexCF():
-								txs, ok := ledger.block.GetTransactionInBlock(batch.Value, batch.Typ)
-								if ok != true {
-									continue
-								}
-								bal, _ := json.Marshal(txs)
-								json.Unmarshal(bal, &value)
-							default:
-								continue
-							}
-							bulk.Upsert(bson.M{"_id": utils.BytesToHex(batch.Key)}, value)
-						}
-					} else if batch.Operation == db.OperationDelete {
-						bulk.Remove(bson.M{"_id": string(batch.Key)})
-					}
-
-					writeBatchCnt++
-					if writeBatchCnt > 800 {
-						_, err = bulk.Run()
-						if err != nil {
-							log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
-							batchesBlockChan <- batches
-							break Out
-						}
-						bulk = ledger.mdb.Coll(colName).Bulk()
-						writeBatchCnt = 0
-					}
-				}
-
-				_, err = bulk.Run()
-				if err != nil {
-					log.Errorf("Col: %+v, bulk run err: %+v", colName, err)
-					batchesBlockChan <- batches
-					break Out
-				}
-			}
-		}
+		return env
 	}
 
-	//in case not to block the main process
-	for {
-		select {
-		case batches := <-ledger.mdbChan:
-			_ = batches
-			log.Warn("recv new batches, but no handle")
-		case batches := <-batchesBlockChan:
-			go ledger.writeBlock(batches)
-		}
-	}
+	addNewEnv("bs", bsWorkers)
 }
 
 // VerifyChain verifys the blockchain data
@@ -291,13 +151,37 @@ func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
 	return genesisBlockHeader
 }
 
+
+
+func (ledger *Ledger) AppendBlock(block *types.Block, flag bool ) error {
+	ledger.execTransaction(block.Transactions)
+}
 // AppendBlock appends a new block to the ledger,flag = true pack up block ,flag = false sync block
-func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
-	var (
-		txWriteBatchs []*db.WriteBatch
-		txs           types.Transactions
-		errTxs        types.Transactions
-	)
+func (ledger *Ledger) execTransaction(txs types.Transactions) error {
+	//var (
+	//	txWriteBatchs []*db.WriteBatch
+	//	txs           types.Transactions
+	//	errTxs        types.Transactions
+	//)
+
+	fn := func(data interface{}) interface{} {
+		return true
+	}
+
+
+	wokerData := func(tx *types.Transaction, txIdx int) *vm.WorkerProc {
+		return &vm.WorkerProc{
+			ContractData: vm.NewContractData(tx),
+			L0Handler: state.NewTXRWSet(ledger.state, tx, uint32(txIdx)),
+		}
+	}
+	for idx, tx := range txs {
+		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
+			WorkProc: wokerData(tx, idx),
+			Fn:fn,
+		})
+	}
+
 
 	// bh, _ := ledger.Height()
 	// ledger.state.SetHeight(bh)
@@ -473,54 +357,34 @@ func (ledger *Ledger) init() error {
 
 	genesisBlock := new(types.Block)
 	genesisBlock.Header = blockHeader
-
-	for _, addr := range params.PublicAddress {
-		sender := accounts.HexToAddress(addr)
-		issueTx := types.NewTransaction{
-			params.ChainID,
-			params.ChainID,
-			types.TypeIssue,
-			uint32(0),
-			sender,
-			sender,
-			uint32(0),
-			big.NewInt(0),
-			big.NewInt(0),
-			uint32(0),
-		}
-		issueCoin := make(map[string]interface{})
-		issueCoin["id"] = uint32(0)
-		tx.Payload, _ = json.Marshal(issueCoin)
-		sig, _ := issueKey.Sign(tx.SignHash().Bytes())
-		genesisBlock.Transactions = append(genesisBlock.Transactions, issueTx)
-		break
-	}
-
 	writeBatchs := ledger.block.AppendBlock(genesisBlock)
 
 	// admin address
-	buf, err := contract.ConcrateStateJson(contract.DefaultAdminAddr)
+	buf, err := state.ConcrateStateJson(state.DefaultAdminAddr)
 	if err != nil {
 		return err
 	}
 
 	writeBatchs = append(writeBatchs,
-		db.NewWriteBatch(contract.ColumnFamily,
+		db.NewWriteBatch(ledger.state.GetChainCodeCF(),
 			db.OperationPut,
-			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.AdminKey)),
-			buf.Bytes(), contract.ColumnFamily))
+			[]byte(state.ConstructCompositeKey(params.GlobalStateKey, params.AdminKey)),
+			buf.Bytes(), ledger.state.GetChainCodeCF()))
 
 	// global contract
-	buf, err = contract.ConcrateStateJson(&contract.DefaultGlobalContract)
+	buf, err = state.ConcrateStateJson(&vm.ContractCode{
+		state.DefaultGlobalContractCode,
+		state.DefaultGlobalContractType,
+	} )
 	if err != nil {
 		return err
 	}
 
 	writeBatchs = append(writeBatchs,
-		db.NewWriteBatch(contract.ColumnFamily,
+		db.NewWriteBatch(ledger.state.GetChainCodeCF(),
 			db.OperationPut,
-			[]byte(contract.EnSmartContractKey(params.GlobalStateKey, params.GlobalContractKey)),
-			buf.Bytes(), contract.ColumnFamily))
+			[]byte(state.ConstructCompositeKey(params.GlobalStateKey, params.GlobalContractKey)),
+			buf.Bytes(), ledger.state.GetChainCodeCF()))
 
 	err = ledger.dbHandler.AtomicWrite(writeBatchs)
 	if err != nil {

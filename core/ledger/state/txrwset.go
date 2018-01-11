@@ -32,9 +32,11 @@ import (
 )
 
 // NewTXRWSet create object
-func NewTXRWSet(blk *BLKRWSet) *TXRWSet {
+func NewTXRWSet(blk *BLKRWSet, tx *types.Transaction, txIndex uint32) *TXRWSet {
 	return &TXRWSet{
 		block: blk,
+		currentTx:tx,
+		TxIndex:txIndex,
 	}
 }
 

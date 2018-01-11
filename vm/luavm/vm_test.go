@@ -45,7 +45,6 @@ func TestVMFunction(t *testing.T) {
 		amount := strconv.Itoa(rand.Intn(1000))
 		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{uid, amount, uid}),
-			PreMethod: "RealInitContract",
 			L0Handler: l0Handler,
 		}
 
@@ -58,7 +57,6 @@ func TestVMFunction(t *testing.T) {
 		amount := strconv.Itoa(rand.Intn(1000))
 		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractData([]string{"send", uid, amount, uid}),
-			PreMethod: "RealInvokeExecute",
 			L0Handler: l0Handler,
 		}
 

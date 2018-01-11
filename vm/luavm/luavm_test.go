@@ -14,6 +14,7 @@ import (
 	"github.com/bocheninc/L0/core/ledger/state"
 	"sync"
 	"math/rand"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 type L0Handler struct {
@@ -180,8 +181,9 @@ func getRandFile() string {
 
 func CreateContractData(args []string) *vm.ContractData {
 	tx := &types.Transaction{}
-	cs := CreateContractSpec(args, getRandFile())
-	return vm.NewContractData(tx, cs, string(cs.ContractCode))
+	tx.Payload = utils.Serialize(CreateContractSpec(args, getRandFile()))
+
+	return vm.NewContractData(tx)
 }
 
 //

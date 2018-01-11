@@ -40,6 +40,9 @@ type Config struct {
 	ExecLimitMaxStateKeyLength int // max state key length
 	LuaVMExeFilePath           string
 	JSVMExeFilePath            string
+	BsWorkerCnt                int
+	JsWorkerCnt                int
+	LuaWorkerCnt               int
 }
 
 // DefaultConfig default vm config

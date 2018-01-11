@@ -2,7 +2,7 @@ package bsvm
 
 import (
 	"testing"
-	"github.com/bocheninc/L0/nvm"
+	"github.com/bocheninc/L0/vm"
 	"time"
 	"fmt"
 	"github.com/pborman/uuid"
@@ -12,9 +12,9 @@ import (
 	"github.com/bocheninc/L0/core/types"
 )
 
-var VMEnv = make(map[string]*nvm.VirtualMachine)
-func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
-	env := nvm.CreateCustomVM(worker)
+var VMEnv = make(map[string]*vm.VirtualMachine)
+func AddNewEnv(name string, worker []vm.VmWorker) *vm.VirtualMachine {
+	env := vm.CreateCustomVM(worker)
 	env.Open(name)
 	VMEnv[name] = env
 
@@ -23,11 +23,11 @@ func AddNewEnv(name string, worker []nvm.VmWorker) *nvm.VirtualMachine {
 
 
 func TestVMFunction(t *testing.T) {
-	nvm.VMConf = nvm.DefaultConfig()
+	vm.VMConf = vm.DefaultConfig()
 	workCnt := 1
-	luaWorkers := make([]nvm.VmWorker, workCnt)
+	luaWorkers := make([]vm.VmWorker, workCnt)
 	for i:=0; i<workCnt; i++ {
-		luaWorkers[i] = NewBsWorker(nvm.DefaultConfig())
+		luaWorkers[i] = NewBsWorker(vm.DefaultConfig())
 	}
 
 	bsVm := AddNewEnv("bs", luaWorkers)
@@ -41,10 +41,10 @@ func TestVMFunction(t *testing.T) {
 
 	l0Handler := NewL0Handler()
 
-	initccd := func(name string, txType uint32) *nvm.WorkerProc {
+	initccd := func(name string, txType uint32) *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractDataWithFileName([]string{uid, amount, uid}, name, txType),
 			PreMethod: "RealInitContract",
 			L0Handler: l0Handler,
@@ -54,10 +54,10 @@ func TestVMFunction(t *testing.T) {
 	}
 
 
-	invokeccd := func(name string, txType uint32) *nvm.WorkerProc {
+	invokeccd := func(name string, txType uint32) *vm.WorkerProc {
 		uid := uuid.New()
 		amount := strconv.Itoa(rand.Intn(1000))
-		workerProc := &nvm.WorkerProc{
+		workerProc := &vm.WorkerProc{
 			ContractData: CreateContractDataWithFileName([]string{"send", uid, amount, uid}, name, txType),
 			PreMethod: "RealInvokeExecute",
 			L0Handler: l0Handler,
@@ -68,11 +68,11 @@ func TestVMFunction(t *testing.T) {
 
 
 	time.Sleep(time.Second)
-	bsVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	bsVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd("l0coin.lua", types.TypeLuaContractInit),
 		Fn:fn,
 	})
-	bsVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+	bsVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 		WorkProc: initccd("l0coin.js", types.TypeJSContractInit),
 		Fn:fn,
 	})
@@ -90,7 +90,7 @@ func TestVMFunction(t *testing.T) {
 			fileName = "l0coin.js"
 			txType = types.TypeContractInvoke
 		}
-		bsVm.SendWorkCleanAsync(&nvm.WorkerProcWithCallback{
+		bsVm.SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: invokeccd(fileName, txType),
 			Fn:fn,
 		})

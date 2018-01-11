@@ -22,9 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/nvm"
-	"github.com/bocheninc/L0/nvm/luavm"
-	"github.com/bocheninc/L0/nvm/jsvm"
+	"github.com/bocheninc/L0/vm"
+	"github.com/bocheninc/L0/vm/luavm"
+	"github.com/bocheninc/L0/vm/jsvm"
 	"strings"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/core/params"
@@ -38,7 +38,7 @@ type BsWorker struct {
 }
 
 
-func NewBsWorker(conf *nvm.Config) *BsWorker {
+func NewBsWorker(conf *vm.Config) *BsWorker {
 	bsWorker := &BsWorker{
 		jsWorker: jsvm.NewJsWorker(conf),
 		luaWorker:luavm.NewLuaWorker(conf),
@@ -51,28 +51,27 @@ func NewBsWorker(conf *nvm.Config) *BsWorker {
 func (worker *BsWorker) VmJob(data interface{}) interface{} {
 	txType := "common"
 	var err error
-	workProcWithCallback := data.(*nvm.WorkerProcWithCallback)
+	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
 
-	if !worker.isCommonTransaction(workProcWithCallback) {
-		if strings.Contains(workProcWithCallback.WorkProc.PreMethod, "Invoke") {
-			txType, err = worker.GetInvokeType(workProcWithCallback)
-			log.Debugf("txType: %+v, err: %+v", txType, err)
+	if !worker.isCommonTransaction(workerProcWithCallback) {
+		if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
+			txType, err = worker.GetInvokeType(workerProcWithCallback)
 			if err != nil {
 				log.Errorf("can't execute contract, err_msg: %+v", err.Error())
-				workProcWithCallback.Fn(err)
+				workerProcWithCallback.Fn(err)
 				return nil
 			}
 		} else {
-			txType = worker.GetInitType(workProcWithCallback)
+			txType = worker.GetInitType(workerProcWithCallback)
 		}
 	}
 
 	if strings.Contains(txType, "common") {
-		worker.HandleCommonTransaction(workProcWithCallback)
+		worker.HandleCommonTransaction(workerProcWithCallback)
 	} else if strings.Contains(txType, "lua"){
-		worker.luaWorker.VmJob(workProcWithCallback)
+		worker.luaWorker.VmJob(workerProcWithCallback)
 	} else {
-		worker.jsWorker.VmJob(workProcWithCallback)
+		worker.jsWorker.VmJob(workerProcWithCallback)
 	}
 	return nil
 }
@@ -89,18 +88,18 @@ func (worker *BsWorker) VmTerminate() {
 	//pass
 }
 
-func (worker *BsWorker) GetInvokeType(wpwc *nvm.WorkerProcWithCallback) (string, error) {
+func (worker *BsWorker) GetInvokeType(wpwc *vm.WorkerProcWithCallback) (string, error) {
 	var err error
-	cc := new(nvm.ContractCode)
+	cc := new(vm.ContractCode)
 	var code []byte
 	if len(wpwc.WorkProc.ContractData.ContractAddr) == 0 {
 		code, err = wpwc.WorkProc.L0Handler.GetGlobalState(params.GlobalContractKey)
 	} else {
-		code, err = wpwc.WorkProc.L0Handler.GetState(nvm.ContractCodeKey)
+		code, err = wpwc.WorkProc.L0Handler.GetState(vm.ContractCodeKey)
 	}
 
 	if len(code) != 0 && err == nil {
-		contractCode, err := nvm.DoContractStateData(code)
+		contractCode, err := vm.DoContractStateData(code)
 		if err != nil {
 			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
 		}
@@ -108,14 +107,14 @@ func (worker *BsWorker) GetInvokeType(wpwc *nvm.WorkerProcWithCallback) (string,
 		if err != nil {
 			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
 		}
-		log.Debugf("ccccctype: %+v", cc.Type)
+
 		return cc.Type, nil
 	} else {
 		return "", errors.New("cat't find contract code in db")
 	}
 }
 
-func (worker *BsWorker) GetInitType(wpwc *nvm.WorkerProcWithCallback) string {
+func (worker *BsWorker) GetInitType(wpwc *vm.WorkerProcWithCallback) string {
 	txType := wpwc.WorkProc.ContractData.Transaction.GetType()
 	if txType == types.TypeLuaContractInit {
 		return "lua"
@@ -124,7 +123,7 @@ func (worker *BsWorker) GetInitType(wpwc *nvm.WorkerProcWithCallback) string {
 	}
 }
 
-func (worker *BsWorker) isCommonTransaction(wpwc *nvm.WorkerProcWithCallback) bool {
+func (worker *BsWorker) isCommonTransaction(wpwc *vm.WorkerProcWithCallback) bool {
 	txType := wpwc.WorkProc.ContractData.Transaction.GetType()
 	if txType == types.TypeLuaContractInit || txType == types.TypeContractInvoke ||
 		txType == types.TypeJSContractInit || txType == types.TypeContractQuery {
@@ -134,7 +133,7 @@ func (worker *BsWorker) isCommonTransaction(wpwc *nvm.WorkerProcWithCallback) bo
 	return true
 }
 
-func (worker *BsWorker) HandleCommonTransaction(wpwc *nvm.WorkerProcWithCallback) {
+func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
 	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
 	if err != nil {
 		log.Debugf("Transaction Exec fail, tx_hash: %+v", wpwc.WorkProc.ContractData.Transaction.Hash())

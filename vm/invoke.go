@@ -26,6 +26,7 @@ import (
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
 	"errors"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 var (
@@ -45,9 +46,14 @@ type ContractData struct {
 	Transaction    *types.Transaction
 }
 
-func NewContractData(tx *types.Transaction, cs *types.ContractSpec, contractCode string) *ContractData {
+func NewContractData(tx *types.Transaction) *ContractData {
 	cd := new(ContractData)
-	cd.ContractCode = contractCode
+	cs := &types.ContractSpec{}
+	err := utils.Deserialize(tx.Payload, cs)
+	if err != nil {
+		return cd
+	}
+	cd.ContractCode = string(cs.ContractCode)
 	cd.ContractAddr = hex.EncodeToString(cs.ContractAddr)
 	cd.ContractParams = cs.ContractParams
 	cd.Transaction = tx
@@ -57,7 +63,6 @@ func NewContractData(tx *types.Transaction, cs *types.ContractSpec, contractCode
 
 type WorkerProc struct {
 	ContractData     *ContractData
-	PreMethod	     string
 	L0Handler        ISmartConstract
 	StateChangeQueue *stateQueue
 	TransferQueue    *transferQueue
@@ -68,42 +73,7 @@ type WorkerProcWithCallback struct {
 	WorkProc *WorkerProc
 	Fn func(interface{}) interface{}
 }
-/************************** call for parent proc (L0 proc) ******************************/
-//
-//func PCallPreInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
-//	var success bool
-//	err := pcall("PreInitContract", cd, handler, &success)
-//	return success, err
-//}
-//
-//func PCallRealInitContract(cd *ContractData, handler ISmartConstract) (bool, error) {
-//	var success bool
-//	err := pcall("RealInitContract", cd, handler, &success)
-//	return success, err
-//}
-//
-//func PCallPreExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
-//	var success bool
-//	err := pcall("PreExecute", cd, handler, &success)
-//	return success, err
-//}
-//
-//func PCallRealExecute(cd *ContractData, handler ISmartConstract) (bool, error) {
-//	var success bool
-//	err := pcall("RealExecute", cd, handler, &success)
-//	return success, err
-//}
-//
-//func  PCallQueryContract(cd *ContractData, handler ISmartConstract) ([]byte, error) {
-//	err := pcall("QueryContract", cd, handler, &result)
-//	return result, err
-//}
-//
-//func pcall(preMethod string, cd *ContractData, handler ISmartConstract) {//, callback func(data interface{}) interface{}) {
-//
-//}
 
-/************************** call for child proc (vm proc) ******************************/
 func (p *WorkerProc) CCallGetGlobalState(key string) ([]byte, error) {
 	if err := CheckStateKey(key); err != nil {
 		return nil, err

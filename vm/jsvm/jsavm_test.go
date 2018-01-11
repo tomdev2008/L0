@@ -18,6 +18,7 @@ import (
 	//"math/rand"
 	//"time"
 	"sync"
+	"github.com/bocheninc/L0/components/utils"
 )
 
 type L0Handler struct {
@@ -165,8 +166,8 @@ func CreateContractSpec(args []string) *types.ContractSpec {
 
 func CreateContractData(args []string) *vm.ContractData {
 	tx := &types.Transaction{}
-	cs := CreateContractSpec(args)
-	return vm.NewContractData(tx, cs, string(cs.ContractCode))
+	tx.Payload = utils.Serialize(CreateContractSpec(args))
+	return vm.NewContractData(tx)
 }
 
 

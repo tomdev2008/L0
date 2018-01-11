@@ -34,6 +34,8 @@ import (
 	"encoding/json"
 	//"sync"
 	"math/rand"
+	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/L0/core/ledger/state"
 )
 
 //var vmproc *vm.VMProc
@@ -42,6 +44,7 @@ import (
 // Start start vm process
 type LuaWorker struct {
 	isInit bool
+	isCanRedo bool
 	workerFlag int
 	luaProto  map[string]*lua.FunctionProto
 	luaLFunc  map[string]*lua.LFunction
@@ -57,20 +60,30 @@ func NewLuaWorker(conf *vm.Config) *LuaWorker {
 	return worker
 }
 
+// VmJob handler main work
 func (worker *LuaWorker) VmJob(data interface{}) interface{} {
-	//startTime := time.Now()
+	worker.isCanRedo = false
+	return worker.ExecJob(data)
+}
+
+// Exec worker
+func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
-	_, err := worker.requestHandle(workerProcWithCallback.WorkProc)
+	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
 	if err != nil {
-		log.Errorf("err: %+v", err)
-	} else {
-		workerProcWithCallback.Fn("hello")
+		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
 	}
 
-	//execTime := time.Now().Sub(startTime)
-	//log.Debugf("===> [%d]must execTime0: %s", worker.workerFlag, execTime)
-	//result, err := worker.requestHandle(data.(*vm.WorkerProc))
-	//log.Debugf("requestResult, result: %+v, err: %+v", result, err)
+	res := workerProcWithCallback.Fn(&state.VMExecResponse{
+		IsCanRedo: !worker.isCanRedo,
+		Err: err,
+	})
+
+	if !res.(bool) && !worker.isCanRedo {
+		worker.isCanRedo = true
+		worker.ExecJob(data)
+	}
+
 	return nil
 }
 
@@ -90,20 +103,16 @@ func (worker *LuaWorker) VmTerminate() {
 }
 
 func (worker *LuaWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
-	//log.Debug("call luavm FuncName:", wp.PreMethod)
-	switch wp.PreMethod {
-	case "PreInitContract":
+	txType := wp.ContractData.Transaction.GetType()
+	if txType == types.TypeLuaContractInit {
 		return worker.InitContract(wp)
-	case "RealInitContract":
-		return worker.InitContract(wp)
-	case "PreInvokeExecute":
+	} else if txType == types.TypeContractInvoke {
 		return worker.InvokeExecute(wp)
-	case "RealInvokeExecute":
-		return worker.InvokeExecute(wp)
-	case "QueryContract":
+	} else if txType == types.TypeContractQuery {
 		return worker.QueryContract(wp)
 	}
-	return nil, errors.New("luavm no method match:" + wp.PreMethod)
+
+	return nil, errors.New(fmt.Sprintf("luavm no method match transaction type: %d", txType))
 }
 
 
@@ -123,7 +132,6 @@ func (worker *LuaWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
-		//worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 
@@ -152,7 +160,6 @@ func (worker *LuaWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
 
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
-		//worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 

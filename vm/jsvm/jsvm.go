@@ -30,6 +30,7 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"encoding/json"
 	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/types"
 )
 
 type JsWorker struct {
@@ -39,7 +40,6 @@ type JsWorker struct {
 	workerProc *vm.WorkerProc
 	ottoVM *otto.Otto
 }
-
 
 func NewJsWorker(conf *vm.Config) *JsWorker {
 	worker := &JsWorker{isInit: false}
@@ -89,26 +89,21 @@ func (worker *JsWorker) VmInitialize() {
 
 // terminate and clean resource when terminated
 func (worker *JsWorker) VmTerminate() {
-	//pass
+
 }
 
 // handler all request
 func (worker *JsWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
-	// log.Debug("call jsvm FuncName:", req.FuncName
-
-	switch wp.PreMethod {
-	case "PreInitContract":
+	txType := wp.ContractData.Transaction.GetType()
+	if txType == types.TypeJSContractInit {
 		return worker.InitContract(wp)
-	case "RealInitContract":
-		return worker.InitContract(wp)
-	case "PreInvokeExecute":
+	} else if txType == types.TypeContractInvoke {
 		return worker.InvokeExecute(wp)
-	case "RealInvokeExecute":
-		return worker.InvokeExecute(wp)
-	case "QueryContract":
+	} else if txType == types.TypeContractQuery {
 		return worker.QueryContract(wp)
 	}
-	return nil, errors.New("luavm no method match:" + wp.PreMethod)
+
+	return nil, errors.New(fmt.Sprintf("luavm no method match transaction type: %d", txType))
 }
 
 // RealInitContract real call L0Init and commit all change
@@ -128,7 +123,6 @@ func (worker *JsWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 	err = worker.workerProc.CCallCommit()
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
-		worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 
@@ -145,7 +139,6 @@ func (worker *JsWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
 	worker.resetProc(wp)
 	code, err := worker.GetContractCode()
 	if err != nil {
-		log.Errorf("can't get contract code")
 		return nil, errors.New("can't get contract code")
 	}
 
@@ -158,7 +151,6 @@ func (worker *JsWorker) InvokeExecute(wp *vm.WorkerProc) (interface{}, error) {
 	err = worker.workerProc.CCallCommit()
 	if err != nil {
 		log.Errorf("commit all change error contractAddr:%s, errmsg:%s\n", worker.workerProc.ContractData.ContractAddr, err.Error())
-		worker.workerProc.CCallSmartContractFailed()
 		return false, err
 	}
 
