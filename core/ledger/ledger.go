@@ -22,14 +22,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
-	"math/big"
 	"path/filepath"
 
 	"errors"
 	"strconv"
-	"strings"
-
-	"reflect"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
@@ -41,15 +37,10 @@ import (
 	"github.com/bocheninc/L0/core/ledger/block_storage"
 	"github.com/bocheninc/L0/core/ledger/merge"
 	"github.com/bocheninc/L0/core/ledger/state"
-	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
-	"gopkg.in/mgo.v2/bson"
-	"github.com/bocheninc/testcases/L0/tx"
-	"github.com/bocheninc/testcases/L0/contract"
 	"github.com/bocheninc/L0/vm"
 	"github.com/bocheninc/L0/vm/bsvm"
-	"github.com/go-kit/kit/examples/shipping/cargo"
 )
 
 var (
@@ -103,11 +94,10 @@ func (ledger *Ledger) DBHandler() *db.BlockchainDB {
 	return ledger.dbHandler
 }
 
-
 func (ledger *Ledger) initVmEnv() {
 	ledger.vmEnv = make(map[string]*vm.VirtualMachine)
 	bsWorkers := make([]vm.VmWorker, vm.VMConf.BsWorkerCnt)
-	for i:=0; i<vm.VMConf.BsWorkerCnt; i++ {
+	for i := 0; i < vm.VMConf.BsWorkerCnt; i++ {
 		bsWorkers[i] = bsvm.NewBsWorker(vm.VMConf)
 	}
 
@@ -151,9 +141,8 @@ func (ledger *Ledger) GetGenesisBlock() *types.BlockHeader {
 	return genesisBlockHeader
 }
 
-
 // AppendBlock appends a new block to the ledger,flag = true pack up block ,flag = false sync block
-func (ledger *Ledger)AppendBlock(block *types.Block, flag bool) error {
+func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	//var (
 	//	txWriteBatchs []*db.WriteBatch
 	//	txs           types.Transactions
@@ -168,13 +157,13 @@ func (ledger *Ledger)AppendBlock(block *types.Block, flag bool) error {
 	wokerData := func(tx *types.Transaction, txIdx int) *vm.WorkerProc {
 		return &vm.WorkerProc{
 			ContractData: vm.NewContractData(tx),
-			L0Handler: state.NewTXRWSet(ledger.state, tx, uint32(txIdx)),
+			L0Handler:    state.NewTXRWSet(ledger.state, tx, uint32(txIdx)),
 		}
 	}
 	for idx, tx := range block.Transactions {
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
-			Fn:fn,
+			Fn:       fn,
 		})
 	}
 
@@ -189,10 +178,9 @@ func (ledger *Ledger)AppendBlock(block *types.Block, flag bool) error {
 	blkWriteBatches := ledger.block.AppendBlock(block)
 	writeBatches = append(writeBatches, blkWriteBatches...)
 
-	 if err := ledger.dbHandler.AtomicWrite(writeBatches); err != nil {
-	 	return err
-	 }
-
+	if err := ledger.dbHandler.AtomicWrite(writeBatches); err != nil {
+		return err
+	}
 
 	// bh, _ := ledger.Height()
 	// ledger.state.SetHeight(bh)
@@ -304,8 +292,8 @@ func (ledger *Ledger) GetTxByTxHash(txHashBytes []byte) (*types.Transaction, err
 	return ledger.block.GetTransactionByTxHash(txHashBytes)
 }
 
-// GetBalances returns balance by account
-func (ledger *Ledger) GetBalances(addr accounts.Address) (*state.Balance, error) {
+// GetBalance returns balance by account
+func (ledger *Ledger) GetBalance(addr accounts.Address) (*state.Balance, error) {
 	return ledger.state.GetBalances(addr.String())
 }
 
@@ -387,7 +375,7 @@ func (ledger *Ledger) init() error {
 	buf, err = state.ConcrateStateJson(&vm.ContractCode{
 		state.DefaultGlobalContractCode,
 		state.DefaultGlobalContractType,
-	} )
+	})
 	if err != nil {
 		return err
 	}

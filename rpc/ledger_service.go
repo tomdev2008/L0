@@ -31,9 +31,9 @@ import (
 //LedgerInterface ledger interface
 type LedgerInterface interface {
 	Height() (uint32, error)
-	GetAsset(id uint32) *state.Asset
+	GetAsset(id uint32) (*state.Asset, error)
 	ComplexQuery(Key string) ([]byte, error)
-	GetBalance(addr accounts.Address) *state.Balance
+	GetBalance(addr accounts.Address) (*state.Balance, error)
 	GetTransaction(txHash crypto.Hash) (*types.Transaction, error)
 	GetBlockByHash(blockHashBytes []byte) (*types.BlockHeader, error)
 	GetBlockByNumber(number uint32) (*types.BlockHeader, error)
@@ -85,7 +85,7 @@ func (l *Ledger) Height(ignore string, reply *uint32) error {
 
 //GetAsset returns asset by id
 func (l *Ledger) GetAsset(id uint32, reply *state.Asset) error {
-	b := l.ledger.GetAsset(id)
+	b, _ := l.ledger.GetAsset(id)
 	if b == nil {
 		return fmt.Errorf("asset %d not found", id)
 	}
@@ -106,7 +106,7 @@ func (l *Ledger) ComplexQuery(key string, reply *string) error {
 
 //GetBalance returns balance by account address
 func (l *Ledger) GetBalance(addr string, reply *state.Balance) error {
-	b := l.ledger.GetBalance(accounts.HexToAddress(addr))
+	b, _ := l.ledger.GetBalance(accounts.HexToAddress(addr))
 	*reply = *b
 	return nil
 }

@@ -424,7 +424,7 @@ func (vcl *viewChangeList) start(lbft *Lbft) {
 				if v.PrimaryID == lbft.lastPrimaryID {
 					continue
 				}
-				if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash()+":"+lbft.hash() {
+				if (lbft.execSeqNo != 0 && v.SeqNo <= lbft.execSeqNo) || v.Height < lbft.execHeight || v.OptHash != lbft.options.Hash() {
 					continue
 				}
 				if p, ok := lbft.primaryHistory[v.PrimaryID]; ok && p != v.Priority {

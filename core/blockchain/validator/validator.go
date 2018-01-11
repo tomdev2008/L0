@@ -19,9 +19,7 @@
 package validator
 
 import (
-	"bytes"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
@@ -30,13 +28,9 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils/sortedlinkedlist"
-	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/consensus"
-	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger"
-	"github.com/bocheninc/L0/core/ledger/contract"
 	"github.com/bocheninc/L0/core/ledger/state"
-	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -44,12 +38,8 @@ type Validator interface {
 	Start()
 	ProcessTransaction(tx *types.Transaction) error
 	VerifyTxs(txs types.Transactions) (types.Transactions, types.Transactions)
-	UpdateAccount(tx *types.Transaction) bool
-	RollBackAccount(tx *types.Transaction)
 	RemoveTxsInVerification(txs types.Transactions)
 	GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool)
-	GetAsset(id uint32) *state.Asset
-	GetBalance(addr accounts.Address) *state.Balance
 	SecurityPluginDir() string
 }
 
@@ -62,13 +52,9 @@ type Verification struct {
 	requestBatchTimer  *time.Timer
 	blacklist          map[string]time.Time
 	rwBlacklist        sync.RWMutex
-	accounts           map[string]*state.Balance
-	rwAccount          sync.RWMutex
-	assets             map[uint32]*state.Asset
 	inTxs              map[crypto.Hash]*types.Transaction
 	rwInTxs            sync.RWMutex
 	sync.RWMutex
-	sctx *contract.SmartConstract
 	//static map[crypto.Hash]time.Duration
 }
 
@@ -83,10 +69,7 @@ func NewVerification(config *Config, ledger *ledger.Ledger, consenter consensus.
 		requestBatchSignal: make(chan int),
 		requestBatchTimer:  time.NewTimer(consenter.BatchTimeout()),
 		blacklist:          make(map[string]time.Time),
-		accounts:           make(map[string]*state.Balance),
-		assets:             make(map[uint32]*state.Asset),
 		inTxs:              make(map[crypto.Hash]*types.Transaction),
-		sctx:               contract.NewSmartConstract(ledger.DBHandler(), ledger),
 	}
 
 	return vf
@@ -206,19 +189,9 @@ func (v *Verification) consensusFailed(flag int, txs types.Transactions) {
 		}
 		v.txpool.Removes(elems)
 	case 4: //update account
-		v.rwAccount.Lock()
-		defer v.rwAccount.Unlock()
-		for _, tx := range txs {
-			if !v.updateAccount(tx) {
-				panic("balance is not enough")
-			}
-		}
+
 	case 5: // rollback account
-		v.rwAccount.Lock()
-		defer v.rwAccount.Unlock()
-		for _, tx := range txs {
-			v.rollBackAccount(tx)
-		}
+
 	case 6: // remove when verify error
 		v.rwInTxs.Lock()
 		defer v.rwInTxs.Unlock()
@@ -240,9 +213,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 		return txs, etxs
 	}
 	v.rwInTxs.Lock()
-	v.rwAccount.Lock()
 	defer v.rwInTxs.Unlock()
-	defer v.rwAccount.Unlock()
 	for _, tx := range txs {
 		if !v.isExist(tx) {
 			if err := v.checkTransaction(tx); err != nil {
@@ -253,10 +224,7 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 		}
 
 		assetID := tx.AssetID()
-		asset, ok := v.assets[assetID]
-		if !ok {
-			asset, _ = v.ledger.GetAssetFromDB(assetID)
-		}
+		asset, _ := v.ledger.GetAsset(assetID)
 		if tx.GetType() != types.TypeIssue {
 			if asset == nil {
 				etxs = append(etxs, tx)
@@ -264,13 +232,12 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 				continue
 			}
 			if tx.GetType() == types.TypeIssueUpdate && len(tx.Payload) > 0 {
-				newAsset, err := asset.Update(string(tx.Payload))
+				_, err := asset.Update(string(tx.Payload))
 				if err != nil {
 					etxs = append(etxs, tx)
 					log.Errorf("[validator] tx_hash: %s, update asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
 					continue
 				}
-				v.assets[assetID] = newAsset
 			}
 		} else {
 			if asset == nil {
@@ -279,13 +246,12 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 					Issuer: tx.Sender(),
 					Owner:  tx.Recipient(),
 				}
-				newAsset, err := asset.Update(string(tx.Payload))
+				_, err := asset.Update(string(tx.Payload))
 				if err != nil {
 					etxs = append(etxs, tx)
 					log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- %s", tx.Hash().String(), assetID, string(tx.Payload), err)
 					continue
 				}
-				v.assets[assetID] = newAsset
 			} else {
 				etxs = append(etxs, tx)
 				log.Errorf("[validator] tx_hash: %s, new issue asset %d(%s) --- already exist", tx.Hash().String(), assetID, string(tx.Payload))
@@ -293,12 +259,6 @@ func (v *Verification) VerifyTxs(txs types.Transactions) (ttxs types.Transaction
 			}
 		}
 
-		// remove balance is negative tx
-		if !v.updateAccount(tx) {
-			etxs = append(etxs, tx)
-			log.Errorf("[validator] tx_hash: %s, asset %d balance is not enough", tx.Hash().String(), tx.AssetID())
-			continue
-		}
 		ttxs = append(ttxs, tx)
 	}
 
@@ -315,89 +275,6 @@ func (v *Verification) RemoveTxsInVerification(txs types.Transactions) {
 	}
 }
 
-func (v *Verification) fetchAccount(address accounts.Address) *state.Balance {
-	account, ok := v.accounts[address.String()]
-	if !ok {
-		account, _ = v.ledger.GetBalanceFromDB(address)
-		v.accounts[address.String()] = account
-	}
-	return account
-}
-
-func (v *Verification) updateAccount(tx *types.Transaction) bool {
-	assetID := tx.AssetID()
-	plusAmount := big.NewInt(tx.Amount().Int64())
-	plusFee := big.NewInt(tx.Fee().Int64())
-	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
-	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
-
-	if fromChain := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes(); bytes.Equal(fromChain, params.ChainID) {
-		senderAccont := v.fetchAccount(tx.Sender())
-		if senderAccont != nil {
-			senderAccont.Add(assetID, subAmount)
-			senderAccont.Add(assetID, subFee)
-			//	log.Debugln("[validator] updateAccount sender: ", tx.Sender(), "amount: ", senderAccont.amount)
-			if (tx.GetType() != types.TypeIssue && tx.GetType() != types.TypeIssueUpdate) && senderAccont.Get(assetID).Sign() == -1 {
-				senderAccont.Add(assetID, plusAmount)
-				senderAccont.Add(assetID, plusFee)
-				return false
-			}
-		}
-	}
-
-	if toChain := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes(); bytes.Equal(toChain, params.ChainID) {
-		receiverAccount := v.fetchAccount(tx.Recipient())
-		if receiverAccount != nil {
-			receiverAccount.Add(assetID, plusAmount)
-			receiverAccount.Add(assetID, plusFee)
-			//	log.Debugln("[validator] updateAccount Recipient: ", tx.Recipient(), "amount: ", receiverAccount.amount)
-			if receiverAccount.Get(assetID).Sign() == -1 {
-				receiverAccount.Add(assetID, subAmount)
-				receiverAccount.Add(assetID, subFee)
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (v *Verification) rollBackAccount(tx *types.Transaction) {
-	assetID := tx.AssetID()
-	plusAmount := big.NewInt(tx.Amount().Int64())
-	plusFee := big.NewInt(tx.Fee().Int64())
-	subAmount := big.NewInt(int64(0)).Neg(tx.Amount())
-	subFee := big.NewInt(int64(0)).Neg(tx.Fee())
-
-	if fromChain := coordinate.HexToChainCoordinate(tx.FromChain()).Bytes(); bytes.Equal(fromChain, params.ChainID) {
-		senderAccont := v.fetchAccount(tx.Sender())
-		if senderAccont != nil {
-			senderAccont.Add(assetID, plusAmount)
-			senderAccont.Add(assetID, plusFee)
-		}
-	}
-
-	if toChain := coordinate.HexToChainCoordinate(tx.ToChain()).Bytes(); bytes.Equal(toChain, params.ChainID) {
-		receiverAccount := v.fetchAccount(tx.Recipient())
-		if receiverAccount != nil {
-			receiverAccount.Add(assetID, subAmount)
-			receiverAccount.Add(assetID, subFee)
-		}
-	}
-}
-
-func (v *Verification) UpdateAccount(tx *types.Transaction) bool {
-	v.rwAccount.Lock()
-	defer v.rwAccount.Unlock()
-	return v.updateAccount(tx)
-}
-
-//RollBackAccount roll back account balance
-func (v *Verification) RollBackAccount(tx *types.Transaction) {
-	v.rwAccount.Lock()
-	defer v.rwAccount.Unlock()
-	v.rollBackAccount(tx)
-}
-
 func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transaction, bool) {
 	if elem := v.txpool.GetIElementByKey(txHash.String()); elem != nil {
 		return elem.(*types.Transaction), true
@@ -405,27 +282,10 @@ func (v *Verification) GetTransactionByHash(txHash crypto.Hash) (*types.Transact
 	return nil, false
 }
 
-func (v *Verification) GetBalance(addr accounts.Address) *state.Balance {
-	v.rwAccount.Lock()
-	defer v.rwAccount.Unlock()
-	acconut := v.fetchAccount(addr)
-	return acconut
-}
-
-func (v *Verification) GetAsset(id uint32) *state.Asset {
-	v.rwAccount.Lock()
-	defer v.rwAccount.Unlock()
-	asset, ok := v.assets[id]
-	if !ok {
-		asset, _ = v.ledger.GetAssetFromDB(id)
-	}
-	return asset
-}
-
 func GetTxPoolTransactions() []string {
 	iter := vf.txpool.Iter()
 	txs := []string{}
-	for ele := iter(); ele != nil ; ele = iter() {
+	for ele := iter(); ele != nil; ele = iter() {
 		tx := ele.(*types.Transaction)
 		txs = append(txs, tx.Hash().String())
 	}

@@ -20,15 +20,10 @@ package validator
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"path/filepath"
-	"plugin"
 	"strings"
 	"sync"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger/state"
@@ -176,104 +171,106 @@ type SecurityVerifierManager struct {
 var securityVerifierMnger SecurityVerifierManager
 
 func (v *Verification) getSecurityVerifier() (SecurityVerifier, error) {
-	securityVerifierMnger.Lock()
-	defer securityVerifierMnger.Unlock()
+	// securityVerifierMnger.Lock()
+	// defer securityVerifierMnger.Unlock()
 
-	securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
-	if err != nil {
-		log.Errorf("get security plugin path failed, %v", err)
-		return nil, fmt.Errorf("get security plugin path failed, %v", err)
-	}
-	if len(securityPathData) == 0 {
-		return nil, nil
-	}
+	// securityPathData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	// if err != nil {
+	// 	log.Errorf("get security plugin path failed, %v", err)
+	// 	return nil, fmt.Errorf("get security plugin path failed, %v", err)
+	// }
+	// if len(securityPathData) == 0 {
+	// 	return nil, nil
+	// }
 
-	var securityPath string
-	err = json.Unmarshal(securityPathData, &securityPath)
-	if err != nil {
-		log.Errorf("unmarshal security plugin path failed, %v", err)
-		return nil, fmt.Errorf("unmarshal security plugin path failed, %v", err)
-	}
+	// var securityPath string
+	// err = json.Unmarshal(securityPathData, &securityPath)
+	// if err != nil {
+	// 	log.Errorf("unmarshal security plugin path failed, %v", err)
+	// 	return nil, fmt.Errorf("unmarshal security plugin path failed, %v", err)
+	// }
 
-	if securityPath == securityVerifierMnger.securityPath {
-		return securityVerifierMnger.verifier, nil
-	}
+	// if securityPath == securityVerifierMnger.securityPath {
+	// 	return securityVerifierMnger.verifier, nil
+	// }
 
-	security, err := plugin.Open(filepath.Join(v.SecurityPluginDir(), securityPath))
-	if err != nil {
-		log.Errorf("load security plugin failed, %v", err)
-		return nil, fmt.Errorf("load security plugin failed, %v", err)
-	}
+	// security, err := plugin.Open(filepath.Join(v.SecurityPluginDir(), securityPath))
+	// if err != nil {
+	// 	log.Errorf("load security plugin failed, %v", err)
+	// 	return nil, fmt.Errorf("load security plugin failed, %v", err)
+	// }
 
-	verifyFn, err := security.Lookup("Verify")
-	if err != nil {
-		log.Errorf("can't find security plugin verifier, %v", err)
-		return nil, fmt.Errorf("can't find security plugin verifier, %v", err)
-	}
+	// verifyFn, err := security.Lookup("Verify")
+	// if err != nil {
+	// 	log.Errorf("can't find security plugin verifier, %v", err)
+	// 	return nil, fmt.Errorf("can't find security plugin verifier, %v", err)
+	// }
 
-	verifier, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error)
-	if !ok {
-		log.Error("invalid security plugin verifier format")
-		return nil, errors.New("invalid security plugin verifier format")
-	}
+	// verifier, ok := verifyFn.(func(*types.Transaction, func(key string) ([]byte, error)) error)
+	// if !ok {
+	// 	log.Error("invalid security plugin verifier format")
+	// 	return nil, errors.New("invalid security plugin verifier format")
+	// }
 
-	securityVerifierMnger.verifier = SecurityVerifier(verifier)
-	securityVerifierMnger.securityPath = securityPath
-	return securityVerifierMnger.verifier, nil
+	// securityVerifierMnger.verifier = SecurityVerifier(verifier)
+	// securityVerifierMnger.securityPath = securityPath
+	// return securityVerifierMnger.verifier, nil
+	return nil, nil
 }
 
 func (v *Verification) checkTransactionSecurity(tx *types.Transaction) error {
-	verifier, err := v.getSecurityVerifier()
-	if err != nil {
-		return err
-	}
+	// verifier, err := v.getSecurityVerifier()
+	// if err != nil {
+	// 	return err
+	// }
 
-	if verifier == nil {
-		return nil
-	}
+	// if verifier == nil {
+	// 	return nil
+	// }
 
-	if err := verifier(tx, func(key string) ([]byte, error) {
-		data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
-		if err != nil {
-			return nil, err
-		}
-		return data, nil
-	}); err != nil {
-		return err
-	}
+	// if err := verifier(tx, func(key string) ([]byte, error) {
+	// 	data, err := v.sctx.GetContractStateData(params.GlobalStateKey, key)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	return data, nil
+	// }); err != nil {
+	// 	return err
+	// }
 
-	log.Infof("security verify success of transaction %v", tx.Hash())
+	// log.Infof("security verify success of transaction %v", tx.Hash())
 	return nil
 }
 
 func (v *Verification) checkTransactionSecurityByContract(tx *types.Transaction) bool {
-	securityAddrData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
-	if err != nil {
-		log.Errorf("get security contract address failed, %v", err)
-		return true
-	}
+	// securityAddrData, err := v.sctx.GetContractStateData(params.GlobalStateKey, params.SecurityContractKey)
+	// if err != nil {
+	// 	log.Errorf("get security contract address failed, %v", err)
+	// 	return true
+	// }
 
-	if len(securityAddrData) == 0 {
-		log.Info("there is no security contract yet")
-		return true
-	}
+	// if len(securityAddrData) == 0 {
+	// 	log.Info("there is no security contract yet")
+	// 	return true
+	// }
 
-	var addr string
-	err = json.Unmarshal(securityAddrData, &addr)
-	if err != nil {
-		log.Errorf("unmarshal security contract address failed, %v", err)
-		return true
-	}
+	// var addr string
+	// err = json.Unmarshal(securityAddrData, &addr)
+	// if err != nil {
+	// 	log.Errorf("unmarshal security contract address failed, %v", err)
+	// 	return true
+	// }
 
-	bh, _ := v.ledger.Height()
-	v.sctx.StartConstract(bh)
-	ok, err := v.sctx.ExecuteRequireContract(tx, addr)
-	v.sctx.StopContract(bh)
+	// bh, _ := v.ledger.Height()
+	// v.sctx.StartConstract(bh)
+	// ok, err := v.sctx.ExecuteRequireContract(tx, addr)
+	// v.sctx.StopContract(bh)
 
-	if err != nil {
-		log.Errorf("execute security contract failed, %v", err)
-		return true
-	}
+	// if err != nil {
+	// 	log.Errorf("execute security contract failed, %v", err)
+	// 	return true
+	// }
 
-	return ok
+	// return ok
+	return true
 }

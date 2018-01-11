@@ -26,11 +26,9 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/log"
-	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/blockchain/validator"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/ledger"
-	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/types"
 )
@@ -144,24 +142,6 @@ func (bc *Blockchain) GetNextBlockHash(h crypto.Hash) (crypto.Hash, error) {
 	return hash, nil
 }
 
-// GetAsset returns asset
-func (bc *Blockchain) GetAsset(id uint32) *state.Asset {
-	if bc.validator == nil {
-		b, _ := bc.ledger.GetAssetFromDB(id)
-		return b
-	}
-	return bc.validator.GetAsset(id)
-}
-
-// GetBalance returns balance
-func (bc *Blockchain) GetBalance(addr accounts.Address) *state.Balance {
-	if bc.validator == nil {
-		b, _ := bc.ledger.GetBalanceFromDB(addr)
-		return b
-	}
-	return bc.validator.GetBalance(addr)
-}
-
 // GetTransaction returns transaction in ledger first then txBool
 func (bc *Blockchain) GetTransaction(txHash crypto.Hash) (*types.Transaction, error) {
 	tx, err := bc.ledger.GetTxByTxHash(txHash.Bytes())
@@ -193,6 +173,7 @@ func (bc *Blockchain) Synced() bool {
 var allProcessBlock time.Duration
 var allBlockCnt int64
 var allTransactionCnt int64
+
 // StartConsensusService starts consensus service
 func (bc *Blockchain) StartConsensusService() {
 	go bc.consenter.Start()
@@ -238,9 +219,9 @@ func (bc *Blockchain) StartConsensusService() {
 				allProcessBlock += oneBlockTime
 				allBlockCnt += 1
 				allTransactionCnt += int64(len(commitedTxs.Txs))
-				if allBlockCnt % 10 == 0 {
-					avg_blk_time := allProcessBlock.Nanoseconds() / allBlockCnt /1000 /1000
-					avg_tx_time := allProcessBlock.Nanoseconds() / allTransactionCnt /1000 /1000
+				if allBlockCnt%10 == 0 {
+					avg_blk_time := allProcessBlock.Nanoseconds() / allBlockCnt / 1000 / 1000
+					avg_tx_time := allProcessBlock.Nanoseconds() / allTransactionCnt / 1000 / 1000
 					log.Debugf("WriteLedger, blockCnt: %d, txCnt: %d, avg_blk_time: %d, avg_tx_time: %d", allBlockCnt, allTransactionCnt, avg_blk_time, avg_tx_time)
 				}
 				log.Debugf("WriteLedger, blk_ht: %+v , tx_nums: %+v, time: %s", height, len(commitedTxs.Txs), oneBlockTime)
