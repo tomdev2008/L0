@@ -29,6 +29,7 @@ import (
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
+	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/state/treap"
 	"github.com/bocheninc/L0/core/types"
@@ -379,6 +380,7 @@ func (blk *BLKRWSet) DelAssetState(assetID uint32) {
 // ApplyChanges merges delta
 func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types.Transactions, error) {
 	blk.wait()
+	log.Debugf("BLKRWSet ApplyChanges blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	blk.chainCodeRW.RLock()
 	defer blk.chainCodeRW.RUnlock()
 	blk.assetRW.RLock()
@@ -476,6 +478,7 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
 	}
 	blk.TxIndex--
+	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
 	if blk.TxIndex == 0 && blk.isWaiting() {
 		close(blk.exit)
 	}
@@ -533,6 +536,7 @@ func (blk *BLKRWSet) isWaiting() bool {
 }
 
 func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
+	log.Debugf("BLKRWSet SetBlock blockHeight:%d, txNum:%d", blkIndex, txNum)
 	blk.BlockIndex = blkIndex
 	blk.TxIndex = txNum
 }
