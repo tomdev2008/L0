@@ -72,6 +72,7 @@ type BLKRWSet struct {
 
 	BlockIndex uint32
 	TxIndex    uint32
+	curTxIndex uint32
 
 	waiting   bool
 	waitingRW sync.RWMutex
@@ -427,7 +428,7 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types
 	return writeBatchs, txs, errTxs, nil
 }
 
-func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet *KVRWSet, tx *types.Transaction, ttxs types.Transactions) error {
+func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet *KVRWSet, tx *types.Transaction, ttxs types.Transactions, txIndex uint32) error {
 	blk.chainCodeRW.Lock()
 	defer blk.chainCodeRW.Unlock()
 	blk.assetRW.Lock()
@@ -480,15 +481,15 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 		blk.txs = append(blk.txs, tx)
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
 	}
-	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
+
 	blk.waitingRW.Lock()
-	log.Debugf("BLKRWSet merge lock blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
-	blk.TxIndex--
-	if blk.waiting && blk.TxIndex == 0 {
+	blk.curTxIndex = txIndex
+	log.Debugf("BLKRWSet merge lock blockHeight:%d, txIndex:%d", blk.BlockIndex, blk.TxIndex)
+	if blk.waiting && blk.TxIndex == blk.curTxIndex {
 		blk.exit <- struct{}{}
 	}
 	blk.waitingRW.Unlock()
-	log.Debugf("BLKRWSet merge blockHeight:%d, txNum:%d", blk.BlockIndex, blk.TxIndex)
+	log.Debugf("BLKRWSet merge blockHeight:%d, txIndex:%d", blk.BlockIndex, txIndex)
 	return nil
 }
 
@@ -531,7 +532,7 @@ func (blk *BLKRWSet) GetAssets() (map[uint32]*Asset, error) {
 
 func (blk *BLKRWSet) wait() {
 	blk.waitingRW.Lock()
-	if blk.TxIndex != 0 {
+	if blk.TxIndex != blk.curTxIndex {
 		blk.waiting = true
 	} else {
 		blk.waiting = false
@@ -546,6 +547,7 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	log.Debugf("BLKRWSet SetBlock blockHeight:%d, txNum:%d", blkIndex, txNum)
 	blk.BlockIndex = blkIndex
 	blk.TxIndex = txNum
+	blk.curTxIndex = 0
 	blk.exit = make(chan struct{}, 1)
 	blk.assetSet = NewKVRWSet()
 	blk.balanceSet = NewKVRWSet()
