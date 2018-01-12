@@ -30,7 +30,6 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"encoding/json"
 	"github.com/bocheninc/L0/core/ledger/state"
-	"math/rand"
 )
 
 type BsWorker struct {
@@ -42,11 +41,11 @@ type BsWorker struct {
 }
 
 
-func NewBsWorker(conf *vm.Config) *BsWorker {
+func NewBsWorker(conf *vm.Config, idx int) *BsWorker {
 	bsWorker := &BsWorker{
 		jsWorker: jsvm.NewJsWorker(conf),
 		luaWorker:luavm.NewLuaWorker(conf),
-		workerID: rand.Int(),
+		workerID: idx,
 	}
 
 	return bsWorker
@@ -105,6 +104,8 @@ func (worker *BsWorker) ExecJob(workerProcWithCallback *vm.WorkerProcWithCallbac
 			vm.Txsync.Wait(workerProcWithCallback.Idx%vm.VMConf.BsWorkerCnt)
 		}
 	}
+	log.Debugf("====> worker thread id: %+v, tx_idx: %+v, tx_hash: %+v",
+		worker.workerID, workerProcWithCallback.Idx, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
 
 	res = res
 	cerr := workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
@@ -124,13 +125,13 @@ func (worker *BsWorker) VmJob(data interface{}) (interface{}, error) {
 	err := worker.ExecJob(workerProcWithCallback)
 
 	if err != nil && !worker.isCanRedo {
-		log.Errorf("to tx redo, tx_hash: %+v, cause: %+v",
-			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
+		log.Errorf("====> worker thread id: %+v, to tx redo, tx_hash: %+v, tx_idx: %+v, cause: %+v",
+			worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err)
 		worker.isCanRedo = true
 		err := worker.ExecJob(workerProcWithCallback)
 		if err != nil {
-			log.Errorf("tx redo failed, tx_hash: %+v, cause: %+v",
-				workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
+			log.Errorf("====> worker thread id: %+v, tx redo failed, tx_hash: %+v, tx_idx: %+v, cause: %+v",
+				worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err)
 		}
 	}
 

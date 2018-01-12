@@ -99,7 +99,7 @@ func (ledger *Ledger) initVmEnv() {
 	ledger.vmEnv = make(map[string]*vm.VirtualMachine)
 	bsWorkers := make([]vm.VmWorker, vm.VMConf.BsWorkerCnt)
 	for i := 0; i < vm.VMConf.BsWorkerCnt; i++ {
-		bsWorkers[i] = bsvm.NewBsWorker(vm.VMConf)
+		bsWorkers[i] = bsvm.NewBsWorker(vm.VMConf, i)
 	}
 
 	addNewEnv := func(name string, worker []vm.VmWorker) *vm.VirtualMachine {
