@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"time"
+
+	"strconv"
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/utils"
@@ -23,171 +26,227 @@ var (
 )
 
 func main() {
+	atomic := flag.Int("atomic", 0, "atomic tx")
+	withdraw := flag.Int("withdraw", 0, "withdraw contract")
+	order := flag.Int("order", 0, "order contract")
+	if *atomic == 0 && *withdraw == 0 && *order == 0 {
+		fmt.Println("Usage: ./withdraw_order -atomic=3 [-withdraw=3] [-order=3]")
+		return
+	}
 	TCPSend([]string{"127.0.0.1:20166"})
+
 	go func() {
 		for {
 			select {
 			case tx := <-txChan:
 				fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 				Relay(NewMsg(0x14, tx.Serialize()))
-				//time.Sleep(500 * time.Millisecond)
 			}
 		}
 	}()
-	for {
-		{
+
+	if *atomic > 0 {
+		//模拟交易所提现场景
+		//1.发行资产系统账户 100000000000
+		//2.转账 100000000000
+		for i := 0; i < *atomic; i++ {
 			systemPriv, _ := crypto.GenerateKey()
 			systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
-			feePriv, _ := crypto.GenerateKey()
-			feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
 			assetID := uint32(time.Now().UnixNano())
+			issueTx(systemAddr, assetID, big.NewInt(100000000000))
+			go func() {
+				userPriv, _ := crypto.GenerateKey()
+				userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
+				atomicTx(systemPriv, userAddr, assetID, big.NewInt(10))
+			}()
+		}
+	}
 
-			userPriv, _ := crypto.GenerateKey()
-			userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
+	//提现合约合约
+	if *withdraw > 0 {
+		//模拟交易所提现场景
+		//1.部署提现合约
 
-			//模拟交易所提现场景
-			//1.发行资产系统账户 10000
-			//2.转账给提现账户, 以完成提现操作 5000
-			//3.部署提现合约 1000
-			//4.发起提现请求
+		//2.发行资产系统账户 100000000000
+		//3.转账给提现账户, 以完成提现操作 100000000000
+		//4.发起提现请求
+		//5.发起撤销提现请求
+		//6.发起提现请求
+		//7.系统账户发起提现成功
+		//8.发起提现请求
+		//9.系统账户发起提现失败
+		systemPriv, _ := crypto.GenerateKey()
+		systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
+		feePriv, _ := crypto.GenerateKey()
+		feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
+
+		initArgs := []string{}
+		initArgs = append(initArgs, systemAddr.String())
+		initArgs = append(initArgs, feeAddr.String())
+		contractAddr := deployTx(systemPriv, uint32(0), big.NewInt(0), "./withdraw.lua", initArgs)
+
+		//并发执行提现合约
+		for i := 0; i < *withdraw; i++ {
+			go func() {
+				assetID := uint32(time.Now().UnixNano())
+				userPriv, _ := crypto.GenerateKey()
+				userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
+
+				issueTx(systemAddr, assetID, big.NewInt(100000000000))
+				atomicTx(systemPriv, userAddr, assetID, big.NewInt(100000000000))
+
+				n := uint64(0)
+				for {
+					n++
+					withdrawID1 := "D" + strconv.FormatUint(n, 10)
+					n++
+					withdrawID2 := "D" + strconv.FormatUint(n, 10)
+					n++
+					withdrawID3 := "D" + strconv.FormatUint(n, 10)
+					invokeArgs := []string{}
+					invokeArgs = append(invokeArgs, "launch")
+					invokeArgs = append(invokeArgs, withdrawID1)
+					invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+
+					invokeArgs = []string{}
+					invokeArgs = append(invokeArgs, "cancel")
+					invokeArgs = append(invokeArgs, withdrawID1)
+					invokeTx(userPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+
+					invokeArgs = []string{}
+					invokeArgs = append(invokeArgs, "launch")
+					invokeArgs = append(invokeArgs, withdrawID2)
+					invokeTx(userPriv, assetID, big.NewInt(10), contractAddr, invokeArgs)
+
+					invokeArgs = []string{}
+					invokeArgs = append(invokeArgs, "succeed")
+					invokeArgs = append(invokeArgs, withdrawID2)
+					invokeArgs = append(invokeArgs, "1")
+					invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+
+					invokeArgs = []string{}
+					invokeArgs = append(invokeArgs, "launch")
+					invokeArgs = append(invokeArgs, withdrawID3)
+					invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+
+					invokeArgs = []string{}
+					invokeArgs = append(invokeArgs, "fail")
+					invokeArgs = append(invokeArgs, withdrawID3)
+					invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+				}
+			}()
+		}
+
+		//订单清算合约
+		if *order > 0 {
+			//模拟交易所订单清算撮合场景 -- 币币交易
+			//1.部署订单清算合约
+
+			//2.发行资产1到用户账户 100000000000
+			//3.发行资产2到用户账户 100000000000
+			//4.用户账户1发起订单请求 1000
+			//5.用户账户2发起订单请求 1000
+			//6.用户账户2发起撤销订单请求 300
+
 			//5.发起撤销提现请求
 			//6.系统账户发起提现成功
 			//7.系统账户发起提现失败
 
-			issueTx(systemAddr, assetID, big.NewInt(10000))
-			atomicTx(systemPriv, userAddr, assetID, big.NewInt(5000))
+			systemPriv, _ := crypto.GenerateKey()
+			systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
+			feePriv, _ := crypto.GenerateKey()
+			feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
 
 			initArgs := []string{}
 			initArgs = append(initArgs, systemAddr.String())
 			initArgs = append(initArgs, feeAddr.String())
-			contractAddr := deployTx(systemPriv, assetID, big.NewInt(0), "./withdraw.lua", initArgs)
+			contractAddr := deployTx(systemPriv, uint32(0), big.NewInt(0), "./order.lua", initArgs)
 
-			time.Sleep(10 * time.Second)
+			//并发
+			for i := 0; i < *order; i++ {
+				go func() {
+					assetID1 := uint32(time.Now().UnixNano())
+					userPriv1, _ := crypto.GenerateKey()
+					userAddr1 := accounts.PublicKeyToAddress(*userPriv1.Public())
 
-			invokeArgs := []string{}
-			invokeArgs = append(invokeArgs, "launch")
-			invokeArgs = append(invokeArgs, "D0001")
-			invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+					assetID2 := uint32(time.Now().UnixNano())
+					userPriv2, _ := crypto.GenerateKey()
+					userAddr2 := accounts.PublicKeyToAddress(*userPriv2.Public())
 
-			invokeArgs = []string{}
-			invokeArgs = append(invokeArgs, "cancel")
-			invokeArgs = append(invokeArgs, "D0001")
-			invokeTx(userPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+					issueTx(userAddr1, assetID1, big.NewInt(100000000000))
+					issueTx(userAddr2, assetID2, big.NewInt(100000000000))
 
-			invokeArgs = []string{}
-			invokeArgs = append(invokeArgs, "launch")
-			invokeArgs = append(invokeArgs, "D0002")
-			invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+					n := uint64(0)
+					for {
 
-			invokeArgs = []string{}
-			invokeArgs = append(invokeArgs, "succeed")
-			invokeArgs = append(invokeArgs, "D0002")
-			invokeArgs = append(invokeArgs, "100")
-			invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+						n++
+						orderID1 := "D" + strconv.FormatUint(n, 10)
+						n++
+						orderID2 := "D" + strconv.FormatUint(n, 10)
+						n++
+						matchID1 := "M" + strconv.FormatUint(n, 10)
 
-			invokeArgs = []string{}
-			invokeArgs = append(invokeArgs, "launch")
-			invokeArgs = append(invokeArgs, "D0003")
-			invokeTx(userPriv, assetID, big.NewInt(1000), contractAddr, invokeArgs)
+						invokeArgs := []string{}
+						invokeArgs = append(invokeArgs, "launch")
+						invokeArgs = append(invokeArgs, orderID1)
+						invokeTx(userPriv1, assetID1, big.NewInt(10), contractAddr, invokeArgs)
 
-			invokeArgs = []string{}
-			invokeArgs = append(invokeArgs, "fail")
-			invokeArgs = append(invokeArgs, "D0003")
-			invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "launch")
+						invokeArgs = append(invokeArgs, orderID2)
+						invokeTx(userPriv2, assetID2, big.NewInt(20), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "cancel")
+						invokeArgs = append(invokeArgs, orderID2)
+						invokeArgs = append(invokeArgs, "10")
+						invokeTx(userPriv2, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "matching")
+						invokeArgs = append(invokeArgs, matchID1)
+						invokeArgs = append(invokeArgs, orderID1)
+						invokeArgs = append(invokeArgs, "5")
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "matching")
+						invokeArgs = append(invokeArgs, matchID1)
+						invokeArgs = append(invokeArgs, orderID2)
+						invokeArgs = append(invokeArgs, "5")
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "matched")
+						invokeArgs = append(invokeArgs, matchID1)
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "feecharge")
+						invokeArgs = append(invokeArgs, matchID1)
+						invokeArgs = append(invokeArgs, orderID1)
+						invokeArgs = append(invokeArgs, "3")
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "syscancel")
+						invokeArgs = append(invokeArgs, orderID1)
+						invokeArgs = append(invokeArgs, "2")
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+
+						invokeArgs = []string{}
+						invokeArgs = append(invokeArgs, "syscancel")
+						invokeArgs = append(invokeArgs, orderID1)
+						invokeArgs = append(invokeArgs, "5")
+						invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
+					}
+				}()
+			}
 		}
-		//{
-		//	systemPriv, _ := crypto.GenerateKey()
-		//	systemAddr := accounts.PublicKeyToAddress(*systemPriv.Public())
-		//	feePriv, _ := crypto.GenerateKey()
-		//	feeAddr := accounts.PublicKeyToAddress(*feePriv.Public())
-		//
-		//	assetID1 := uint32(time.Now().UnixNano())
-		//	userPriv1, _ := crypto.GenerateKey()
-		//	userAddr1 := accounts.PublicKeyToAddress(*userPriv1.Public())
-		//
-		//	assetID2 := uint32(time.Now().UnixNano())
-		//	userPriv2, _ := crypto.GenerateKey()
-		//	userAddr2 := accounts.PublicKeyToAddress(*userPriv2.Public())
-		//
-		//	//模拟交易所订单清算撮合场景 -- 币币交易
-		//	//1.发行资产1到用户账户 10000
-		//	//2.发行资产2到用户账户 10000
-		//	//3.部署订单清算合约
-		//	//4.用户账户1发起订单请求 1000
-		//	//5.用户账户2发起订单请求 1000
-		//	//6.用户账户2发起撤销订单请求 300
-		//
-		//	//5.发起撤销提现请求
-		//	//6.系统账户发起提现成功
-		//	//7.系统账户发起提现失败
-		//
-		//	issueTx(userAddr1, assetID1, big.NewInt(10000))
-		//	issueTx(userAddr2, assetID2, big.NewInt(10000))
-		//
-		//	initArgs := []string{}
-		//	initArgs = append(initArgs, systemAddr.String())
-		//	initArgs = append(initArgs, feeAddr.String())
-		//	contractAddr := deployTx(systemPriv, uint32(0), big.NewInt(0), "./order.lua", initArgs)
-		//
-		//	//time.Sleep(10 * time.Second)
-		//
-		//	invokeArgs := []string{}
-		//	invokeArgs = append(invokeArgs, "launch")
-		//	invokeArgs = append(invokeArgs, "D0001")
-		//	invokeTx(userPriv1, assetID1, big.NewInt(1000), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "launch")
-		//	invokeArgs = append(invokeArgs, "D0002")
-		//	invokeTx(userPriv2, assetID2, big.NewInt(1000), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "cancel")
-		//	invokeArgs = append(invokeArgs, "D0002")
-		//	invokeArgs = append(invokeArgs, "500")
-		//	invokeTx(userPriv2, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "matching")
-		//	invokeArgs = append(invokeArgs, "M0001")
-		//	invokeArgs = append(invokeArgs, "D0001")
-		//	invokeArgs = append(invokeArgs, "300")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "matching")
-		//	invokeArgs = append(invokeArgs, "M0001")
-		//	invokeArgs = append(invokeArgs, "D0002")
-		//	invokeArgs = append(invokeArgs, "300")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "matched")
-		//	invokeArgs = append(invokeArgs, "M0001")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "feecharge")
-		//	invokeArgs = append(invokeArgs, "M0001")
-		//	invokeArgs = append(invokeArgs, "D0001")
-		//	invokeArgs = append(invokeArgs, "30")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "syscancel")
-		//	invokeArgs = append(invokeArgs, "D0001")
-		//	invokeArgs = append(invokeArgs, "670")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//
-		//	invokeArgs = []string{}
-		//	invokeArgs = append(invokeArgs, "syscancel")
-		//	invokeArgs = append(invokeArgs, "D0002")
-		//	invokeArgs = append(invokeArgs, "200")
-		//	invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
-		//}
-		time.Sleep(time.Millisecond * 200)
 	}
 
+	c := make(chan struct{})
+	<-c
 }
 
 func issueTx(owner accounts.Address, assetID uint32, amount *big.Int) {
@@ -266,7 +325,7 @@ func deployTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, path 
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
+	//fmt.Println("> deploy :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
 	sendTransaction(tx)
 
 	return a
@@ -296,7 +355,7 @@ func invokeTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, contr
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
+	//fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
 	sendTransaction(tx)
 }
 
