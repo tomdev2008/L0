@@ -549,6 +549,7 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	blk.balanceSet = NewKVRWSet()
 	blk.chainCodeSet = NewKVRWSet()
 	blk.txs = nil
+	blk.errTxs = nil
 	blk.transferTxs = nil
 }
 
