@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"github.com/bocheninc/L0/core/params"
 	"encoding/json"
-	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
 )
 
@@ -49,40 +48,17 @@ func NewJsWorker(conf *vm.Config) *JsWorker {
 }
 
 // VmJob handler main work
-func (worker *JsWorker) VmJob(data interface{}) interface{} {
+func (worker *JsWorker) VmJob(data interface{}) (interface{}, error) {
 	worker.isCanRedo = false
 	return worker.ExecJob(data)
 }
 
 // Exec worker
-func (worker *JsWorker) ExecJob(data interface{}) interface{} {
+func (worker *JsWorker) ExecJob(data interface{}) (interface{}, error) {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
 	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
-	if err != nil {
-		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
-	}
 
-	if workerProcWithCallback.Idx != 0 {
-		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
-		if !worker.isCanRedo {
-			vm.Txsync.Wait(workerProcWithCallback.Idx%vm.VMConf.BsWorkerCnt)
-		}
-	}
-
-	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
-		IsCanRedo: !worker.isCanRedo,
-		Err: err,
-		Result: result,
-	})
-
-	if err != nil && !worker.isCanRedo {
-		worker.isCanRedo = true
-		worker.ExecJob(data)
-	} else {
-		vm.Txsync.Notify((workerProcWithCallback.Idx+1)%vm.VMConf.BsWorkerCnt)
-	}
-
-	return result
+	return result, err
 }
 
 // Block until worker ready

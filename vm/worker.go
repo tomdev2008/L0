@@ -8,7 +8,7 @@ import (
 
 type VmWorker interface {
 	//called for job, adn returned synchronously
-	VmJob(interface{}) interface{}
+	VmJob(interface{}) (interface{}, error)
 
 	//wait for to execute the next job
 	VmReady() bool
@@ -30,8 +30,8 @@ type VmDefaultWorker struct {
 	job *func(interface{}) interface{}
 }
 
-func (worker *VmDefaultWorker) VmJob(data interface{}) interface{} {
-	return (*worker.job)(data)
+func (worker *VmDefaultWorker) VmJob(data interface{}) (interface{}, error) {
+	return (*worker.job)(data), nil
 }
 
 func (worker *VmDefaultWorker) VmReady() bool {

@@ -35,7 +35,6 @@ import (
 	//"sync"
 	"math/rand"
 	"github.com/bocheninc/L0/core/types"
-	"github.com/bocheninc/L0/core/ledger/state"
 )
 
 //var vmproc *vm.VMProc
@@ -61,49 +60,16 @@ func NewLuaWorker(conf *vm.Config) *LuaWorker {
 }
 
 // VmJob handler main work
-func (worker *LuaWorker) VmJob(data interface{}) interface{} {
+func (worker *LuaWorker) VmJob(data interface{}) (interface{}, error) {
 	worker.isCanRedo = false
 	return worker.ExecJob(data)
 }
 
 // Exec worker
-func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
+func (worker *LuaWorker) ExecJob(data interface{}) (interface{}, error) {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
-	//result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
-	//if err != nil {
-	//	log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
-	//		workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
-	//}
-
-	if workerProcWithCallback.Idx != 0 {
-		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
-		if !worker.isCanRedo {
-			vm.Txsync.Wait(workerProcWithCallback.Idx%vm.VMConf.BsWorkerCnt)
-		}
-	}
-
 	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
-	if err != nil {
-		log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
-			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
-	}
-
-	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
-		IsCanRedo: !worker.isCanRedo,
-		Err: err,
-		Result: result,
-	})
-
-	if err != nil && !worker.isCanRedo {
-		log.Errorf("tx redo, tx_hash: %+v, err: %+v",
-			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
-		worker.isCanRedo = true
-		worker.ExecJob(data)
-	} else {
-		vm.Txsync.Notify((workerProcWithCallback.Idx+1)%vm.VMConf.BsWorkerCnt)
-	}
-
-	return nil
+	return result, err
 }
 
 func (worker *LuaWorker) VmReady() bool {
