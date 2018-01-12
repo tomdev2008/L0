@@ -421,11 +421,6 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types
 	errTxs := blk.errTxs
 	txs := blk.txs
 	txs = append(txs, blk.transferTxs...)
-	// blk.assetSet = nil
-	// blk.balanceSet = nil
-	// blk.chainCodeSet = nil
-	// blk.txs = nil
-	// blk.transferTxs = nil
 	return writeBatchs, txs, errTxs, nil
 }
 

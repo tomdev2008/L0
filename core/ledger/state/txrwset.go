@@ -365,9 +365,9 @@ func (tx *TXRWSet) ApplyChanges() error {
 	log.Debugf("TXRWSet ApplyChanges txIndex: %d ", tx.TxIndex)
 	err := tx.block.merge(tx.chainCodeSet, tx.assetSet, tx.balanceSet, tx.currentTx, tx.transferTxs, tx.TxIndex)
 
-	tx.assetSet = NewKVRWSet()
-	tx.balanceSet = NewKVRWSet()
-	tx.chainCodeSet = NewKVRWSet()
-	tx.transferTxs = nil
+	// tx.assetSet = NewKVRWSet()
+	// tx.balanceSet = NewKVRWSet()
+	// tx.chainCodeSet = NewKVRWSet()
+	// tx.transferTxs = nil
 	return err
 }
