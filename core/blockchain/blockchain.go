@@ -297,12 +297,14 @@ func (bc *Blockchain) GenerateBlock(txs types.Transactions, createTime uint32) *
 	var (
 		// default value is empty hash
 		merkleRootHash crypto.Hash
+		stateRootHash  crypto.Hash
 	)
 
 	blk := types.NewBlock(bc.currentBlockHeader.Hash(),
 		createTime, bc.currentBlockHeader.Height+1,
 		uint32(100),
 		merkleRootHash,
+		stateRootHash,
 		txs,
 	)
 	return blk

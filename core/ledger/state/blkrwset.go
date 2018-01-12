@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
@@ -554,4 +555,12 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	blk.chainCodeSet = NewKVRWSet()
 	blk.txs = nil
 	blk.transferTxs = nil
+}
+
+func (blk *BLKRWSet) RootHash() crypto.Hash {
+	hashs := make([]crypto.Hash, 3)
+	hashs[0] = crypto.DoubleSha256(utils.Serialize(blk.chainCodeSet))
+	hashs[1] = crypto.DoubleSha256(utils.Serialize(blk.assetSet))
+	hashs[2] = crypto.DoubleSha256(utils.Serialize(blk.balanceSet))
+	return crypto.ComputeMerkleHash(hashs)[0]
 }
