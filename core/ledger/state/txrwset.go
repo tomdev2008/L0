@@ -74,7 +74,7 @@ func (tx *TXRWSet) GetChainCodeState(chaincodeAddr string, key string, committed
 		}
 	}
 	val, err := tx.block.GetChainCodeState(chaincodeAddr, key, committed)
-	if err == nil {
+	if val != nil {
 		tx.chainCodeSet.Reads[ckey] = &KVRead{
 			Value: val,
 		}
@@ -170,7 +170,7 @@ func (tx *TXRWSet) GetBalanceState(addr string, assetID uint32, committed bool) 
 		}
 	}
 	val, err := tx.block.GetBalanceState(addr, assetID, committed)
-	if err == nil {
+	if val != nil {
 		tx.chainCodeSet.Reads[ckey] = &KVRead{
 			Value: val.Bytes(),
 		}
@@ -275,7 +275,7 @@ func (tx *TXRWSet) GetAssetState(assetID uint32, committed bool) (*Asset, error)
 		}
 	}
 	val, err := tx.block.GetAssetState(assetID, committed)
-	if err == nil {
+	if val != nil {
 		tx.chainCodeSet.Reads[ckey] = &KVRead{
 			Value: utils.Serialize(val),
 		}
