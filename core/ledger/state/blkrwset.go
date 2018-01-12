@@ -483,13 +483,13 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 	}
 
 	blk.waitingRW.Lock()
-	blk.curTxIndex = txIndex
-	log.Debugf("BLKRWSet merge lock blockHeight:%d, txIndex:%d", blk.BlockIndex, txIndex)
+	blk.curTxIndex = txIndex + 1
+	log.Debugf("BLKRWSet merge lock blockHeight:%d, txIndex:%d", blk.BlockIndex, blk.curTxIndex)
 	if blk.waiting && blk.TxIndex == blk.curTxIndex {
 		blk.exit <- struct{}{}
 	}
 	blk.waitingRW.Unlock()
-	log.Debugf("BLKRWSet merge blockHeight:%d, txIndex:%d", blk.BlockIndex, txIndex)
+	log.Debugf("BLKRWSet merge blockHeight:%d, txIndex:%d", blk.BlockIndex, blk.curTxIndex)
 	return nil
 }
 
