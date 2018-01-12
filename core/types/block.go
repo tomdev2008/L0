@@ -49,16 +49,18 @@ type BlockHeader struct {
 	TimeStamp     uint32      `json:"timeStamp"`
 	Nonce         uint32      `json:"nonce" `
 	TxsMerkleHash crypto.Hash `json:"transactionsMerkleHash" `
+	StateHash     crypto.Hash `json:"stateHash"`
 	Height        uint32      `json:"height" `
 }
 
 // NewBlockHeader returns a blockheader
-func NewBlockHeader(prvHash crypto.Hash, timeStamp, height, nonce uint32, txsHash crypto.Hash) *BlockHeader {
+func NewBlockHeader(prvHash crypto.Hash, timeStamp, height, nonce uint32, txsHash crypto.Hash, stateHash crypto.Hash) *BlockHeader {
 	return &BlockHeader{
 		prvHash,
 		timeStamp,
 		nonce,
 		txsHash,
+		stateHash,
 		height,
 	}
 }
@@ -67,9 +69,10 @@ func NewBlockHeader(prvHash crypto.Hash, timeStamp, height, nonce uint32, txsHas
 func NewBlock(prvHash crypto.Hash,
 	timeStamp, height, nonce uint32,
 	txsHash crypto.Hash,
+	stateHash crypto.Hash,
 	Txs Transactions) *Block {
 	return &Block{
-		Header:       NewBlockHeader(prvHash, timeStamp, height, nonce, txsHash),
+		Header:       NewBlockHeader(prvHash, timeStamp, height, nonce, txsHash, stateHash),
 		Transactions: Txs,
 	}
 }

@@ -275,15 +275,18 @@ type CallBackResponse struct {
 }
 
 func (tx *TXRWSet) CallBack(res *CallBackResponse) error {
-	log.Debugf("TXRWSet CallBack %v", res)
+	log.Debugf("TXRWSet CallBack txIndex: %d %v", tx.TxIndex, res)
 	if res.Err != nil {
-		tx.assetSet = NewKVRWSet()
-		tx.balanceSet = NewKVRWSet()
-		tx.chainCodeSet = NewKVRWSet()
 		tx.transferTxs = nil
 		if res.IsCanRedo {
+			tx.assetSet = NewKVRWSet()
+			tx.balanceSet = NewKVRWSet()
+			tx.chainCodeSet = NewKVRWSet()
 			return res.Err
 		}
+		tx.assetSet = nil
+		tx.balanceSet = nil
+		tx.chainCodeSet = nil
 	}
 	return tx.ApplyChanges()
 }

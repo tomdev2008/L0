@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
 	"github.com/bocheninc/L0/components/log"
@@ -420,11 +421,6 @@ func (blk *BLKRWSet) ApplyChanges() ([]*db.WriteBatch, types.Transactions, types
 	errTxs := blk.errTxs
 	txs := blk.txs
 	txs = append(txs, blk.transferTxs...)
-	// blk.assetSet = nil
-	// blk.balanceSet = nil
-	// blk.chainCodeSet = nil
-	// blk.txs = nil
-	// blk.transferTxs = nil
 	return writeBatchs, txs, errTxs, nil
 }
 
@@ -436,50 +432,50 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 	blk.balanceRW.Lock()
 	defer blk.balanceRW.Unlock()
 
-	for ckey, rset := range chainCodeSet.Reads {
-		if trset, ok := blk.chainCodeSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				chaincodeAddr, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("chaincode readset conflict -- %s %s", chaincodeAddr, key)
-			}
-		}
-	}
-
-	for ckey, rset := range assetSet.Reads {
-		if trset, ok := blk.assetSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				_, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("asset readset conflict -- %s", key)
-			}
-		}
-	}
-
-	for ckey, rset := range balanceSet.Reads {
-		if trset, ok := blk.balanceSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				addr, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("balance readset conflict -- %s %s", addr, key)
-			}
-		}
-	}
-
-	for ckey, wset := range chainCodeSet.Writes {
-		blk.chainCodeSet.Writes[ckey] = wset
-	}
-
-	for ckey, wset := range assetSet.Writes {
-		blk.assetSet.Writes[ckey] = wset
-	}
-
-	for ckey, wset := range balanceSet.Writes {
-		blk.balanceSet.Writes[ckey] = wset
-	}
-
-	if chainCodeSet == nil && assetSet == nil && balanceSet.Reads == nil && ttxs == nil {
+	if chainCodeSet == nil && assetSet == nil && balanceSet == nil && ttxs == nil {
 		blk.errTxs = append(blk.errTxs, tx)
 	} else {
-		blk.txs = append(blk.txs, tx)
+		for ckey, rset := range chainCodeSet.Reads {
+			if trset, ok := blk.chainCodeSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					chaincodeAddr, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("chaincode readset conflict -- %s %s", chaincodeAddr, key)
+				}
+			}
+		}
+
+		for ckey, rset := range assetSet.Reads {
+			if trset, ok := blk.assetSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					_, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("asset readset conflict -- %s", key)
+				}
+			}
+		}
+
+		for ckey, rset := range balanceSet.Reads {
+			if trset, ok := blk.balanceSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					addr, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("balance readset conflict -- %s %s", addr, key)
+				}
+			}
+		}
+
+		for ckey, wset := range chainCodeSet.Writes {
+			blk.chainCodeSet.Writes[ckey] = wset
+		}
+
+		for ckey, wset := range assetSet.Writes {
+			blk.assetSet.Writes[ckey] = wset
+		}
+
+		for ckey, wset := range balanceSet.Writes {
+			blk.balanceSet.Writes[ckey] = wset
+		}
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
+
+		blk.txs = append(blk.txs, tx)
 	}
 
 	blk.waitingRW.Lock()
@@ -554,4 +550,12 @@ func (blk *BLKRWSet) SetBlock(blkIndex, txNum uint32) {
 	blk.chainCodeSet = NewKVRWSet()
 	blk.txs = nil
 	blk.transferTxs = nil
+}
+
+func (blk *BLKRWSet) RootHash() crypto.Hash {
+	hashs := make([]crypto.Hash, 3)
+	hashs[0] = crypto.DoubleSha256(utils.Serialize(blk.chainCodeSet))
+	hashs[1] = crypto.DoubleSha256(utils.Serialize(blk.assetSet))
+	hashs[2] = crypto.DoubleSha256(utils.Serialize(blk.balanceSet))
+	return crypto.ComputeMerkleHash(hashs)[0]
 }

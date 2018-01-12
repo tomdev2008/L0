@@ -168,7 +168,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	for idx, tx := range block.Transactions {
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
-			Idx: idx,
+			Idx:      idx,
 			Fn:       fn,
 		})
 	}
@@ -181,9 +181,9 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 
 	log.Debugf("appendBlock cnt: %+v, oktxs: %+v, errtxs: %+v ...........", len(block.Transactions), len(oktxs), len(errtxs))
 
-
 	block.Transactions = oktxs
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)
+	block.Header.StateHash = ledger.state.RootHash()
 	blkWriteBatches := ledger.block.AppendBlock(block)
 	writeBatches = append(writeBatches, blkWriteBatches...)
 
