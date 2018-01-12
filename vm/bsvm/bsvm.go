@@ -170,14 +170,24 @@ func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback)
 		log.Errorf("Transaction Exec fail, tx_hash: %+v, err: %s", wpwc.WorkProc.ContractData.Transaction.Hash(), err)
 	}
 
+	if wpwc.Idx != 0 {
+		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
+		if !worker.isCanRedo {
+			vm.Txsync.Wait(wpwc.Idx%vm.VMConf.BsWorkerCnt)
+		}
+	}
+
 	err = wpwc.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
 	})
 
+
 	if err != nil  && !worker.isCanRedo {
 		log.Errorf("tx redo, tx_hash: %+v, err: %+v", wpwc.WorkProc.ContractData.Transaction.Hash().String(), err)
 		worker.isCanRedo = true
 		worker.HandleCommonTransaction(wpwc)
+	} else {
+		vm.Txsync.Notify((wpwc.Idx+1)%vm.VMConf.BsWorkerCnt)
 	}
 }

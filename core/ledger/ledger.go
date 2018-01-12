@@ -168,6 +168,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
+			Idx: idx,
 			Fn:       fn,
 		})
 	}

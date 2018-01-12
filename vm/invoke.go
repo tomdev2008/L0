@@ -71,6 +71,7 @@ type WorkerProc struct {
 
 type WorkerProcWithCallback struct {
 	WorkProc *WorkerProc
+	Idx int
 	Fn func(interface{}) interface{}
 }
 

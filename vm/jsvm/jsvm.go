@@ -62,6 +62,13 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 		log.Errorf("execjob fail, result: %+v, err_msg: %+v", result, err.Error())
 	}
 
+	if workerProcWithCallback.Idx != 0 {
+		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
+		if !worker.isCanRedo {
+			vm.Txsync.Wait(workerProcWithCallback.Idx%vm.VMConf.BsWorkerCnt)
+		}
+	}
+
 	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
@@ -71,6 +78,8 @@ func (worker *JsWorker) ExecJob(data interface{}) interface{} {
 	if err != nil && !worker.isCanRedo {
 		worker.isCanRedo = true
 		worker.ExecJob(data)
+	} else {
+		vm.Txsync.Notify((workerProcWithCallback.Idx+1)%vm.VMConf.BsWorkerCnt)
 	}
 
 	return result

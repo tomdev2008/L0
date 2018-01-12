@@ -104,6 +104,8 @@ func CreateVM(numWorkers int, job func(interface{}) interface{}) *VirtualMachine
 		}
 		vm.workers[i] = &newWorker
 	}
+	//to manage workers
+	NewTxSync(numWorkers)
 
 	return vm
 }
@@ -123,6 +125,8 @@ func CreateCustomVM(workers []VmWorker) *VirtualMachine {
 		vm.workers[i] = &newWorker
 	}
 
+	//to manage workers
+	NewTxSync(len(workers))
 	return vm
 }
 
