@@ -136,7 +136,11 @@ func (worker *LuaWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 		return nil, err
 	}
 
-	worker.StoreContractCode()
+	err = worker.StoreContractCode()
+	if err != nil {
+		return false, err
+	}
+
 	ok, err := worker.execContract(wp.ContractData, "L0Init")
 	if err != nil {
 		return false, err
@@ -433,6 +437,7 @@ func (worker *LuaWorker) StoreContractCode() error {
 	if len(worker.workerProc.ContractData.ContractAddr) == 0 {
 		err = worker.workerProc.CCallPutState(params.GlobalContractKey, code.Bytes())
 	} else {
+		log.Debugf("threadID: %d, StoreContractCode, addr: %+v", worker.workerFlag, worker.workerProc.ContractData.ContractAddr)
 		err = worker.workerProc.CCallPutState(vm.ContractCodeKey, code.Bytes()) // add js contract code into state
 	}
 

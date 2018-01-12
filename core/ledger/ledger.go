@@ -176,7 +176,11 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	writeBatches, oktxs, errtxs, err := ledger.state.ApplyChanges()
 	if err != nil || len(errtxs) != 0 {
 		//TODO
-		log.Errorf("AppendBlock Err: %s, errtxs: %+v", err, len(errtxs))
+		log.Errorf("AppendBlock Err: %+v, errtxs: %+v", err, len(errtxs))
+	}
+
+	for _, w := range writeBatches {
+		log.Debugf("writeBatch: %#v, %#v", string(w.Key), string(w.Value))
 	}
 
 	log.Debugf("appendBlock cnt: %+v, oktxs: %+v, errtxs: %+v ...........", len(block.Transactions), len(oktxs), len(errtxs))

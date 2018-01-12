@@ -74,10 +74,10 @@ vm:
   execLimitMaxRunTime: 1000
 
   # contract script(lua source code) maximum size (byte)
-  execLimitMaxScriptSize: 40960
+  execLimitMaxScriptSize: 4096000
 
   # the max state value size (byte)
-  execLimitMaxStateValueSize: 5120
+  execLimitMaxStateValueSize: 5120000
 
   # the max state count in one contract
   execLimitMaxStateItemCount: 1000

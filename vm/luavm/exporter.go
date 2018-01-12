@@ -46,6 +46,7 @@ func exporter(workerProc *vm.WorkerProc) map[string]lua.LGFunction {
 		"GetBalance":         getBalanceFunc(workerProc),
 		"GetBalances":        getBalancesFunc(workerProc),
 		"Account":            accountFunc(workerProc),
+		"TxInfo":             txInfo(workerProc),
 		"Transfer":           transferFunc(workerProc),
 
 		"CurrentBlockHeight": currentBlockHeightFunc(workerProc),
@@ -319,6 +320,32 @@ func getBalancesFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 		return 1
 	}
 }
+
+func txInfo(workerProc *vm.WorkerProc) lua.LGFunction {
+	return func(l *lua.LState) int {
+		var addr, sender, recipient string
+		var amount, fee int64
+		if l.GetTop() == 1 {
+			addr = l.CheckString(1)
+		} else {
+			addr = workerProc.ContractData.ContractAddr
+		}
+
+		sender = workerProc.ContractData.Transaction.Sender().String()
+		amount = workerProc.ContractData.Transaction.Amount().Int64()
+		fee = workerProc.ContractData.Transaction.Fee().Int64()
+		recipient = workerProc.ContractData.Transaction.Recipient().String()
+		tb := l.NewTable()
+		tb.RawSetString("Sender", lua.LString(sender))
+		tb.RawSetString("Address", lua.LString(addr))
+		tb.RawSetString("Recipient", lua.LString(recipient))
+		tb.RawSetString("Amount", lua.LNumber(amount))
+		tb.RawSetString("Fee", lua.LNumber(fee))
+		l.Push(tb)
+		return 1
+	}
+}
+
 
 func accountFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 	return func(l *lua.LState) int {
