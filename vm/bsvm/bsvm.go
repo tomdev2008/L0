@@ -131,17 +131,17 @@ func (worker *BsWorker) GetInvokeType(wpwc *vm.WorkerProcWithCallback) (string, 
 	if len(code) != 0 && err == nil {
 		contractCode, err := vm.DoContractStateData(code)
 		if err != nil {
-			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+			return "", fmt.Errorf("cat't find contract code in db(1), err: %+v, contract_addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr)
 		}
 		err = json.Unmarshal(contractCode, cc)
 		if err != nil {
-			return "", fmt.Errorf("cat't find contract code in db, err: %+v", err)
+			return "", fmt.Errorf("cat't find contract code in db(2), err: %+v, contract_addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr)
 		}
 		wpwc.WorkProc.ContractData.ContractCode = string(cc.Code)
 		log.Debugf("contract type: %+v", cc.Type)
 		return cc.Type, nil
 	} else {
-		return "", errors.New("cat't find contract code in db")
+		return "", errors.New(fmt.Sprintf("can't find contract code in db,err: %+v, addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr))
 	}
 }
 
