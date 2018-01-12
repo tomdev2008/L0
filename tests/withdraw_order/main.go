@@ -29,6 +29,7 @@ func main() {
 	atomic := flag.Int("atomic", 0, "atomic tx")
 	withdraw := flag.Int("withdraw", 0, "withdraw contract")
 	order := flag.Int("order", 0, "order contract")
+	flag.Parse()
 	if *atomic == 0 && *withdraw == 0 && *order == 0 {
 		fmt.Println("Usage: ./withdraw_order -atomic=3 [-withdraw=3] [-order=3]")
 		return
