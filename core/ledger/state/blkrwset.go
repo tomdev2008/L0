@@ -432,50 +432,50 @@ func (blk *BLKRWSet) merge(chainCodeSet *KVRWSet, assetSet *KVRWSet, balanceSet 
 	blk.balanceRW.Lock()
 	defer blk.balanceRW.Unlock()
 
-	for ckey, rset := range chainCodeSet.Reads {
-		if trset, ok := blk.chainCodeSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				chaincodeAddr, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("chaincode readset conflict -- %s %s", chaincodeAddr, key)
-			}
-		}
-	}
-
-	for ckey, rset := range assetSet.Reads {
-		if trset, ok := blk.assetSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				_, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("asset readset conflict -- %s", key)
-			}
-		}
-	}
-
-	for ckey, rset := range balanceSet.Reads {
-		if trset, ok := blk.balanceSet.Reads[ckey]; ok {
-			if bytes.Compare(trset.Value, rset.Value) != 0 {
-				addr, key := DecodeCompositeKey(ckey)
-				return fmt.Errorf("balance readset conflict -- %s %s", addr, key)
-			}
-		}
-	}
-
-	for ckey, wset := range chainCodeSet.Writes {
-		blk.chainCodeSet.Writes[ckey] = wset
-	}
-
-	for ckey, wset := range assetSet.Writes {
-		blk.assetSet.Writes[ckey] = wset
-	}
-
-	for ckey, wset := range balanceSet.Writes {
-		blk.balanceSet.Writes[ckey] = wset
-	}
-
-	if chainCodeSet == nil && assetSet == nil && balanceSet.Reads == nil && ttxs == nil {
+	if chainCodeSet == nil && assetSet == nil && balanceSet == nil && ttxs == nil {
 		blk.errTxs = append(blk.errTxs, tx)
 	} else {
-		blk.txs = append(blk.txs, tx)
+		for ckey, rset := range chainCodeSet.Reads {
+			if trset, ok := blk.chainCodeSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					chaincodeAddr, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("chaincode readset conflict -- %s %s", chaincodeAddr, key)
+				}
+			}
+		}
+
+		for ckey, rset := range assetSet.Reads {
+			if trset, ok := blk.assetSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					_, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("asset readset conflict -- %s", key)
+				}
+			}
+		}
+
+		for ckey, rset := range balanceSet.Reads {
+			if trset, ok := blk.balanceSet.Reads[ckey]; ok {
+				if bytes.Compare(trset.Value, rset.Value) != 0 {
+					addr, key := DecodeCompositeKey(ckey)
+					return fmt.Errorf("balance readset conflict -- %s %s", addr, key)
+				}
+			}
+		}
+
+		for ckey, wset := range chainCodeSet.Writes {
+			blk.chainCodeSet.Writes[ckey] = wset
+		}
+
+		for ckey, wset := range assetSet.Writes {
+			blk.assetSet.Writes[ckey] = wset
+		}
+
+		for ckey, wset := range balanceSet.Writes {
+			blk.balanceSet.Writes[ckey] = wset
+		}
 		blk.transferTxs = append(blk.transferTxs, ttxs...)
+
+		blk.txs = append(blk.txs, tx)
 	}
 
 	blk.waitingRW.Lock()
