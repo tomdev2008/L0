@@ -52,7 +52,7 @@ func NewBsWorker(conf *vm.Config) *BsWorker {
 	return bsWorker
 }
 
-func (worker *BsWorker) ExecFetchInvokeType(workerProcWithCallback *vm.WorkerProcWithCallback) string {
+func (worker *BsWorker) FetchContractType(workerProcWithCallback *vm.WorkerProcWithCallback) string {
 	var err error
 	txType := "common"
 	callback := func() {
@@ -61,23 +61,22 @@ func (worker *BsWorker) ExecFetchInvokeType(workerProcWithCallback *vm.WorkerPro
 			Err: err,
 		})
 		if err != nil  && !worker.isCanRedo {
-			log.Errorf("ThreadId: %+v, tx redo, tx_hash: %+v, err: %+v, can Redo: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err, worker.isCanRedo)
+			log.Errorf("ThreadId: %+v, tx redo, tx_hash: %+v, tx_idx: %+v, err: %+v, can Redo: %+v",
+				worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err, worker.isCanRedo)
 			worker.isCanRedo = true
-			worker.ExecFetchInvokeType(workerProcWithCallback)
+			worker.FetchContractType(workerProcWithCallback)
 		}
 	}
 
-	if !worker.isCommonTransaction(workerProcWithCallback) {
-		if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
-			txType, err = worker.GetInvokeType(workerProcWithCallback)
-			if err != nil {
-				log.Errorf("ThreadId: %+v, can't execute contract, tx_hash: %s, err_msg: %+v, can Redo: %+v", worker.workerID,
-					workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err.Error(), worker.isCanRedo)
-				callback()
-			}
-		} else {
-			txType = worker.GetInitType(workerProcWithCallback)
+	if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
+		txType, err = worker.GetInvokeType(workerProcWithCallback)
+		if err != nil {
+			log.Errorf("ThreadId: %+v, can't execute contract, tx_hash: %s, tx_idx: %+v, err_msg: %+v, can Redo: %+v", worker.workerID,
+				workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err.Error(), worker.isCanRedo)
+			callback()
 		}
+	} else {
+		txType = worker.GetInitType(workerProcWithCallback)
 	}
 
 	return txType
@@ -85,13 +84,25 @@ func (worker *BsWorker) ExecFetchInvokeType(workerProcWithCallback *vm.WorkerPro
 
 func (worker *BsWorker) VmJob(data interface{}) interface{} {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
-	log.Debugf("worker thread id: %+v, start tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
-	defer log.Debugf("worker thread id: %+v, finish tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
+	log.Debugf("worker thread id: %+v, start tx: %+v, tx_idx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx)
+	defer log.Debugf("worker thread id: %+v, finish tx: %+v, tx_idx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx)
 	worker.isCanRedo = false
-	txType := worker.ExecFetchInvokeType(workerProcWithCallback)
-	if strings.Contains(txType, "common") {
+	if worker.isCommonTransaction(workerProcWithCallback) {
 		worker.ExecCommonTransaction(workerProcWithCallback)
-	} else if strings.Contains(txType, "lua"){
+	} else {
+		txType := worker.FetchContractType(workerProcWithCallback)
+		if strings.Contains(txType, "lua"){
+			worker.luaWorker.VmJob(workerProcWithCallback)
+		} else if strings.Contains(txType, "js") {
+			worker.jsWorker.VmJob(workerProcWithCallback)
+		} else {
+			log.Errorf("can't find tx type: %+v, %+v",
+				workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(),
+				workerProcWithCallback.WorkProc.ContractData.Transaction.GetType())
+		}
+	}
+	/*
+	strings.Contains(txType, "lua"){
 		worker.luaWorker.VmJob(workerProcWithCallback)
 	} else if strings.Contains(txType, "js") {
 		worker.jsWorker.VmJob(workerProcWithCallback)
@@ -102,7 +113,7 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 		//TODO
 		//callback(workerProcWithCallback)
 	}
-
+	*/
 	return nil
 }
 
@@ -131,17 +142,18 @@ func (worker *BsWorker) GetInvokeType(wpwc *vm.WorkerProcWithCallback) (string, 
 	if len(code) != 0 && err == nil {
 		contractCode, err := vm.DoContractStateData(code)
 		if err != nil {
-			return "", fmt.Errorf("cat't find contract code in db(1), err: %+v, contract_addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr)
+			return "", fmt.Errorf("cat't find contract code in db(1), err: %+v, contract_addr: %+v, len(code): %+v",
+				err, wpwc.WorkProc.ContractData.ContractAddr, len(code))
 		}
 		err = json.Unmarshal(contractCode, cc)
 		if err != nil {
-			return "", fmt.Errorf("cat't find contract code in db(2), err: %+v, contract_addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr)
+			return "", fmt.Errorf("cat't find contract code in db(2), err: %+v, contract_addr: %+v, len(code): %+v", err, wpwc.WorkProc.ContractData.ContractAddr, len(code))
 		}
 		wpwc.WorkProc.ContractData.ContractCode = string(cc.Code)
-		log.Debugf("contract type: %+v", cc.Type)
 		return cc.Type, nil
 	} else {
-		return "", errors.New(fmt.Sprintf("can't find contract code in db,err: %+v, addr: %+v", err, wpwc.WorkProc.ContractData.ContractAddr))
+		return "", errors.New(fmt.Sprintf("can't find contract code in db,err: %+v, addr: %+v, len(code): %+v",
+			err, wpwc.WorkProc.ContractData.ContractAddr, len(code)))
 	}
 }
 
@@ -165,16 +177,10 @@ func (worker *BsWorker) isCommonTransaction(wpwc *vm.WorkerProcWithCallback) boo
 }
 
 func (worker *BsWorker) ExecCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
-	worker.isCanRedo = false
 	worker.HandleCommonTransaction(wpwc)
 }
 
 func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback) {
-	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
-	if err != nil {
-		log.Errorf("Transaction Exec fail, tx_hash: %+v, err: %s", wpwc.WorkProc.ContractData.Transaction.Hash(), err)
-	}
-
 	if wpwc.Idx != 0 {
 		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
 		if !worker.isCanRedo {
@@ -182,11 +188,15 @@ func (worker *BsWorker) HandleCommonTransaction(wpwc *vm.WorkerProcWithCallback)
 		}
 	}
 
+	err := wpwc.WorkProc.L0Handler.Transfer(wpwc.WorkProc.ContractData.Transaction)
+	if err != nil {
+		log.Errorf("Transaction Exec fail, tx_hash: %+v, err: %s", wpwc.WorkProc.ContractData.Transaction.Hash(), err)
+	}
+
 	err = wpwc.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
 		IsCanRedo: !worker.isCanRedo,
 		Err: err,
 	})
-
 
 	if err != nil  && !worker.isCanRedo {
 		log.Errorf("tx redo, tx_hash: %+v, err: %+v", wpwc.WorkProc.ContractData.Transaction.Hash().String(), err)

@@ -30,7 +30,7 @@ func main() {
 			case tx := <-txChan:
 				fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 				Relay(NewMsg(0x14, tx.Serialize()))
-				time.Sleep(500 * time.Millisecond)
+				//time.Sleep(500 * time.Millisecond)
 			}
 		}
 	}()
@@ -62,7 +62,7 @@ func main() {
 			initArgs = append(initArgs, feeAddr.String())
 			contractAddr := deployTx(systemPriv, assetID, big.NewInt(0), "./withdraw.lua", initArgs)
 
-			//time.Sleep(10 * time.Second)
+			time.Sleep(10 * time.Second)
 
 			invokeArgs := []string{}
 			invokeArgs = append(invokeArgs, "launch")

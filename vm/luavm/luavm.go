@@ -69,17 +69,23 @@ func (worker *LuaWorker) VmJob(data interface{}) interface{} {
 // Exec worker
 func (worker *LuaWorker) ExecJob(data interface{}) interface{} {
 	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
-	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
-	if err != nil {
-		log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
-			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
-	}
+	//result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
+	//if err != nil {
+	//	log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
+	//		workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
+	//}
 
 	if workerProcWithCallback.Idx != 0 {
 		//log.Debugf("workerID: %+v, %+v, %+v", worker.workerID, " wait ", wpwc.Idx)
 		if !worker.isCanRedo {
 			vm.Txsync.Wait(workerProcWithCallback.Idx%vm.VMConf.BsWorkerCnt)
 		}
+	}
+
+	result, err := worker.requestHandle(workerProcWithCallback.WorkProc)
+	if err != nil {
+		log.Errorf("execjob fail, tx_hash: %+v, result: %+v, err_msg: %+v",
+			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), result, err.Error())
 	}
 
 	err = workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
