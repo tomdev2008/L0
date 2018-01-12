@@ -52,23 +52,18 @@ func NewBsWorker(conf *vm.Config) *BsWorker {
 	return bsWorker
 }
 
-
-func (worker *BsWorker) VmJob(data interface{}) interface{} {
-	txType := "common"
+func (worker *BsWorker) ExecFetchInvokeType(workerProcWithCallback *vm.WorkerProcWithCallback) string {
 	var err error
-	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
-	log.Debugf("worker thread id: %+v, start tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
-	defer log.Debugf("worker thread id: %+v, finish tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
-
+	txType := "common"
 	callback := func() {
 		err := workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
 			IsCanRedo: !worker.isCanRedo,
 			Err: err,
 		})
 		if err != nil  && !worker.isCanRedo {
-			log.Errorf("tx redo, tx_hash: %+v, err: %+v", workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err)
+			log.Errorf("ThreadId: %+v, tx redo, tx_hash: %+v, err: %+v, can Redo: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err, worker.isCanRedo)
 			worker.isCanRedo = true
-			worker.VmJob(data)
+			worker.ExecFetchInvokeType(workerProcWithCallback)
 		}
 	}
 
@@ -76,8 +71,8 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 		if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
 			txType, err = worker.GetInvokeType(workerProcWithCallback)
 			if err != nil {
-				log.Errorf("can't execute contract, tx_hash: %s, err_msg: %+v",
-					workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err.Error())
+				log.Errorf("ThreadId: %+v, can't execute contract, tx_hash: %s, err_msg: %+v, can Redo: %+v", worker.workerID,
+					workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), err.Error(), worker.isCanRedo)
 				callback()
 			}
 		} else {
@@ -85,6 +80,15 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 		}
 	}
 
+	return txType
+}
+
+func (worker *BsWorker) VmJob(data interface{}) interface{} {
+	workerProcWithCallback := data.(*vm.WorkerProcWithCallback)
+	log.Debugf("worker thread id: %+v, start tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
+	defer log.Debugf("worker thread id: %+v, finish tx: %+v", worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String())
+	worker.isCanRedo = false
+	txType := worker.ExecFetchInvokeType(workerProcWithCallback)
 	if strings.Contains(txType, "common") {
 		worker.ExecCommonTransaction(workerProcWithCallback)
 	} else if strings.Contains(txType, "lua"){
@@ -95,7 +99,8 @@ func (worker *BsWorker) VmJob(data interface{}) interface{} {
 		log.Errorf("can't find tx type: %+v, %+v",
 			workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(),
 				workerProcWithCallback.WorkProc.ContractData.Transaction.GetType())
-		callback()
+		//TODO
+		//callback(workerProcWithCallback)
 	}
 
 	return nil

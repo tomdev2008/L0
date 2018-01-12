@@ -30,6 +30,7 @@ func main() {
 			case tx := <-txChan:
 				fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 				Relay(NewMsg(0x14, tx.Serialize()))
+				time.Sleep(time.Second)
 			}
 		}
 	}()

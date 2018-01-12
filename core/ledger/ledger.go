@@ -164,8 +164,8 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 	}
 
 	//log.Debugf("appendBlock cnt: %+v ...........", len(block.Transactions))
+	vm.NewTxSync(vm.VMConf.BsWorkerCnt)
 	for idx, tx := range block.Transactions {
-
 		ledger.vmEnv["bs"].SendWorkCleanAsync(&vm.WorkerProcWithCallback{
 			WorkProc: wokerData(tx, idx),
 			Idx: idx,

@@ -126,7 +126,6 @@ func CreateCustomVM(workers []VmWorker) *VirtualMachine {
 	}
 
 	//to manage workers
-	NewTxSync(len(workers))
 	return vm
 }
 

@@ -62,7 +62,7 @@ func sendTx() {
 		case tx := <-txChan:
 			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 			Relay(NewMsg(0x14, tx.Serialize()))
-			time.Sleep(10 * time.Second)
+			//time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -70,11 +70,11 @@ func sendTx() {
 func generateContract() {
 	ct := &Contract{}
 	txChan <- ct.init()
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	txChan <- ct.createInitTransaction()
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	for {
-		time.Sleep(5 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 		txChan <- ct.createInvokeTransaction()
 	}
 }
