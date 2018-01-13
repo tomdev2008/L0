@@ -39,6 +39,6 @@ func VMConfig(logFile, logLevel string) *vm.Config {
 	config.ExecLimitMaxStateKeyLength = getInt("vm.execLimitMaxStateKeyLength", config.ExecLimitMaxStateKeyLength)
 	config.LuaVMExeFilePath = getString("vm.luaVMExeFilePath", config.LuaVMExeFilePath)
 	config.JSVMExeFilePath = getString("vm.jsVMExeFilePath", config.JSVMExeFilePath)
-
+	config.BsWorkerCnt = getInt("vm.BsWorkerCnt", config.BsWorkerCnt)
 	return config
 }

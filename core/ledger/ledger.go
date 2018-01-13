@@ -179,7 +179,7 @@ func (ledger *Ledger) AppendBlock(block *types.Block, flag bool) error {
 		log.Errorf("AppendBlock Err: %+v, errtxs: %+v", err, len(errtxs))
 	}
 
-	log.Debugf("appendBlock cnt: %+v, oktxs: %+v, errtxs: %+v ...........", len(block.Transactions), len(oktxs), len(errtxs))
+	log.Warnf("appendBlock cnt: %+v, oktxs: %+v, errtxs: %+v ...........", len(block.Transactions), len(oktxs), len(errtxs))
 
 	block.Transactions = oktxs
 	block.Header.TxsMerkleHash = merkleRootHash(block.Transactions)

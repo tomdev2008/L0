@@ -12,6 +12,7 @@ import (
 	"time"
 	//"net/http"
 	"strconv"
+	"github.com/bocheninc/L0/core/accounts"
 )
 
 var (
@@ -20,8 +21,19 @@ var (
 	defaultURL = "http://127.0.0.1:8881"
 )
 
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 type Contract struct {
 	dirPath string
+}
+
+
+func RandStringBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return b
 }
 
 func (ct *Contract) createInvokeTransaction() *types.Transaction {
@@ -31,8 +43,13 @@ func (ct *Contract) createInvokeTransaction() *types.Transaction {
 	return ct.invokeContract("invoke", "./l0coin.lua", []string{}, []string{"send", uid, strconv.Itoa(amount), uid})
 }
 
-func (ct *Contract) createInitTransaction() *types.Transaction {
+func (ct *Contract) createLuaInitTransaction() *types.Transaction {
 	return  ct.initContract("lua", "./l0coin.lua", []string{"test"}, []string{})
+}
+
+func (ct *Contract) createJsInitTransaction() *types.Transaction {
+	addr := accounts.NewAddress(RandStringBytes(20))
+	return  ct.initContract("js", "./l0coin.js", []string{addr.String(), "100", "1"}, []string{})
 }
 
 func (ct *Contract) invokeContract(typ, contractPath string, initArgs, invokeArgs []string) *types.Transaction {

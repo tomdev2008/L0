@@ -87,6 +87,7 @@ vm:
 
   luaVMExeFilePath: "bin/luavm"
   jsVMExeFilePath: "bin/jsvm"
+  BsWorkerCnt: 3
 
 ca:
   enabled: true
