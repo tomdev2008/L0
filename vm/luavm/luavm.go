@@ -191,10 +191,11 @@ func (worker *LuaWorker) txTransfer() error {
 }
 
 func (worker *LuaWorker) resetProc(wp *vm.WorkerProc) {
+	worker.workerProc = wp
 	worker.workerProc.StateChangeQueue = vm.NewStateQueue()
 	worker.workerProc.TransferQueue = vm.NewTransferQueue()
-	worker.workerProc.ContractData = wp.ContractData
-	worker.workerProc.L0Handler = wp.L0Handler
+	//worker.workerProc.ContractData = wp.ContractData
+	//worker.workerProc.L0Handler = wp.L0Handler
 	log.Debugf("worker_lua resetProc: %p, wp: %p, wpar: %#v, tx: %#v", worker.workerProc, wp, wp.ContractData.ContractParams, wp.ContractData.Transaction)
 	//startTime := time.Now()
 	worker.L = worker.newState()

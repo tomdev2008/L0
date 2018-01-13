@@ -132,6 +132,7 @@ func (worker *BsWorker) VmJob(data interface{}) (interface{}, error) {
 	worker.isCanRedo = false
 	err := worker.ExecJob(workerProcWithCallback)
 
+
 	if err != nil && !worker.isCanRedo {
 		log.Errorf("====> worker thread id: %+v, to tx redo, tx_hash: %+v, tx_idx: %+v, cause: %+v",
 			worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err)
