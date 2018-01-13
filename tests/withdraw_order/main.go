@@ -38,7 +38,11 @@ func main() {
 		fmt.Println("Usage: ./withdraw_order -atomic=3 [-withdraw=3] [-order=3]")
 		return
 	}
+	fmt.Println("withdraw_order -atomic=", *atomic, "-withdraw=", *withdraw, "-order=", *order)
+
 	TCPSend([]string{"127.0.0.1:20166"})
+
+	pid := "P" + strconv.FormatInt(int64(os.Getpid()), 10)
 
 	go func() {
 		for {
@@ -97,7 +101,7 @@ func main() {
 
 		//并发执行提现合约
 		for i := 0; i < *withdraw; i++ {
-			go func(systemPriv *crypto.PrivateKey) {
+			go func(systemPriv *crypto.PrivateKey, index int) {
 				assetID := uint32(time.Now().UnixNano())
 				userPriv, _ := crypto.GenerateKey()
 				userAddr := accounts.PublicKeyToAddress(*userPriv.Public())
@@ -108,11 +112,12 @@ func main() {
 				n := uint64(0)
 				for {
 					n++
-					withdrawID1 := "D" + strconv.FormatUint(n, 10)
+					tid := "I" + strconv.FormatInt(int64(index), 10)
+					withdrawID1 := pid + tid + "D" + strconv.FormatUint(n, 10)
 					n++
-					withdrawID2 := "D" + strconv.FormatUint(n, 10)
+					withdrawID2 := pid + tid + "D" + strconv.FormatUint(n, 10)
 					n++
-					withdrawID3 := "D" + strconv.FormatUint(n, 10)
+					withdrawID3 := pid + tid + "D" + strconv.FormatUint(n, 10)
 					invokeArgs := []string{}
 					invokeArgs = append(invokeArgs, "launch")
 					invokeArgs = append(invokeArgs, withdrawID1)
@@ -146,7 +151,7 @@ func main() {
 
 					//break
 				}
-			}(systemPriv)
+			}(systemPriv, i)
 		}
 	}
 
@@ -179,7 +184,7 @@ func main() {
 
 		//并发
 		for i := 0; i < *order; i++ {
-			go func(systemPriv *crypto.PrivateKey) {
+			go func(systemPriv *crypto.PrivateKey, index int) {
 				assetID1 := uint32(time.Now().UnixNano())
 				userPriv1, _ := crypto.GenerateKey()
 				userAddr1 := accounts.PublicKeyToAddress(*userPriv1.Public())
@@ -193,13 +198,13 @@ func main() {
 
 				n := uint64(0)
 				for {
-
+					tid := "I" + strconv.FormatInt(int64(index), 10)
 					n++
-					orderID1 := "D" + strconv.FormatUint(n, 10)
+					orderID1 := pid + tid + "D" + strconv.FormatUint(n, 10)
 					n++
-					orderID2 := "D" + strconv.FormatUint(n, 10)
+					orderID2 := pid + tid + "D" + strconv.FormatUint(n, 10)
 					n++
-					matchID1 := "M" + strconv.FormatUint(n, 10)
+					matchID1 := pid + tid + "M" + strconv.FormatUint(n, 10)
 
 					invokeArgs := []string{}
 					invokeArgs = append(invokeArgs, "launch")
@@ -255,7 +260,7 @@ func main() {
 					invokeArgs = append(invokeArgs, "5")
 					invokeTx(systemPriv, uint32(0), big.NewInt(0), contractAddr, invokeArgs)
 				}
-			}(systemPriv)
+			}(systemPriv, i)
 		}
 	}
 
