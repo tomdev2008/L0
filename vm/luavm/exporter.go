@@ -377,7 +377,7 @@ func accountFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 
 func transferFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 	return func(l *lua.LState) int {
-		if l.GetTop() != 3 {
+		if l.GetTop() != 4 {
 			l.RaiseError("param illegality when invoke Transfer")
 			return 1
 		}
