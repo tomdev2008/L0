@@ -212,7 +212,7 @@ function cancel(args)
         print("ERR :" .. CName ..  " cancel --- balance not enough", amount, tamount)
         return false
     end
-    L0.Transfer(receiver, assetID,tamount)
+    L0.Transfer(receiver, assetID,tamount, 0)
     local b = amount - tamount
     if (b == 0) then
         L0.DelState(orderID)
@@ -345,8 +345,8 @@ function matched(args)
     local assetID_sell = tonumber(tb_sell[2])
     local amount_sell = tonumber(tb_sell[3])
     -- to do balance check
-    L0.Transfer(receiver_sell, assetID_buy, amount_buy)
-    L0.Transfer(receiver_buy, assetID_sell, amount_sell)
+    L0.Transfer(receiver_sell, assetID_buy, amount_buy, 0)
+    L0.Transfer(receiver_buy, assetID_sell, amount_sell, 0)
     L0.DelState(matchID.."_buy")
     L0.DelState(matchID.."_sell")
     --]]--
@@ -413,7 +413,7 @@ function feecharge(args)
         L0.PutState(orderID, receiver.."&"..assetID.."&"..b)
     end
     local fee = L0.GetState("account_fee")
-    L0.Transfer(fee, assetID, feeamount)
+    L0.Transfer(fee, assetID, feeamount, 0)
     print("INFO:" .. CName ..  " feecharge ---", matchID, orderID, amount, feeamount, b)
     --]]--
     return true
@@ -471,7 +471,7 @@ function syscancel(args)
         print("ERR :" .. CName ..  " syscancel --- balance not enough", amount, tamount)
         return false
     end
-    L0.Transfer(receiver, assetID,tamount)
+    L0.Transfer(receiver, assetID,tamount, 0)
 
     local b = amount - tamount
     if (b == 0) then

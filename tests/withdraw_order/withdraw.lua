@@ -176,7 +176,7 @@ function cancel(args)
         return false
     end
     -- to do balance check
-    L0.Transfer(receiver, assetID, amount)
+    L0.Transfer(receiver, assetID, amount, 0)
     L0.DelState(withdrawID)
     print("INFO:" .. CName ..  " cancel ---", withdrawID, receiver, assetID, amount)
     --]]--
@@ -234,8 +234,8 @@ function succeed(args)
     end
     -- to do balance check
     local fee = L0.GetState("account_fee")
-    L0.Transfer(fee, assetID, feeAmount)
-    L0.Transfer(system, assetID, amount-feeAmount)
+    L0.Transfer(fee, assetID, feeAmount, 0)
+    L0.Transfer(system, assetID, amount-feeAmount, 0)
     L0.DelState(withdrawID)
     print("INFO:" .. CName ..  " succeed ---", withdrawID, fee, assetID, feeAmount)
     print("INFO:" .. CName ..  " succeed ---", withdrawID, system, assetID, amount-feeAmount)
@@ -282,7 +282,7 @@ function fail(args)
     local assetID = tonumber(tb[2])
     local amount = tonumber(tb[3])
     -- to do balance check
-    L0.Transfer(receiver, assetID, amount)
+    L0.Transfer(receiver, assetID, amount,0)
     L0.DelState(withdrawID)
     --]]--
     print("INFO:" .. CName ..  " fail ---", withdrawID, receiver, assetID, amount)
