@@ -32,9 +32,15 @@ import (
 	"github.com/bocheninc/L0/core/ledger/state"
 )
 
+type WorkerInfo struct {
+	allTxsCnt int
+	redoTxsCnt int
+}
+
 type BsWorker struct {
 	isCanRedo bool
 	workerID  int
+	workerInfo *WorkerInfo
 	jsWorker *jsvm.JsWorker
 	luaWorker *luavm.LuaWorker
 	//can't use lock
@@ -43,6 +49,7 @@ type BsWorker struct {
 
 func NewBsWorker(conf *vm.Config, idx int) *BsWorker {
 	bsWorker := &BsWorker{
+		workerInfo: &WorkerInfo{},
 		jsWorker: jsvm.NewJsWorker(conf),
 		luaWorker:luavm.NewLuaWorker(conf),
 		workerID: idx,
@@ -53,26 +60,25 @@ func NewBsWorker(conf *vm.Config, idx int) *BsWorker {
 
 func (worker *BsWorker) FetchContractType(workerProcWithCallback *vm.WorkerProcWithCallback) string {
 	var err error
-	txType := "common"
-	callback := func() {
-		err := workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
-			IsCanRedo: !worker.isCanRedo,
-			Err: err,
-		})
-		if err != nil  && !worker.isCanRedo {
-			log.Errorf("ThreadId: %+v, tx redo, tx_hash: %+v, tx_idx: %+v, err: %+v, can Redo: %+v",
-				worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err, worker.isCanRedo)
-			worker.isCanRedo = true
-			worker.FetchContractType(workerProcWithCallback)
-		}
-	}
+	txType := "unknown"
+	//callback := func() {
+	//	err := workerProcWithCallback.WorkProc.L0Handler.CallBack(&state.CallBackResponse{
+	//		IsCanRedo: !worker.isCanRedo,
+	//		Err: err,
+	//	})
+	//	if err != nil  && !worker.isCanRedo {
+	//		log.Errorf("ThreadId: %+v, tx redo, tx_hash: %+v, tx_idx: %+v, err: %+v, can Redo: %+v",
+	//			worker.workerID, workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err, worker.isCanRedo)
+	//		worker.isCanRedo = true
+	//		worker.FetchContractType(workerProcWithCallback)
+	//	}
+	//}
 
 	if workerProcWithCallback.WorkProc.ContractData.Transaction.GetType() == types.TypeContractInvoke {
 		txType, err = worker.GetInvokeType(workerProcWithCallback)
 		if err != nil {
 			log.Errorf("ThreadId: %+v, can't execute contract, tx_hash: %s, tx_idx: %+v, err_msg: %+v, can Redo: %+v", worker.workerID,
 				workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(), workerProcWithCallback.Idx, err.Error(), worker.isCanRedo)
-			callback()
 		}
 	} else {
 		txType = worker.GetInitType(workerProcWithCallback)
@@ -96,8 +102,10 @@ func (worker *BsWorker) ExecJob(workerProcWithCallback *vm.WorkerProcWithCallbac
 			log.Errorf("can't find tx type: %+v, %+v",
 				workerProcWithCallback.WorkProc.ContractData.Transaction.Hash().String(),
 				workerProcWithCallback.WorkProc.ContractData.Transaction.GetType())
+			err = errors.New("find contract type fail ...")
 		}
 	}
+
 
 	if workerProcWithCallback.Idx != 0 {
 		if !worker.isCanRedo {

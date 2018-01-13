@@ -19,6 +19,11 @@ end
 -- 设置系统账户地址 & 手续费账户地址
 function L0Init(args)
     -- info
+    local txInfo = L0.TxInfo()
+    local sender = txInfo["Sender"]
+    print(">>> init INFO:", txInfo["Hash"], sender)
+
+
     local str = ""
     for k, v in pairs(args) do 
         str = str .. v .. ","
@@ -45,11 +50,14 @@ end
 -- 用户账户发起提现 launch & 用户账户撤销提现 cancel & 系统账户提现成功 succeed & 系统账户提现失败 failed
 function L0Invoke(func, args)
     -- info
+    print('========================================')
     local str = ""
     for k, v in pairs(args) do 
         str = str .. v .. ","
     end
-    print("INFO:" .. CName ..  " L0Invoke(" .. func .. "," .. string.sub(str, 0, -2) .. ")")
+    local txInfo = L0.TxInfo()
+    local sender = txInfo["Sender"]
+    print(">>> INFO:" .. CName ..  " L0Invoke(" .. func .. "," .. string.sub(str, 0, -2) .. ")", txInfo["Hash"], sender)
 
     -- execute
     if("launch" == func) then

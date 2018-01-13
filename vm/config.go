@@ -60,7 +60,7 @@ func DefaultConfig() *Config {
 		ExecLimitMaxStateKeyLength: 256,
 		LuaVMExeFilePath:           "bin/luavm",
 		JSVMExeFilePath:            "bin/jsvm",
-		BsWorkerCnt:                3,
+		BsWorkerCnt:                1,
 	}
 }
 

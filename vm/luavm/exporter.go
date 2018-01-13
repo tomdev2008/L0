@@ -28,6 +28,7 @@ import (
 	luajson "github.com/bocheninc/L0/vm/luavm/json"
 	"github.com/yuin/gopher-lua"
 	//"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/L0/components/log"
 )
 
 func exporter(workerProc *vm.WorkerProc) map[string]lua.LGFunction {
@@ -333,6 +334,7 @@ func txInfo(workerProc *vm.WorkerProc) lua.LGFunction {
 		assetID := workerProc.ContractData.Transaction.AssetID()
 		hash := workerProc.ContractData.Transaction.Hash().String()
 		tb := l.NewTable()
+		log.Debugf("worker_lua tx_hash: %+v, tx_sender: %+v, wp: %p, cpar: %#v, tx: %#v", workerProc.ContractData.Transaction.Hash(), sender, workerProc, workerProc.ContractData.ContractParams, workerProc.ContractData.Transaction)
 		tb.RawSetString("Sender", lua.LString(sender))
 		tb.RawSetString("Recipient", lua.LString(recipient))
 		tb.RawSetString("AssetID", lua.LNumber(assetID))

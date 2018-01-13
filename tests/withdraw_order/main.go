@@ -46,6 +46,7 @@ func main() {
 			case tx := <-txChan:
 				fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 				Relay(NewMsg(0x14, tx.Serialize()))
+				//time.Sleep(10 * time.Second)
 			}
 		}
 	}()
@@ -142,6 +143,8 @@ func main() {
 					invokeArgs = append(invokeArgs, "fail")
 					invokeArgs = append(invokeArgs, withdrawID3)
 					invokeTx(systemPriv, assetID, big.NewInt(0), contractAddr, invokeArgs)
+
+					//break
 				}
 			}(systemPriv)
 		}
@@ -366,7 +369,7 @@ func invokeTx(privkey *crypto.PrivateKey, assetID uint32, amount *big.Int, contr
 	tx.Payload = utils.Serialize(contractSpec)
 	sig, _ := privkey.Sign(tx.SignHash().Bytes())
 	tx.WithSignature(sig)
-	//fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash())
+	fmt.Println("> invoke :", accounts.NewAddress(contractSpec.ContractAddr).String(), contractSpec.ContractParams, tx.Hash(), tx.Sender())
 	sendTransaction(tx)
 }
 

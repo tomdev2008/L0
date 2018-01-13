@@ -89,6 +89,7 @@ func (worker *LuaWorker) VmTerminate() {
 
 func (worker *LuaWorker)requestHandle(wp *vm.WorkerProc) (interface{}, error) {
 	txType := wp.ContractData.Transaction.GetType()
+	log.Debugf("worker txType: %+v, txHash: %+v", txType, wp.ContractData.Transaction.Hash().String())
 	if txType == types.TypeLuaContractInit {
 		return worker.InitContract(wp)
 	} else if txType == types.TypeContractInvoke {
@@ -190,18 +191,21 @@ func (worker *LuaWorker) txTransfer() error {
 }
 
 func (worker *LuaWorker) resetProc(wp *vm.WorkerProc) {
-	worker.workerProc = wp
+	worker.workerProc.StateChangeQueue = vm.NewStateQueue()
+	worker.workerProc.TransferQueue = vm.NewTransferQueue()
+	worker.workerProc.ContractData = wp.ContractData
+	worker.workerProc.L0Handler = wp.L0Handler
+	log.Debugf("worker_lua resetProc: %p, wp: %p, wpar: %#v, tx: %#v", worker.workerProc, wp, wp.ContractData.ContractParams, wp.ContractData.Transaction)
 	//startTime := time.Now()
-	//loader := func(L *lua.LState) int {
-	//	mod := L.SetFuncs(L.NewTable(), exporter(worker.workerProc)) // register functions to the table
-	//	L.Push(mod)
-	//	return 1
-	//}
-	////execTime := time.Now().Sub(startTime)
-	////log.Debugf("exec time: %s", execTime)
-	//worker.L.PreloadModule("L0", loader)
-	wp.StateChangeQueue = vm.NewStateQueue()
-	wp.TransferQueue = vm.NewTransferQueue()
+	worker.L = worker.newState()
+	loader := func(L *lua.LState) int {
+		mod := L.SetFuncs(L.NewTable(), exporter(worker.workerProc)) // register functions to the table
+		L.Push(mod)
+		return 1
+	}
+	//execTime := time.Now().Sub(startTime)
+	//log.Debugf("exec time: %s", execTime)
+	worker.L.PreloadModule("L0", loader)
 }
 
 

@@ -100,7 +100,11 @@ func (worker *JsWorker) InitContract(wp *vm.WorkerProc) (interface{}, error) {
 	}
 
 	worker.resetProc(wp)
-	worker.StoreContractCode()
+	err = worker.StoreContractCode()
+	if err != nil {
+		return nil, err
+	}
+
 	ok, err := worker.execContract(wp.ContractData, "L0Init")
 	if !ok.(bool) || err != nil {
 		return ok, err
