@@ -24,30 +24,30 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/bocheninc/L0/vm"
 	luajson "github.com/bocheninc/L0/vm/luavm/json"
 	"github.com/yuin/gopher-lua"
-	"github.com/bocheninc/L0/vm"
 	//"github.com/bocheninc/L0/components/log"
 )
 
 func exporter(workerProc *vm.WorkerProc) map[string]lua.LGFunction {
 	return map[string]lua.LGFunction{
-		"GetGlobalState":     getGlobalStateFunc(workerProc),
-		"PutGlobalState":     setGlobalStateFunc(workerProc),
-		"DelGlobalState":     delGlobalStateFunc(workerProc),
-		"GetState":           getStateFunc(workerProc),
-		"PutState":           putStateFunc(workerProc),
-		"DelState":           delStateFunc(workerProc),
+		"GetGlobalState": getGlobalStateFunc(workerProc),
+		"PutGlobalState": setGlobalStateFunc(workerProc),
+		"DelGlobalState": delGlobalStateFunc(workerProc),
+		"GetState":       getStateFunc(workerProc),
+		"PutState":       putStateFunc(workerProc),
+		"DelState":       delStateFunc(workerProc),
 
-		"GetByPrefix":        getByPrefixFunc(workerProc),
-		"GetByRange":         getByRangeFunc(workerProc),
-		"ComplexQuery":       complexQueryFunc(workerProc),
+		"GetByPrefix":  getByPrefixFunc(workerProc),
+		"GetByRange":   getByRangeFunc(workerProc),
+		"ComplexQuery": complexQueryFunc(workerProc),
 
-		"GetBalance":         getBalanceFunc(workerProc),
-		"GetBalances":        getBalancesFunc(workerProc),
-		"Account":            accountFunc(workerProc),
-		"TxInfo":             txInfo(workerProc),
-		"Transfer":           transferFunc(workerProc),
+		"GetBalance":  getBalanceFunc(workerProc),
+		"GetBalances": getBalancesFunc(workerProc),
+		"Account":     accountFunc(workerProc),
+		"TxInfo":      txInfo(workerProc),
+		"Transfer":    transferFunc(workerProc),
 
 		"CurrentBlockHeight": currentBlockHeightFunc(workerProc),
 		"sleep":              sleepFunc(workerProc),
@@ -323,31 +323,26 @@ func getBalancesFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 
 func txInfo(workerProc *vm.WorkerProc) lua.LGFunction {
 	return func(l *lua.LState) int {
-		var addr, sender, recipient string
+		var sender, recipient string
 		var amount, fee int64
-		if l.GetTop() == 1 {
-			addr = l.CheckString(1)
-		} else {
-			addr = workerProc.ContractData.ContractAddr
-		}
 
 		sender = workerProc.ContractData.Transaction.Sender().String()
 		amount = workerProc.ContractData.Transaction.Amount().Int64()
 		fee = workerProc.ContractData.Transaction.Fee().Int64()
 		recipient = workerProc.ContractData.Transaction.Recipient().String()
 		assetID := workerProc.ContractData.Transaction.AssetID()
+		hash := workerProc.ContractData.Transaction.Hash().String()
 		tb := l.NewTable()
 		tb.RawSetString("Sender", lua.LString(sender))
-		tb.RawSetString("Address", lua.LString(addr))
 		tb.RawSetString("Recipient", lua.LString(recipient))
+		tb.RawSetString("AssetID", lua.LNumber(assetID))
 		tb.RawSetString("Amount", lua.LNumber(amount))
 		tb.RawSetString("Fee", lua.LNumber(fee))
-		tb.RawSetString("AssetID", lua.LNumber(assetID))
+		tb.RawSetString("Hash", lua.LString(hash))
 		l.Push(tb)
 		return 1
 	}
 }
-
 
 func accountFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 	return func(l *lua.LState) int {
@@ -425,4 +420,3 @@ func currentBlockHeightFunc(workerProc *vm.WorkerProc) lua.LGFunction {
 		return 1
 	}
 }
-

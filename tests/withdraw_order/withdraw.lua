@@ -38,7 +38,6 @@ function L0Init(args)
     L0.PutState("account_system", args[0])
     print("INFO:" .. CName ..  " L0Init --- fee account " .. args[1])
     L0.PutState("account_fee", args[1])
-    print("finish init ....")
     return true
 end
 
@@ -46,7 +45,6 @@ end
 -- 用户账户发起提现 launch & 用户账户撤销提现 cancel & 系统账户提现成功 succeed & 系统账户提现失败 failed
 function L0Invoke(func, args)
     -- info
-    print(" into invoke ....")
     local str = ""
     for k, v in pairs(args) do 
         str = str .. v .. ","
@@ -211,7 +209,7 @@ function succeed(args)
     local amount = txInfo["Amount"]
     if (system ~= sender) 
     then
-        print("ERR :" .. CName ..  " succeed --- wrong sender", sender, system)
+        print("ERR :" .. CName ..  " succeed --- wrong sender", sender, system, txInfo["Hash"])
         return false
     end
     if (type(amount) ~= "number" or amount > 0)
@@ -264,7 +262,7 @@ function fail(args)
     local amount = txInfo["Amount"]
     if (system ~= sender) 
     then
-        print("ERR :" .. CName ..  " fail --- wrong sender", sender, system)
+        print("ERR :" .. CName ..  " fail --- wrong sender", sender, system, txInfo["Hash"])
         return false
     end
     if (type(amount) ~= "number" or amount > 0)
