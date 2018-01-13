@@ -335,12 +335,14 @@ func txInfo(workerProc *vm.WorkerProc) lua.LGFunction {
 		amount = workerProc.ContractData.Transaction.Amount().Int64()
 		fee = workerProc.ContractData.Transaction.Fee().Int64()
 		recipient = workerProc.ContractData.Transaction.Recipient().String()
+		assetID := workerProc.ContractData.Transaction.AssetID()
 		tb := l.NewTable()
 		tb.RawSetString("Sender", lua.LString(sender))
 		tb.RawSetString("Address", lua.LString(addr))
 		tb.RawSetString("Recipient", lua.LString(recipient))
 		tb.RawSetString("Amount", lua.LNumber(amount))
 		tb.RawSetString("Fee", lua.LNumber(fee))
+		tb.RawSetString("AssetID", lua.LNumber(assetID))
 		l.Push(tb)
 		return 1
 	}

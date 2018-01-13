@@ -53,6 +53,7 @@ func exporter(ottoVM *otto.Otto, workerProc *vm.WorkerProc) (*otto.Object, error
 	exporterFuncs.Set("GetBalance", getBalanceFunc(workerProc))
 	exporterFuncs.Set("GetBalances", getBalancesFunc(workerProc))
 	exporterFuncs.Set("Account", accountFunc(workerProc))
+	exporterFuncs.Set("TxInfo", txInfoFunc(workerProc))
 	exporterFuncs.Set("Transfer", transferFunc(workerProc))
 
 	exporterFuncs.Set("CurrentBlockHeight", currentBlockHeightFunc(workerProc))
@@ -354,6 +355,59 @@ func getBalancesFunc(workerProc *vm.WorkerProc) interface{} {
 	}
 }
 
+func txInfoFunc(workerProc *vm.WorkerProc) interface{} {
+	return func(fc otto.FunctionCall) otto.Value {
+		var addr, sender, recipient string
+		var amount, fee int64
+		var err error
+		if len(fc.ArgumentList) == 1 {
+			addr, err = fc.Argument(0).ToString()
+		} else {
+			addr = workerProc.ContractData.ContractAddr
+		}
+
+		sender = workerProc.ContractData.Transaction.Sender().String()
+		recipient = workerProc.ContractData.Transaction.Recipient().String()
+
+		amount = workerProc.ContractData.Transaction.Amount().Int64()
+		amountValue, err := fc.Otto.ToValue(amount)
+		if err != nil {
+			log.Error("accountFunc -> call amount ToLValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
+		}
+
+		fee = workerProc.ContractData.Transaction.Fee().Int64()
+		feeValue, err := fc.Otto.ToValue(fee)
+		if err != nil {
+			log.Error("accountFunc -> call amount ToLValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
+		}
+
+		assetID := workerProc.ContractData.Transaction.Fee().Int64()
+		assetIDValue, err := fc.Otto.ToValue(assetID)
+		if err != nil {
+			log.Error("accountFunc -> call amount ToLValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "call call amount ToLValue error:"+err.Error())
+		}
+
+		mp := make(map[string]interface{}, 3)
+		mp["Address"] = addr
+		mp["Sender"] = sender
+		mp["Recipient"] = recipient
+		mp["Amount"] = amountValue
+		mp["Fee"] = feeValue
+		mp["AssetID"] = assetIDValue
+
+		val, err := fc.Otto.ToValue(mp)
+		if err != nil {
+			log.Error("accountFunc -> otto ToValue error", err)
+			return fc.Otto.MakeCustomError("accountFunc", "otto ToValue error:"+err.Error())
+		}
+		return val
+	}
+}
+
+
 func accountFunc(workerProc *vm.WorkerProc) interface{} {
 	return func(fc otto.FunctionCall) otto.Value {
 		var addr, sender, recipient string
@@ -405,7 +459,7 @@ func accountFunc(workerProc *vm.WorkerProc) interface{} {
 
 func transferFunc(workerProc *vm.WorkerProc) interface{} {
 	return func(fc otto.FunctionCall) otto.Value {
-		if len(fc.ArgumentList) != 3 {
+		if len(fc.ArgumentList) != 4 {
 			log.Error("transferFunc -> param illegality when invoke Transfer")
 			return fc.Otto.MakeCustomError("transferFunc", "param illegality when invoke Transfer")
 		}
