@@ -20,13 +20,15 @@ package vm
 
 import (
 	"encoding/hex"
-	"github.com/bocheninc/L0/core/types"
+	"errors"
+	"fmt"
 	"math/big"
-	"github.com/bocheninc/L0/core/ledger/state"
+
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/log"
-	"errors"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/L0/core/ledger/state"
+	"github.com/bocheninc/L0/core/types"
 )
 
 var (
@@ -37,7 +39,6 @@ type ContractCode struct {
 	Code []byte
 	Type string
 }
-
 
 type ContractData struct {
 	ContractCode   string
@@ -68,11 +69,10 @@ type WorkerProc struct {
 	TransferQueue    *transferQueue
 }
 
-
 type WorkerProcWithCallback struct {
 	WorkProc *WorkerProc
-	Idx int
-	Fn func(interface{}) interface{}
+	Idx      int
+	Fn       func(interface{}) interface{}
 }
 
 func (p *WorkerProc) CCallGetGlobalState(key string) ([]byte, error) {
@@ -93,7 +93,7 @@ func (p *WorkerProc) CCallSetGlobalState(key string, value []byte) error {
 		return err
 	}
 
-	if  _, err := p.ccall("SetGlobalState", key, value); err != nil {
+	if _, err := p.ccall("SetGlobalState", key, value); err != nil {
 		return err
 	}
 
@@ -191,7 +191,6 @@ func (p *WorkerProc) CCallGetBalance(addr string, assetID uint32) (*big.Int, err
 	return result.(*big.Int), err
 }
 
-
 func (p *WorkerProc) CCallGetBalances(addr string) (*state.Balance, error) {
 	if err := CheckAddr(addr); err != nil {
 		return nil, err
@@ -223,14 +222,14 @@ func (p *WorkerProc) CCallTransfer(recipientAddr string, id, amount int64, fee i
 	if v, ok := p.TransferQueue.balancesMap[contractAddr]; ok { // get contract balances from cache
 		contractBalances = v
 	} else { // get contract balances from parent proc
-		result, err := p.ccall("GetBalances", contractAddr)
-		if err != nil {
-			return errors.New("get balances error")
+		result, err := p.ccall("GetBalance", contractAddr, uint32(id))
+		if err != nil || result == nil {
+			return fmt.Errorf("get balance error -- %s", err)
 		}
-		contractBalances = result.(*state.Balance)
+		contractBalances.Amounts[uint32(id)] = result.(*big.Int)
 	}
 
-	if contractBalances.Amounts[uint32(id)].Int64() < amount {
+	if b, ok := contractBalances.Amounts[uint32(id)]; !ok || b.Int64() < amount {
 		return errors.New("balances not enough")
 	}
 
@@ -238,11 +237,11 @@ func (p *WorkerProc) CCallTransfer(recipientAddr string, id, amount int64, fee i
 	if v, ok := p.TransferQueue.balancesMap[recipientAddr]; ok { // get recipient balances from cache
 		recipientBalances = v
 	} else { // get recipient balances from parent proc
-		result, err := p.ccall("GetBalances", recipientAddr)
-		if err != nil {
-			return errors.New("get balances error")
+		result, err := p.ccall("GetBalance", recipientAddr, uint32(id))
+		if err != nil || result == nil {
+			return errors.New("get balance error")
 		}
-		recipientBalances = result.(*state.Balance)
+		recipientBalances.Amounts[uint32(id)] = result.(*big.Int)
 	}
 
 	contractBalances.Amounts[uint32(id)].Sub(contractBalances.Amounts[uint32(id)], big.NewInt(amount))
@@ -365,6 +364,14 @@ func (p *WorkerProc) ccall(funcName string, params ...interface{}) (interface{},
 		limitKey := params[1].(string)
 
 		return p.L0Handler.GetByRange(startKey, limitKey)
+	case "GetBalance":
+		if !p.checkParamsCnt(2, params...) {
+			return nil, ErrNoValidParamsCnt
+		}
+
+		addr := params[0].(string)
+		assetID := params[1].(uint32)
+		return p.L0Handler.GetBalance(addr, assetID)
 
 	case "GetBalances":
 		if !p.checkParamsCnt(1, params...) {
@@ -396,7 +403,7 @@ func (p *WorkerProc) ccall(funcName string, params ...interface{}) (interface{},
 	return false, errors.New("no method match:" + funcName)
 }
 
-func (p *WorkerProc)checkParamsCnt( wanted int, params ...interface{}) bool {
+func (p *WorkerProc) checkParamsCnt(wanted int, params ...interface{}) bool {
 	if len(params) != wanted {
 		log.Errorf("invalid param count, wanted: %+v, actual: %+v", wanted, len(params))
 		return false
