@@ -19,6 +19,45 @@ type Browse struct {
 	tempList  *list.List
 }
 
+//TheLastBlock for browse
+type TheLastBlock struct {
+	Hash      string `json:"hash"`
+	Height    uint32 `json:"height"`
+	MsgnetNum uint32 `json:"msgnetNum"`
+	NodeID    string `json:"nodeID"`
+	ServerIP  string `json:"serverIP"`
+	Status    string `json:"status"`
+	TimeStamp uint32 `json:"timeStamp"`
+}
+
+//TheRangeBlocks get blocks by range
+type TheRangeBlocks struct {
+	Blocks []*TheRangeBlock `json:"blocks"`
+}
+type TheRangeBlock struct {
+	Height         uint32 `json:"height"`
+	TimeStamp      uint32 `json:"timeStamp"`
+	TransactionNum uint32 `json:"transactionNum"`
+}
+
+//BlockInfo get block info by height or hash
+type BlockInfo struct {
+	Hash           string    `json:"hash"`
+	Height         uint32    `json:"height"`
+	Size           int       `json:"size"`
+	TimeStamp      int32     `json:"timeStamp"`
+	TransactionNum uint32    `json:"transactionNum"`
+	TxHashList     []*TxHash `json:"txHashList"`
+}
+
+type TyHashList struct {
+}
+type TxHash struct {
+	Hash      string `json:"hash"`
+	Type      uint32 `json:"type"`
+	TimeStamp uint32 `json:"simeStamp"`
+}
+
 //NewBrowse support rpc for Browse browse
 func NewBrowse(pm pmHandler) *Browse {
 	b := &Browse{
@@ -83,16 +122,22 @@ func (l *Browse) GetLog(args []int, reply *interface{}) error {
 	var (
 		result []interface{}
 	)
-	start, end, err := l.checkArgs(args)
+	start, len, err := l.checkArgs(args)
 	if err != nil {
 		return err
 	}
-	if err = func(line, number int) error {
-
-		return nil
-	}(start, end); err != nil {
-		return err
-	}
+	func(start, len int) {
+		if start == 0 {
+			l.copyLog()
+		}
+		var n int
+		for e := l.tempList.Front(); e != nil; e = e.Next() {
+			if n > start && n < (n+len) {
+				result = append(result, e.Value)
+			}
+			n++
+		}
+	}(start, len)
 	*reply = result
 	return nil
 }
@@ -108,20 +153,79 @@ func (l *Browse) GetConfig(key string, reply *[]byte) error {
 }
 
 //GetTheLastBlockInfo get the last block info  config for browse
-func (l *Browse) GetTheLastBlockInfo() error {
+func (l *Browse) GetTheLastBlockInfo(ignore string, reply *TheLastBlock) error {
+	hash, err := l.ledger.GetLastBlockHash()
+	if err != nil {
+		return err
+	}
+	block, err := l.ledger.GetBlockByHash(hash.Bytes())
+	if err != nil {
+		return err
+	}
+	*reply = TheLastBlock{
+		Hash:      hash.String(),
+		Height:    block.Height,
+		MsgnetNum: 1,
+		NodeID:    string(l.netServer.GetLocalPeer().ID),
+		ServerIP:  l.netServer.GetLocalPeer().Address,
+		Status:    "运行中",
+		TimeStamp: block.TimeStamp,
+	}
 	return nil
 }
 
 //GetBlockByRange get blocks for browse
-func (l *Browse) GetBlockByRange() error {
-	return nil
+func (l *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
+	var max = 10
+	blocks := &TheRangeBlocks{}
+	theLastHeight, err := l.ledger.Height()
+	if err != nil {
+		return err
+	}
 
+	f := func(start, len uint32) error {
+		for start + 1; start <= (start + len); start++ {
+			block, err := l.ledger.GetBlockByNumber(start)
+			if err != nil {
+				return err
+			}
+			txHashList, err := l.ledger.GetTransactionHashList(block.Height)
+			if err != nil {
+				return err
+			}
+			blocks.Blocks = append(blocks.Blocks, &TheRangeBlock{
+				Height:         block.Height,
+				TimeStamp:      block.TimeStamp,
+				TransactionNum: len(txHashList),
+			})
+		}
+		return nil
+	}
+
+	if rangeNum == -1 {
+		if theLastHeight > max {
+			err = f(theLastHeight-max, theLastHeight)
+		} else {
+			err = f(0, theLastHeight)
+		}
+	} else if rangeNum <= int(theLastHeight) && rangeNum >= 0 {
+		if rangeNum < (max / 2) {
+			err = f(0, max)
+		} else {
+			err = f(rangeNum-5, rangeNum+5)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	*reply = *blocks
+	return nil
 }
 
 //GetBlockByHash get block by hash for browse
-func (l *Browse) GetBlockByHash() error {
-	return nil
+func (l *Browse) GetBlockByHash(hash string, reply *interface{}) error {
 
+	return nil
 }
 
 //GetBlockByHeight get block by height for browse
