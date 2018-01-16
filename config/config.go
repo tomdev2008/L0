@@ -21,15 +21,16 @@ package config
 import (
 	"path/filepath"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/merge"
 	"github.com/bocheninc/L0/core/p2p"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/rpc"
 	"github.com/bocheninc/L0/vm"
+	"github.com/bocheninc/base/log"
 	"github.com/spf13/viper"
 )
 
@@ -55,6 +56,10 @@ var (
 
 		LogLevel: "debug",
 		LogFile:  defaultLogFilename,
+		LogFormatter: &logrus.TextFormatter{
+			TimestampFormat: "2006-01-02 15:04:05.000",
+			FullTimestamp:   true,
+		},
 	}
 
 	privkey *crypto.PrivateKey
@@ -81,8 +86,9 @@ type Config struct {
 	MergeConfig *merge.Config
 
 	// log
-	LogLevel string
-	LogFile  string
+	LogLevel     string
+	LogFile      string
+	LogFormatter logrus.Formatter
 
 	// db
 	DbConfig    *db.Config
@@ -200,7 +206,7 @@ func (cfg *Config) readParamConfig() {
 
 func (cfg *Config) readLogConfig() {
 	var (
-		logLevel, logFile string
+		logLevel, logFile, logFormatter string
 	)
 	if logLevel = viper.GetString("log.level"); logLevel != "" {
 		cfg.LogLevel = logLevel
@@ -208,4 +214,13 @@ func (cfg *Config) readLogConfig() {
 	if logFile = filepath.Join(cfg.LogDir, defaultLogFilename); logFile != "" {
 		cfg.LogFile = logFile
 	}
+
+	if logFormatter = viper.GetString("log.formatter"); logFormatter != "" {
+		if logFormatter == "json" {
+			cfg.LogFormatter = &logrus.JSONFormatter{
+				TimestampFormat: "2006-01-02 15:04:05.000",
+			}
+		}
+	}
+
 }

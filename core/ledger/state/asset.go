@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
+	"github.com/bocheninc/base/log"
 )
 
 //Asset Attributes

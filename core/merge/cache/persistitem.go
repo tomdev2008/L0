@@ -20,7 +20,7 @@ package cache
 
 import (
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 )
 
 //PersistItem

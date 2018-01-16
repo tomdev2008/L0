@@ -26,10 +26,10 @@ import (
 	"errors"
 
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
 // request, response type

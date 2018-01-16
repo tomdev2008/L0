@@ -31,7 +31,6 @@ import (
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/config"
 	"github.com/bocheninc/L0/core/accounts/keystore"
 	"github.com/bocheninc/L0/core/blockchain"
@@ -43,6 +42,7 @@ import (
 	"github.com/bocheninc/L0/core/p2p"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/node"
+	"github.com/bocheninc/base/log"
 )
 
 // Lcnd represents the blockchain l0
@@ -159,4 +159,5 @@ func startPProf(cpuFile, memFile string) {
 func (l *Lcnd) initLog() {
 	log.New(l.Config.LogFile)
 	log.SetLevel(l.Config.LogLevel)
+	log.SetFormatter(l.Config.LogFormatter)
 }

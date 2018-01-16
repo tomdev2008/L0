@@ -22,9 +22,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
 	"github.com/bocheninc/L0/vm/jsvm"
+	"github.com/bocheninc/base/log"
 )
 
 func main() {

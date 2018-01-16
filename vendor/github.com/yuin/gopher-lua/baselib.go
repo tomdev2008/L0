@@ -2,12 +2,13 @@ package lua
 
 import (
 	"fmt"
-	"github.com/bocheninc/L0/components/log"
 	"io"
 	"os"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/bocheninc/base/log"
 )
 
 /* basic functions {{{ */
@@ -27,27 +28,27 @@ var baseFuncs = map[string]LGFunction{
 	"assert":         baseAssert,
 	"collectgarbage": baseCollectGarbage,
 	//"dofile":         baseDoFile, // modify by ohnoohyesohmygod
-	"error":          baseError,
-	"getfenv":        baseGetFEnv,
-	"getmetatable":   baseGetMetatable,
+	"error":        baseError,
+	"getfenv":      baseGetFEnv,
+	"getmetatable": baseGetMetatable,
 	//"load":           baseLoad, // modify by ohnoohyesohmygod
 	//"loadfile":       baseLoadFile, // modify by ohnoohyesohmygod
 	//"loadstring":     baseLoadString, // modify by ohnoohyesohmygod
-	"next":           baseNext,
-	"pcall":          basePCall,
-	"print":          basePrint,
-	"rawequal":       baseRawEqual,
-	"rawget":         baseRawGet,
-	"rawset":         baseRawSet,
-	"select":         baseSelect,
-	"_printregs":     base_PrintRegs,
-	"setfenv":        baseSetFEnv,
-	"setmetatable":   baseSetMetatable,
-	"tonumber":       baseToNumber,
-	"tostring":       baseToString,
-	"type":           baseType,
-	"unpack":         baseUnpack,
-	"xpcall":         baseXPCall,
+	"next":         baseNext,
+	"pcall":        basePCall,
+	"print":        basePrint,
+	"rawequal":     baseRawEqual,
+	"rawget":       baseRawGet,
+	"rawset":       baseRawSet,
+	"select":       baseSelect,
+	"_printregs":   base_PrintRegs,
+	"setfenv":      baseSetFEnv,
+	"setmetatable": baseSetMetatable,
+	"tonumber":     baseToNumber,
+	"tostring":     baseToString,
+	"type":         baseType,
+	"unpack":       baseUnpack,
+	"xpcall":       baseXPCall,
 	// loadlib
 	"module":  loModule,
 	"require": loRequire,
@@ -546,7 +547,7 @@ func loRequire(L *LState) int {
 			messages = append(messages, string(retv))
 		}
 	}
-	loopbreak:
+loopbreak:
 	L.SetField(loaded, name, loopdetection)
 	L.Push(modasfunc)
 	L.Push(LString(name))

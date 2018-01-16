@@ -22,7 +22,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 	"github.com/bocheninc/base/rpc"
 )
 
@@ -49,31 +49,28 @@ func (c *HttpConn) Read(p []byte) (n int, err error)  { return c.in.Read(p) }
 func (c *HttpConn) Write(d []byte) (n int, err error) { return c.out.Write(d) }
 func (c *HttpConn) Close() error                      { return nil }
 
-func NewServer(pmHandler pmHandler) *rpc.Server {
-
+func NewServer(pmHandler pmHandler, cfg *Config) *rpc.Server {
+	jrpcCfg = &Config{}
+	jrpcCfg = cfg
 	server := rpc.NewServer()
-
 	server.Register(NewAccount(pmHandler))
 	server.Register(NewTransaction(pmHandler))
 	server.Register(NewNet(pmHandler))
 	server.Register(NewLedger(pmHandler))
-	server.Register(NewMonitoring())
-
+	server.Register(NewBrowse(pmHandler))
 	return server
 }
 
 // StartServer with Test instance as a service
-func StartServer(server *rpc.Server, cfg *Config) {
-	jrpcCfg = &Config{}
-	jrpcCfg = cfg
-	if cfg.Enabled == false {
+func StartServer(server *rpc.Server) {
+	if jrpcCfg.Enabled == false {
 		return
 	}
 	var (
 		listener net.Listener
 		err      error
 	)
-	if listener, err = net.Listen("tcp", ":"+cfg.Port); err != nil {
+	if listener, err = net.Listen("tcp", ":"+jrpcCfg.Port); err != nil {
 		log.Errorf("TestServer error %+v", err)
 	}
 	rpc.NewHTTPServer(server, []string{"*"}).Serve(listener)

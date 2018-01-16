@@ -40,6 +40,9 @@ type Entry struct {
 	// Message passed to Debug, Info, Warn, Error, Fatal or Panic
 	Message string
 
+	// Function Name of Caller
+	FuncName string
+
 	// When formatter is called in entry.log(), an Buffer may be set to entry
 	Buffer *bytes.Buffer
 }

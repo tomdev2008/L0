@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/base/log"
 
 	"github.com/tecbot/gorocksdb"
 )

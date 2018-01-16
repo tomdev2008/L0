@@ -21,11 +21,11 @@ package merge
 import (
 	"fmt"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/blockchain"
 	"github.com/bocheninc/L0/core/ledger"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
+	"github.com/bocheninc/base/log"
 )
 
 // Event merge event

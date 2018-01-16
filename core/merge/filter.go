@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	cache "github.com/bocheninc/L0/core/merge/cache"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
 //DefaultDurationCnt default timeout

@@ -36,7 +36,6 @@ import (
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/plugins"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
@@ -48,6 +47,7 @@ import (
 	"github.com/bocheninc/L0/core/notify"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 	"gopkg.in/mgo.v2/bson"
 )
 

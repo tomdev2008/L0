@@ -30,10 +30,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
 type ContractCode struct {

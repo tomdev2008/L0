@@ -22,11 +22,11 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/blockchain"
 	cache "github.com/bocheninc/L0/core/merge/cache"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
+	"github.com/bocheninc/base/log"
 )
 
 // PeerTx for where the transaction should be delivered

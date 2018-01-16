@@ -19,8 +19,8 @@
 package msgnet
 
 import (
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/base/log"
 	msgnet "github.com/bocheninc/msg-net/peer"
 )
 

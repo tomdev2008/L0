@@ -27,6 +27,7 @@ func JrpcConfig(logFilePath, cfgFilePath string) *rpc.Config {
 	config := rpc.NewDefaultConfig()
 	config.Enabled = viper.GetBool("jrpc.enabled")
 	config.Port = getString("jrpc.port", config.Port)
+	config.Logcache = getInt("jrpc.logcache", config.Logcache)
 	config.LogFilePath = logFilePath
 	config.ConfigFilePath = cfgFilePath
 	return config

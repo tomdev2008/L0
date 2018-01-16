@@ -23,9 +23,9 @@ import (
 	"io"
 
 	"github.com/bocheninc/L0/components/crypto"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/params"
+	"github.com/bocheninc/base/log"
 )
 
 var (

@@ -25,10 +25,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
 //MINQUORUM  Define min quorum

@@ -24,7 +24,7 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 )
 
 //IElement Interface for element of LinkedList

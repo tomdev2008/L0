@@ -29,7 +29,6 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts/keystore"
 	"github.com/bocheninc/L0/core/blockchain"
@@ -42,6 +41,7 @@ import (
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
 	jrpc "github.com/bocheninc/L0/rpc"
+	"github.com/bocheninc/base/log"
 	"github.com/bocheninc/base/rpc"
 	"github.com/willf/bloom"
 )
@@ -63,8 +63,6 @@ type ProtocolManager struct {
 	filter *bloom.BloomFilter
 	jobs   chan *job
 
-	//jrpc confg
-	jrpcConfig *jrpc.Config
 	jrpcServer *rpc.Server
 }
 
@@ -86,7 +84,6 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 		msgCh:      make(chan *p2p.Msg, 100),
 		Server:     p2p.NewServer(db, netConfig),
 		filter:     bloom.NewWithEstimates(filterN, falsePositive),
-		jrpcConfig: jrpcConfig,
 	}
 	manager.Server.Protocols = append(manager.Server.Protocols, p2p.Protocol{
 		Name:    params.ProtocolName,
@@ -99,7 +96,7 @@ func NewProtocolManager(db *db.BlockchainDB, netConfig *p2p.Config,
 	})
 	manager.msgnet = msgnet.NewMsgnet(manager.peerAddress(), netConfig.RouteAddress, manager.handleMsgnetMessage, logDir)
 	manager.merger = merge.NewHelper(ledger, blockchain, manager, mergeConfig)
-	manager.jrpcServer = jrpc.NewServer(manager)
+	manager.jrpcServer = jrpc.NewServer(manager, jrpcConfig)
 	if params.MaxOccurs > 1 {
 		manager.jobs = make(chan *job, 100)
 		startJobs(params.MaxOccurs, manager.jobs)
@@ -113,7 +110,7 @@ func (pm *ProtocolManager) Start() {
 	pm.Server.Start()
 	pm.merger.Start()
 
-	go jrpc.StartServer(pm.jrpcServer, pm.jrpcConfig)
+	go jrpc.StartServer(pm.jrpcServer)
 	go pm.consensusReadLoop()
 	go pm.broadcastLoop()
 	go func() {

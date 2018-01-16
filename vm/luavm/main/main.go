@@ -24,9 +24,9 @@ import (
 
 	"os"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
 	"github.com/bocheninc/L0/vm/luavm"
+	"github.com/bocheninc/base/log"
 )
 
 func main() {

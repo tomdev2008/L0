@@ -25,12 +25,14 @@ type Config struct {
 	Port           string
 	LogFilePath    string
 	ConfigFilePath string
+	Logcache       int
 }
 
 func NewDefaultConfig() *Config {
 	config := &Config{
-		Enabled: true,
-		Port:    "8000",
+		Enabled:  true,
+		Port:     "8000",
+		Logcache: 2000,
 	}
 	return config
 }

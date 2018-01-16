@@ -23,7 +23,7 @@ import (
 
 	"strings"
 
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 )
 
 // TCPServer represents a tcp server

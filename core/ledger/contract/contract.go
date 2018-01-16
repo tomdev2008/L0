@@ -30,13 +30,13 @@ import (
 
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/ledger/state"
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/vm"
+	"github.com/bocheninc/base/log"
 )
 
 const (

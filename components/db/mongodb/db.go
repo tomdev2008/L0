@@ -26,7 +26,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )

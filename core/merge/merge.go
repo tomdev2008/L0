@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/accounts"
 	"github.com/bocheninc/L0/core/coordinate"
 	"github.com/bocheninc/L0/core/ledger"
@@ -33,6 +32,7 @@ import (
 	"github.com/bocheninc/L0/core/params"
 	"github.com/bocheninc/L0/core/types"
 	"github.com/bocheninc/L0/msgnet"
+	"github.com/bocheninc/base/log"
 )
 
 // SEPARATOR separates fromChain from toChain

@@ -25,8 +25,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/base/log"
 )
 
 // VMProc the vm process struct

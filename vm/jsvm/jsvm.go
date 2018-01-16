@@ -23,8 +23,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/vm"
+	"github.com/bocheninc/base/log"
 	"github.com/robertkrimen/otto"
 )
 

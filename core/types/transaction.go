@@ -81,11 +81,11 @@ const (
 	TypeDistribut                     // 下发交易 4
 	TypeIssue                         // 发行交易 5
 	TypeIssueUpdate                   // 发行更新 6
-	TypeJSContractInit                // js contract_Init 7
-	TypeLuaContractInit               // lua contract_Init 8
-	TypeContractInvoke                // contract_Invoke 9
-	TypeContractQuery                 // contract_Query 10
-	TypeSecurity                      // security 11
+	TypeJSContractInit                // js 合约init 7
+	TypeLuaContractInit               // lua 合约init 8
+	TypeContractInvoke                // 合约 invoke 9
+	TypeContractQuery                 // 合约 query 10
+	TypeSecurity                      // 安全合约 11
 )
 
 // NewTransaction creates an new transaction with the parameters

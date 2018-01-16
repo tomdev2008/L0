@@ -29,8 +29,8 @@ import (
 
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/components/utils"
+	"github.com/bocheninc/base/log"
 )
 
 // Config is the p2p network configuration

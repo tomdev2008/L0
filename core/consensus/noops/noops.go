@@ -24,9 +24,9 @@ import (
 
 	"encoding/json"
 
-	"github.com/bocheninc/L0/components/log"
 	"github.com/bocheninc/L0/core/consensus"
 	"github.com/bocheninc/L0/core/types"
+	"github.com/bocheninc/base/log"
 )
 
 // NewNoops Create Noops

@@ -22,7 +22,7 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 	"github.com/robertkrimen/otto"
 )
 

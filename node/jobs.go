@@ -1,7 +1,7 @@
 package node
 
 import (
-	"github.com/bocheninc/L0/components/log"
+	"github.com/bocheninc/base/log"
 )
 
 type job struct {

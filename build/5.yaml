@@ -8,6 +8,7 @@ net:
 
 log:
   level: "debug"
+  formatter: "text"
 
 jrpc:
   enabled: true
