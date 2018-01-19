@@ -20,6 +20,7 @@ package block_storage
 
 import (
 	"errors"
+
 	"github.com/bocheninc/L0/components/crypto"
 	"github.com/bocheninc/L0/components/db"
 	"github.com/bocheninc/L0/components/db/mongodb"
@@ -33,21 +34,23 @@ const (
 
 // Blockchain represents block
 type Blockchain struct {
-	dbHandler               *db.BlockchainDB
-	txPrefix                []byte
-	blockColumnFamily       string
-	transactionColumnFamily string
-	indexColumnFamily       string
+	dbHandler                     *db.BlockchainDB
+	txPrefix                      []byte
+	blockColumnFamily             string
+	transactionColumnFamily       string
+	transactionHeightColumnFamily string
+	indexColumnFamily             string
 }
 
 // NewBlockchain initialization
 func NewBlockchain(db *db.BlockchainDB) *Blockchain {
 	return &Blockchain{
-		dbHandler:               db,
-		txPrefix:                []byte("tx_"),
-		blockColumnFamily:       "block",
-		transactionColumnFamily: "transaction",
-		indexColumnFamily:       "index",
+		dbHandler:                     db,
+		txPrefix:                      []byte("tx_"),
+		blockColumnFamily:             "block",
+		transactionColumnFamily:       "transaction",
+		transactionHeightColumnFamily: "transactionHeight",
+		indexColumnFamily:             "index",
 	}
 }
 
@@ -148,6 +151,18 @@ func (blockchain *Blockchain) GetTransactionByTxHash(txHash []byte) (*types.Tran
 	return tx, nil
 }
 
+func (blockchain *Blockchain) GetBlockHeightByTxHash(txHash []byte) (uint32, error) {
+	heightBytes, err := blockchain.dbHandler.Get(blockchain.transactionHeightColumnFamily, txHash)
+	if err != nil {
+		return 0, err
+	}
+
+	if len(heightBytes) == 0 {
+		return 0, errors.New("not found block height by txHash")
+	}
+	return utils.BytesToUint32(heightBytes), nil
+}
+
 // GetBlockchainHeight gets blockchain height
 func (blockchain *Blockchain) GetBlockchainHeight() (uint32, error) {
 	heightBytes, _ := blockchain.dbHandler.Get(blockchain.indexColumnFamily, []byte(heightKey))
@@ -177,7 +192,7 @@ func (blockchain *Blockchain) AppendBlock(block *types.Block) []*db.WriteBatch {
 	for _, tx := range block.Transactions {
 		txHashs = append(txHashs, tx.Hash())
 		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.transactionColumnFamily, db.OperationPut, tx.Hash().Bytes(), tx.Serialize(), blockchain.transactionColumnFamily)) // tx hash => tx detail
-
+		writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.transactionHeightColumnFamily, db.OperationPut, tx.Hash().Bytes(), utils.Uint32ToBytes(block.Header.Height), blockchain.transactionHeightColumnFamily))
 	}
 	writeBatchs = append(writeBatchs, db.NewWriteBatch(blockchain.indexColumnFamily, db.OperationPut, prependKeyPrefix(blockchain.txPrefix, blockHeightBytes), utils.Serialize(txHashs), string(blockchain.txPrefix))) // prefix + blockheight  => all tx hash
 

@@ -32,7 +32,7 @@ function downloadMongodb(){
 
     if [ ${#version_ubuntu1404} -ne 0 ];then
         echo version_ubuntu1604        
-        #curl -O https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1404-3.4.10.tgz
+        curl -O https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-ubuntu1404-3.4.10.tgz
     
         tar -zxvf mongodb-linux-x86_64-ubuntu1404-3.4.10.tgz
 

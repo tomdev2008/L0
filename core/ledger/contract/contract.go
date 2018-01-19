@@ -220,7 +220,7 @@ func (sctx *SmartConstract) DelGlobalState(key string) error {
 
 func (sctx *SmartConstract) ComplexQuery(key string) ([]byte, error) {
 	if !params.Nvp {
-		return nil, errors.New("vp can't support complex qery")
+		return nil, errors.New("vp can't support complex query")
 	}
 	mdb := mongodb.MongDB()
 	return mdb.Query(key)

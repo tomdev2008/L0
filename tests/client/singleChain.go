@@ -25,6 +25,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/bocheninc/L0/components/crypto"
@@ -55,13 +56,32 @@ func sendTx() {
 	//go generateIssueTx()
 	//go generateAtomicTx()
 	//go generateContract()
-	go generateSecurity()
+	//go generateSecurity()
+	go generateBrowseTx()
 	for {
 		select {
 		case tx := <-txChan:
 			fmt.Println(time.Now().Format("2006-01-02 15:04:05"), "Hash:", tx.Hash(), "Sender:", tx.Sender(), " Nonce: ", tx.Nonce(), "Asset: ", tx.AssetID(), " Type:", tx.GetType(), "txChan size:", len(txChan))
 			Relay(NewMsg(0x14, tx.Serialize()))
 		}
+	}
+}
+
+func generateBrowseTx() {
+	b := &Browse{}
+	txChan <- b.init()
+	time.Sleep(2 * time.Second)
+	txChan <- b.createSetAccountTx1("admin", privkey)
+	txChan <- b.createSetAccountTx2("admin", privkey)
+	for {
+		n := 0
+		id := strconv.Itoa(n)
+		privateKey, _ := crypto.GenerateKey()
+		txChan <- b.createSetAccountTx1(id, privateKey)
+		txChan <- b.createSetAccountTx2(id, privateKey)
+		time.Sleep(time.Second)
+		txChan <- b.createAtomicTx(privkey)
+		n++
 	}
 }
 

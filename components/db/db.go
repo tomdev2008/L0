@@ -37,7 +37,7 @@ const (
 )
 
 var (
-	deafultColumnfamilies = []string{"account", "asset", "balance", "ledger", "peer", "index", "state", "block", "transaction", "storage", "scontract", "persistCacheTxs"}
+	deafultColumnfamilies = []string{"account", "asset", "balance", "ledger", "peer", "transactionHeight", "index", "state", "block", "transaction", "storage", "scontract", "persistCacheTxs"}
 	config                *Config
 	dbInstance            *BlockchainDB
 	once                  sync.Once

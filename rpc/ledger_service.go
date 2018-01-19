@@ -43,6 +43,7 @@ type LedgerInterface interface {
 	GetTxsByBlockNumber(blockNumber uint32, transactionType uint32) (types.Transactions, error)
 	GetTxsByMergeTxHash(mergeTxHash crypto.Hash) (types.Transactions, error)
 	GetTransactionHashList(number uint32) ([]crypto.Hash, error)
+	GetBlockHeightByTxHash(txHashBytes []byte) (uint32, error)
 }
 
 //Ledger ledger rpc api

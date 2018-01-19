@@ -498,7 +498,7 @@ func (pm *ProtocolManager) SendMsgnetMessage(src, dst string, msg msgnet.Message
 	}
 
 	if pm.msgnet != nil {
-		log.Debugf("==============send data=========== cmd : %v, payload: %v ", msg.Cmd, msg.Payload)
+		//log.Debugf("==============send data=========== cmd : %v, payload: %v ", msg.Cmd, msg.Payload)
 		return pm.msgnet.Send(dst, msg.Serialize(), sig[:])
 	}
 

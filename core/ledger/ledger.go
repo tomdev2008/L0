@@ -426,6 +426,11 @@ func (ledger *Ledger) GetTxByTxHash(txHashBytes []byte) (*types.Transaction, err
 	return ledger.block.GetTransactionByTxHash(txHashBytes)
 }
 
+//GetBlockHeightByTxHash returns transaction by tx hash []byte
+func (ledger *Ledger) GetBlockHeightByTxHash(txHashBytes []byte) (uint32, error) {
+	return ledger.block.GetBlockHeightByTxHash(txHashBytes)
+}
+
 // GetBalanceFromDB returns balance by account
 func (ledger *Ledger) GetBalanceFromDB(addr accounts.Address) (*state.Balance, error) {
 	return ledger.state.GetBalance(addr)
