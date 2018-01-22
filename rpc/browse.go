@@ -182,10 +182,10 @@ func (l *Browse) checkArgs(args []int) (int, int, error) {
 }
 
 //GetLog get ldp log for browse
-func (l *Browse) GetLog(args []int, reply *interface{}) error {
-	var (
-		result []interface{}
-	)
+func (l *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
+
+	result := []map[string]interface{}{}
+
 	start, num, err := l.checkArgs(args)
 	if err != nil {
 		return err
@@ -193,12 +193,20 @@ func (l *Browse) GetLog(args []int, reply *interface{}) error {
 	func(start, num int) {
 		if start == 0 || l.tempList.Len() == 0 {
 			l.copyLog()
-			result = append(result, l.tempList.Front().Value)
+			valueStr := l.tempList.Front().Value.(string)
+			m := make(map[string]interface{})
+			err := json.Unmarshal([]byte(valueStr), &m)
+			fmt.Println("errrr: ", err, m)
+
+			result = append(result, m)
 		}
 		var n int
 		for e := l.tempList.Front(); e != nil; e = e.Next() {
 			if n > start && n <= (start+num) {
-				result = append(result, e.Value)
+				valueStr := e.Value.(string)
+				m := make(map[string]interface{})
+				json.Unmarshal([]byte(valueStr), &m)
+				result = append(result, m)
 			}
 			n++
 		}
