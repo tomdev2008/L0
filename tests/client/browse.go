@@ -18,7 +18,7 @@ func (b *Browse) createSetAccountTx1(account string, key *crypto.PrivateKey) *ty
 	invokeArgs := []string{
 		"SetGlobalState",
 		account,
-		fmt.Sprintf(`{"add","%s"}`, address.String()),
+		fmt.Sprintf(`{"add":"%s"}`, address.String()),
 	}
 	txConf := common.NewContractTxConf([]byte{0}, []byte{0}, big.NewInt(1), big.NewInt(0), privkeyHex)
 	contractConf := common.NewContractConf("", "invoke", true, []string{}, invokeArgs)
@@ -30,7 +30,7 @@ func (b *Browse) createSetAccountTx2(account string, key *crypto.PrivateKey) *ty
 	invokeArgs := []string{
 		"SetGlobalState",
 		address.String(),
-		fmt.Sprintf(`{"acc","%s"}`, account),
+		fmt.Sprintf(`{"acc":"%s"}`, account),
 	}
 	txConf := common.NewContractTxConf([]byte{0}, []byte{0}, big.NewInt(1), big.NewInt(0), privkeyHex)
 	contractConf := common.NewContractConf("", "invoke", true, []string{}, invokeArgs)

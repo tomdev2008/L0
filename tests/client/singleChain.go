@@ -36,7 +36,7 @@ import (
 
 var (
 	srvAddress = []string{
-		"127.0.0.1:20166",
+		"192.168.8.128:20166",
 		//"127.0.0.1:20167",
 		//"127.0.0.1:20168",
 		//"127.0.0.1:20169",
@@ -73,14 +73,14 @@ func generateBrowseTx() {
 	time.Sleep(2 * time.Second)
 	txChan <- b.createSetAccountTx1("admin", privkey)
 	txChan <- b.createSetAccountTx2("admin", privkey)
+	n := 0
 	for {
-		n := 0
 		id := strconv.Itoa(n)
 		privateKey, _ := crypto.GenerateKey()
 		txChan <- b.createSetAccountTx1(id, privateKey)
 		txChan <- b.createSetAccountTx2(id, privateKey)
-		time.Sleep(time.Second)
-		txChan <- b.createAtomicTx(privkey)
+		time.Sleep(10 * time.Millisecond)
+		txChan <- b.createAtomicTx(privateKey)
 		n++
 	}
 }

@@ -196,7 +196,7 @@ func (l *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
 			valueStr := l.tempList.Front().Value.(string)
 			m := make(map[string]interface{})
 			err := json.Unmarshal([]byte(valueStr), &m)
-			fmt.Println("errrr: ", err, m)
+			fmt.Println("err: ", err, m)
 
 			result = append(result, m)
 		}
@@ -283,9 +283,17 @@ func (l *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
 			err = f(0, theLastHeight)
 		}
 	} else if 0 <= rangeNum && rangeNum <= max {
-		err = f(0, max)
+		if theLastHeight < max {
+			err = f(0, theLastHeight)
+		} else {
+			err = f(0, max)
+		}
 	} else if rangeNum > max {
-		err = f(rangeNum-5, max)
+		if rangeNum+5 > theLastHeight {
+			err = f(theLastHeight-10, max)
+		} else {
+			err = f(rangeNum-5, max)
+		}
 	}
 	if err != nil {
 		return err
@@ -372,26 +380,32 @@ func (l *Browse) GetTxByHash(hash string, reply *TxInfo) error {
 			Params: contractSpec.ContractParams,
 		}
 	}
-	var senderID, recipientID string
-	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Recipient().String()}}, &recipientID); err != nil {
+	var senderIDStr, recipientIDStr string
+	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Recipient().String()}}, &recipientIDStr); err != nil {
 		return err
 	}
-	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Sender().String()}}, &senderID); err != nil {
+	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Sender().String()}}, &senderIDStr); err != nil {
 		return err
 	}
 	height, err := l.ledger.GetBlockHeightByTxHash(tx.Hash().Bytes())
 	if err != nil {
 		return err
 	}
+	senderID := make(map[string]string)
+	err = json.Unmarshal([]byte(senderIDStr), &senderID)
+	recipientID := make(map[string]string)
+	err = json.Unmarshal([]byte(recipientIDStr), &recipientID)
+
+	fmt.Println("senderID: ", senderIDStr, "err: ", err, "recipientID: ", recipientIDStr, "err: ", err, recipientID["acc"], senderID["acc"])
 	txInfo.Data = &Data{
 		Height:      height,
 		Amount:      tx.Amount(),
 		AssetID:     tx.AssetID(),
 		Hash:        tx.Hash().String(),
 		Recipient:   tx.Recipient(),
-		RecipientID: recipientID,
+		RecipientID: recipientID["acc"],
 		Sender:      tx.Sender(),
-		SenderID:    senderID,
+		SenderID:    senderID["acc"],
 		Size:        len(tx.Serialize()),
 		TimeStamp:   tx.CreateTime(),
 		Type:        tx.GetType(),
