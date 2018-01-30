@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+message Header {
+    uint32 magic = 1;
+    uint32 seqNum = 2;
+    uint32 protoID = 3;
+    uint32 msgID = 4;
+}
+
+message Message {
+  Header header = 1;
+  bytes payload = 2;
+}
