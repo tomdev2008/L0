@@ -136,7 +136,7 @@ func NewBrowse(pm pmHandler) *Browse {
 	return b
 }
 
-func (l *Browse) saveLog() {
+func (b *Browse) saveLog() {
 	t, err := tail.TailFile(jrpcCfg.LogFilePath, tail.Config{Follow: true, MustExist: true})
 	if err != nil {
 		log.Error("browse func saveLog err: ", err)
@@ -144,27 +144,27 @@ func (l *Browse) saveLog() {
 	}
 	n := 0
 	for line := range t.Lines {
-		l.logList.PushBack(line.Text)
-		if l.logList.Len() > jrpcCfg.Logcache {
-			e := l.logList.Front()
+		b.logList.PushBack(line.Text)
+		if b.logList.Len() > jrpcCfg.Logcache {
+			e := b.logList.Front()
 			if e != nil {
-				l.logList.Remove(e)
+				b.logList.Remove(e)
 			}
 		}
 		n++
 	}
 }
 
-func (l *Browse) copyLog() {
-	if l.tempList.Len() != 0 {
-		l.tempList = list.New()
+func (b *Browse) copyLog() {
+	if b.tempList.Len() != 0 {
+		b.tempList = list.New()
 	}
-	for e := l.logList.Front(); e != nil; e = e.Next() {
-		l.tempList.PushFront(e.Value)
+	for e := b.logList.Front(); e != nil; e = e.Next() {
+		b.tempList.PushFront(e.Value)
 	}
 }
 
-func (l *Browse) checkArgs(args []int) (int, int, error) {
+func (b *Browse) checkArgs(args []int) (int, int, error) {
 	var maxLine = 50
 	if len(args) == 1 {
 		return 0, 0, errors.New("args len must be 2")
@@ -182,18 +182,18 @@ func (l *Browse) checkArgs(args []int) (int, int, error) {
 }
 
 //GetLog get ldp log for browse
-func (l *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
+func (b *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
 
 	result := []map[string]interface{}{}
 
-	start, num, err := l.checkArgs(args)
+	start, num, err := b.checkArgs(args)
 	if err != nil {
 		return err
 	}
 	func(start, num int) {
-		if start == 0 || l.tempList.Len() == 0 {
-			l.copyLog()
-			valueStr := l.tempList.Front().Value.(string)
+		if start == 0 || b.tempList.Len() == 0 {
+			b.copyLog()
+			valueStr := b.tempList.Front().Value.(string)
 			m := make(map[string]interface{})
 			err := json.Unmarshal([]byte(valueStr), &m)
 			fmt.Println("err: ", err, m)
@@ -201,7 +201,7 @@ func (l *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
 			result = append(result, m)
 		}
 		var n int
-		for e := l.tempList.Front(); e != nil; e = e.Next() {
+		for e := b.tempList.Front(); e != nil; e = e.Next() {
 			if n > start && n <= (start+num) {
 				valueStr := e.Value.(string)
 				m := make(map[string]interface{})
@@ -216,7 +216,7 @@ func (l *Browse) GetLog(args []int, reply *[]map[string]interface{}) error {
 }
 
 //GetConfig get ldp config for browse
-func (l *Browse) GetConfig(key string, reply *[]byte) error {
+func (b *Browse) GetConfig(key string, reply *[]byte) error {
 	result, err := ioutil.ReadFile(jrpcCfg.ConfigFilePath)
 	if err != nil {
 		return err
@@ -226,21 +226,21 @@ func (l *Browse) GetConfig(key string, reply *[]byte) error {
 }
 
 //GetTheLastBlockInfo get the last block info  config for browse
-func (l *Browse) GetTheLastBlockInfo(ignore string, reply *TheLastBlock) error {
-	hash, err := l.ledger.GetLastBlockHash()
+func (b *Browse) GetTheLastBlockInfo(ignore string, reply *TheLastBlock) error {
+	hash, err := b.ledger.GetLastBlockHash()
 	if err != nil {
 		return err
 	}
-	block, err := l.ledger.GetBlockByHash(hash.Bytes())
+	block, err := b.ledger.GetBlockByHash(hash.Bytes())
 	if err != nil {
 		return err
 	}
 	*reply = TheLastBlock{
-		Hash:      hash.String(),
+		Hash:      block.Hash().String(),
 		Height:    block.Height,
 		MsgnetNum: 1,
-		NodeID:    string(l.netServer.GetLocalPeer().ID),
-		ServerIP:  l.netServer.GetLocalPeer().Address,
+		NodeID:    string(b.netServer.GetLocalPeer().ID),
+		ServerIP:  b.netServer.GetLocalPeer().Address,
 		Status:    "运行中",
 		TimeStamp: block.TimeStamp,
 	}
@@ -248,10 +248,10 @@ func (l *Browse) GetTheLastBlockInfo(ignore string, reply *TheLastBlock) error {
 }
 
 //GetBlockByRange get blocks for browse
-func (l *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
+func (b *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
 	var max = 10
 	blocks := &TheRangeBlocks{}
-	height, err := l.ledger.Height()
+	height, err := b.ledger.Height()
 	if err != nil {
 		return err
 
@@ -259,11 +259,11 @@ func (l *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
 	theLastHeight := int(height)
 	f := func(start, num int) error {
 		for n := (start + 1); n <= (start + num); n++ {
-			block, err := l.ledger.GetBlockByNumber(uint32(n))
+			block, err := b.ledger.GetBlockByNumber(uint32(n))
 			if err != nil {
 				return err
 			}
-			txHashList, err := l.ledger.GetTransactionHashList(block.Height)
+			txHashList, err := b.ledger.GetTransactionHashList(block.Height)
 			if err != nil {
 				return err
 			}
@@ -303,8 +303,8 @@ func (l *Browse) GetBlockByRange(rangeNum int, reply *TheRangeBlocks) error {
 }
 
 //GetBlockByHash get block by hash for browse
-func (l *Browse) GetBlockByHash(args GetBlockByHashArgs, reply *interface{}) error {
-	result, err := l.getBlockByHash(args.Hash, args.Range)
+func (b *Browse) GetBlockByHash(args GetBlockByHashArgs, reply *interface{}) error {
+	result, err := b.getBlockByHash(args.Hash, args.Range)
 	if err != nil {
 		return err
 	}
@@ -313,12 +313,12 @@ func (l *Browse) GetBlockByHash(args GetBlockByHashArgs, reply *interface{}) err
 }
 
 //GetBlockByHeight get block by height for browse
-func (l *Browse) GetBlockByHeight(args GetBlockByHeightArgs, reply *interface{}) error {
-	hash, err := l.ledger.GetBlockHashByNumber(args.Height)
+func (b *Browse) GetBlockByHeight(args GetBlockByHeightArgs, reply *interface{}) error {
+	hash, err := b.ledger.GetBlockHashByNumber(args.Height)
 	if err != nil {
 		return err
 	}
-	result, err := l.getBlockByHash(hash.String(), args.Range)
+	result, err := b.getBlockByHash(hash.String(), args.Range)
 	if err != nil {
 		return err
 	}
@@ -326,18 +326,18 @@ func (l *Browse) GetBlockByHeight(args GetBlockByHeightArgs, reply *interface{})
 	return nil
 }
 
-func (l *Browse) getBlockByHash(hash string, args []int) (interface{}, error) {
-	start, num, err := l.checkArgs(args)
+func (b *Browse) getBlockByHash(hash string, args []int) (interface{}, error) {
+	start, num, err := b.checkArgs(args)
 	if err != nil {
 		return nil, err
 	}
 	m := make(map[string]interface{})
 	txHashList := &TxHashList{}
-	blockHeader, err := l.ledger.GetBlockByHash(crypto.HexToHash(hash).Bytes())
+	blockHeader, err := b.ledger.GetBlockByHash(crypto.HexToHash(hash).Bytes())
 	if err != nil {
 		return nil, err
 	}
-	txs, err := l.ledger.GetTxsByBlockHash(crypto.HexToHash(hash).Bytes(), 100)
+	txs, err := b.ledger.GetTxsByBlockHash(crypto.HexToHash(hash).Bytes(), 100)
 	if err != nil {
 		return nil, err
 	}
@@ -351,11 +351,11 @@ func (l *Browse) getBlockByHash(hash string, args []int) (interface{}, error) {
 		}
 	}
 
-	b := &types.Block{Header: blockHeader, Transactions: txs}
+	block := &types.Block{Header: blockHeader, Transactions: txs}
 	blockInfo := &BlockInfo{
 		Hash:           blockHeader.Hash().String(),
 		Height:         blockHeader.Height,
-		Size:           len(b.Serialize()),
+		Size:           len(block.Serialize()),
 		TimeStamp:      blockHeader.TimeStamp,
 		TransactionNum: len(txs),
 	}
@@ -365,9 +365,9 @@ func (l *Browse) getBlockByHash(hash string, args []int) (interface{}, error) {
 }
 
 //GetTxByHash get tx by hash for browse
-func (l *Browse) GetTxByHash(hash string, reply *TxInfo) error {
+func (b *Browse) GetTxByHash(hash string, reply *TxInfo) error {
 	txInfo := &TxInfo{}
-	tx, err := l.ledger.GetTransaction(crypto.HexToHash(hash))
+	tx, err := b.ledger.GetTransaction(crypto.HexToHash(hash))
 	if err != nil {
 		return err
 	}
@@ -381,13 +381,13 @@ func (l *Browse) GetTxByHash(hash string, reply *TxInfo) error {
 		}
 	}
 	var senderIDStr, recipientIDStr string
-	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Recipient().String()}}, &recipientIDStr); err != nil {
+	if err := b.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Recipient().String()}}, &recipientIDStr); err != nil {
 		return err
 	}
-	if err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Sender().String()}}, &senderIDStr); err != nil {
+	if err := b.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{tx.Sender().String()}}, &senderIDStr); err != nil {
 		return err
 	}
-	height, err := l.ledger.GetBlockHeightByTxHash(tx.Hash().Bytes())
+	height, err := b.ledger.GetBlockHeightByTxHash(tx.Hash().Bytes())
 	if err != nil {
 		return err
 	}
@@ -415,16 +415,16 @@ func (l *Browse) GetTxByHash(hash string, reply *TxInfo) error {
 }
 
 //GetAccountInfoByID get Account by id for browse
-func (l *Browse) GetAccountInfoByID(accountID string, reply *AccountInfo) error {
+func (b *Browse) GetAccountInfoByID(accountID string, reply *AccountInfo) error {
 	var accountAddrStr string
-	err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{accountID}}, &accountAddrStr)
+	err := b.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{accountID}}, &accountAddrStr)
 	if err != nil {
 		return err
 	}
 	m := make(map[string]string)
 	json.Unmarshal([]byte(accountAddrStr), &m)
 
-	balance := l.ledger.GetBalance(accounts.HexToAddress(m["add"]))
+	balance := b.ledger.GetBalance(accounts.HexToAddress(m["add"]))
 	*reply = AccountInfo{
 		Addr:      accounts.HexToAddress(m["add"]),
 		Balance:   balance,
@@ -435,16 +435,16 @@ func (l *Browse) GetAccountInfoByID(accountID string, reply *AccountInfo) error 
 }
 
 //GetAccountInfoByAddr get Account by addr for browse
-func (l *Browse) GetAccountInfoByAddr(accountAddr string, reply *AccountInfo) error {
+func (b *Browse) GetAccountInfoByAddr(accountAddr string, reply *AccountInfo) error {
 	var accountIDstr string
-	err := l.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{accountAddr}}, &accountIDstr)
+	err := b.txRPC.Query(&ContractQueryArgs{ContractAddr: "", ContractParams: []string{accountAddr}}, &accountIDstr)
 	if err != nil {
 		return err
 	}
 
 	m := make(map[string]string)
 	json.Unmarshal([]byte(accountIDstr), &m)
-	balance := l.ledger.GetBalance(accounts.HexToAddress(accountAddr))
+	balance := b.ledger.GetBalance(accounts.HexToAddress(accountAddr))
 	*reply = AccountInfo{
 		Addr:      accounts.HexToAddress(accountAddr),
 		Balance:   balance,
@@ -455,10 +455,10 @@ func (l *Browse) GetAccountInfoByAddr(accountAddr string, reply *AccountInfo) er
 }
 
 //GetHistoryTransaction get history tx by addr for browse
-func (l *Browse) GetHistoryTransaction(args GetHistoryTransactionArgs, relay *HistoryTxs) error {
+func (b *Browse) GetHistoryTransaction(args GetHistoryTransactionArgs, relay *HistoryTxs) error {
 	historyTxs := &HistoryTxs{}
 	key := fmt.Sprintf(`db.transaction.find({$or:[{"data.sender":"%s"},{"data.recipient":"%s"}]}).skip(%d).limit(%d).sort({"data.createTime":-1})"]}`, args.Addr, args.Addr, args.Range[0], args.Range[1])
-	result, err := l.ledger.ComplexQuery(key)
+	result, err := b.ledger.ComplexQuery(key)
 	if err != nil {
 		return err
 	}
