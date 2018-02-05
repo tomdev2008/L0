@@ -20,10 +20,12 @@ package p2p
 
 import (
 	"testing"
+	"time"
 )
 
 func TestServer(t *testing.T) {
-	// srv := NewServer()
-	// srv.Start()
-	// time.Sleep(time.Hour)
+	srv := NewServer()
+	srv.Start()
+	time.Sleep(time.Second * 10)
+	srv.Stop()
 }
