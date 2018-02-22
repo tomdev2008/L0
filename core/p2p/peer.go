@@ -78,10 +78,12 @@ type Peer struct {
 	peerManager *PeerManager
 }
 
-func NewPeer() *Peer {
+func NewPeer(conn net.Conn, pm *PeerManager) *Peer {
 	return &Peer{
 		lastActiveTime: time.Now(),
 		sendChannel:    make(chan []byte, 100),
+		conn:           conn,
+		peerManager:    pm,
 	}
 }
 
@@ -105,12 +107,15 @@ func (peer *Peer) Stop() {
 	}
 	peer.cancel()
 	peer.waitGroup.Wait()
+	log.Infoln("Peer %s(%s->%s) Stopped", peer.String(), peer.conn.LocalAddr().String(), peer.conn.RemoteAddr().String())
+}
+
+func (peer *Peer) stop() {
 	peer.peerManager.remove(peer.conn)
 	peer.conn.Close()
 	peer.conn = nil
 	peer.cancel = nil
 	peer.sendChannel = make(chan []byte)
-	log.Infoln("Peer %s(%s->%s) Stopped", peer.String(), peer.conn.LocalAddr().String(), peer.conn.RemoteAddr().String())
 }
 
 func (peer *Peer) SendMsg(msg []byte) error {
@@ -161,11 +166,11 @@ func (peer *Peer) ParsePeer(rawurl string) error {
 }
 
 func (peer *Peer) recv(ctx context.Context) {
-	defer peer.Stop()
+	defer peer.stop()
 
 	defer peer.waitGroup.Done()
 	peer.conn.SetReadDeadline(time.Now().Add(option.DeadLine))
-	headerSize := 32
+	headerSize := 4
 	for {
 		select {
 		case <-ctx.Done():
@@ -173,7 +178,7 @@ func (peer *Peer) recv(ctx context.Context) {
 		default:
 		}
 		//head
-		headerBytes := make([]byte, 32)
+		headerBytes := make([]byte, headerSize)
 		if n, err := peer.conn.Read(headerBytes); err != nil {
 			log.Errorf("%s(%s->%s) conn read header --- %s", peer, peer.conn.LocalAddr().String(), peer.conn.RemoteAddr().String(), err)
 			return
@@ -205,21 +210,22 @@ func (peer *Peer) recv(ctx context.Context) {
 func (peer *Peer) send(ctx context.Context) {
 	defer peer.waitGroup.Done()
 	peer.conn.SetWriteDeadline(time.Now().Add(option.DeadLine))
-	headerSize := 32
+	headerSize := 4
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case dataBytes := <-peer.sendChannel:
 			//headdata
-			headerBytes := make([]byte, headerSize) //ToDo
-			binary.LittleEndian.PutUint32(headerBytes, uint32(headerSize))
+			headerBytes := make([]byte, headerSize)
+			dataSize := len(dataBytes)
+			binary.LittleEndian.PutUint32(headerBytes, uint32(dataSize))
 			var buf bytes.Buffer
 			if num, err := buf.Write(headerBytes); num != headerSize || err != nil {
 				log.Errorf("%s(%s->%s) conn send header --- %s", peer, peer.conn.LocalAddr().String(), peer.conn.RemoteAddr().String(), err)
 				continue
 			}
-			if num, err := buf.Write(dataBytes); num != len(dataBytes) && err != nil {
+			if num, err := buf.Write(dataBytes); num != dataSize && err != nil {
 				log.Errorf("%s(%s->%s) conn send header --- %s", peer, peer.conn.LocalAddr().String(), peer.conn.RemoteAddr().String(), err)
 				continue
 			}

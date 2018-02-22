@@ -64,12 +64,23 @@ func (pm *PeerManager) Add(conn net.Conn) (*Peer, error) {
 	if _, ok := pm.peers[conn]; ok {
 		return nil, fmt.Errorf("conn alreay exist")
 	}
-	peer := &Peer{
-		peerManager: pm,
-		conn:        conn,
-	}
+	peer := NewPeer(conn, pm)
 	pm.peers[conn] = peer
+	peer.Start()
 	return peer, nil
+}
+
+func (pm *PeerManager) Remove(conn net.Conn) {
+	pm.Lock()
+	defer pm.Unlock()
+	if peer, ok := pm.peers[conn]; ok {
+		peer.Stop()
+	}
+	delete(pm.peers, conn)
+}
+
+func (pm *PeerManager) remove(conn net.Conn) {
+	delete(pm.peers, conn)
 }
 
 func (pm *PeerManager) Contains(id PeerID) bool {
@@ -81,16 +92,6 @@ func (pm *PeerManager) Contains(id PeerID) bool {
 		}
 	}
 	return false
-}
-
-func (pm *PeerManager) Remove(conn net.Conn) {
-	pm.Lock()
-	defer pm.Unlock()
-	delete(pm.peers, conn)
-}
-
-func (pm *PeerManager) remove(conn net.Conn) {
-	delete(pm.peers, conn)
 }
 
 func (pm *PeerManager) Connect(peer *Peer) {
@@ -108,8 +109,7 @@ func (pm *PeerManager) Connect(peer *Peer) {
 			if pm.Contains(peer.ID) || i > option.ReconnectTimes {
 				break
 			}
-			conn, err := net.Dial("tcp4", peer.Address)
-			if err == nil {
+			if conn, err := net.Dial("tcp4", peer.Address); err == nil {
 				pm.Add(conn)
 				break
 			}

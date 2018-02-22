@@ -26,6 +26,7 @@ import (
 func TestServer(t *testing.T) {
 	srv := NewServer()
 	srv.Start()
-	time.Sleep(time.Second * 10)
+	//srv.Connect()
+	time.Sleep(time.Second * 60)
 	srv.Stop()
 }

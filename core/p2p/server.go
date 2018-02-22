@@ -87,7 +87,6 @@ func (srv *Server) Start() {
 		return
 	}
 
-	log.Infoln("Server Starting ...")
 	ctx, cancel := context.WithCancel(context.Background())
 	srv.cancel = cancel
 	addrs := strings.Split(option.ListenAddress, ",")
@@ -99,10 +98,7 @@ func (srv *Server) Start() {
 }
 
 func (srv *Server) listen(ctx context.Context, addr string) (err error) {
-	defer func() {
-		srv.cancel = nil
-		srv.waitGroup.Done()
-	}()
+	defer srv.waitGroup.Done()
 
 	var (
 		listener *net.TCPListener
@@ -138,12 +134,7 @@ func (srv *Server) listen(ctx context.Context, addr string) (err error) {
 		}
 		// handle requests
 		log.Debugf("Accept connection %s, %v", conn.RemoteAddr(), conn)
-		peer, err := srv.peerManager.Add(conn)
-		if err != nil {
-			log.Errorf("add peer err --- %s", err)
-			continue
-		}
-		peer.Start()
+		srv.peerManager.Add(conn)
 	}
 }
 
@@ -154,7 +145,6 @@ func (srv *Server) Stop() {
 		return
 	}
 
-	log.Infoln("Server Stopping ...")
 	srv.cancel()
 	srv.waitGroup.Wait()
 	srv.cancel = nil
@@ -165,4 +155,8 @@ func (srv *Server) Stop() {
 // Broadcast broadcasts message to remote peers
 func (srv *Server) Broadcast(msg []byte, tp uint32) {
 	srv.peerManager.Broadcast(msg, tp)
+}
+
+func (srv *Server) Connect(peer *Peer) {
+	srv.peerManager.Connect(peer)
 }
